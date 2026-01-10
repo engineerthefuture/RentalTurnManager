@@ -157,7 +157,7 @@ Resources:
     Properties:
       FunctionName: !Sub '${NamespacePrefix}-${Environment}-lambda-${AppName}'
       Description: Scans IMAP inbox for booking emails and triggers cleaner workflows
-      Runtime: dotnet8
+      Runtime: dotnet10
       Handler: RentalTurnManager.Lambda::RentalTurnManager.Lambda.Function::FunctionHandler
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 300
@@ -171,13 +171,8 @@ Resources:
           IMAP_HOST: !Ref ImapHost
           IMAP_PORT: !Ref ImapPort
       Code:
-        ZipFile: |
-          // Placeholder - will be replaced during deployment
-          public class Function {
-              public string FunctionHandler(object input) {
-                  return "Placeholder";
-              }
-          }
+        S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
+        S3Key: !Sub '${AppName}/lambda/initial/lambda-deployment.zip'
       Tags:
         - Key: OwnerName
           Value: !Ref OwnerName
