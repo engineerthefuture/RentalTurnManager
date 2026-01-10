@@ -64,7 +64,7 @@ Metadata:
           - Environment
           - NamespacePrefix
           - AppName
-          - Owner
+          - OwnerName
       - Label:
           default: Email Configuration
         Parameters:
@@ -95,7 +95,7 @@ Resources:
         }
       Tags:
         - Key: Owner
-          Value: !Ref Owner
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -143,7 +143,7 @@ Resources:
                 Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
       Tags:
         - Key: Owner
-          Value: !Ref Owner
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -180,7 +180,7 @@ Resources:
           }
       Tags:
         - Key: Owner
-          Value: !Ref Owner
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -196,7 +196,7 @@ Resources:
       RetentionInDays: 30
       Tags:
         - Key: Owner
-          Value: !Ref Owner
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -217,7 +217,7 @@ Resources:
           Id: EmailScannerLambdaTarget
       Tags:
         - Key: Owner
-          Value: !Ref Owner
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -273,7 +273,7 @@ Resources:
                 Resource: '*'
       Tags:
         - Key: Owner
-          Value: !Ref Owner
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -293,7 +293,7 @@ Resources:
         Key: !Sub '${AppName}/stepfunctions/${Environment}/cleaner-workflow.json'
       Tags:
         - Key: Owner
-          Value: !Ref Owner
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -309,7 +309,7 @@ Resources:
       RetentionInDays: 30
       Tags:
         - Key: Owner
-          Value: !Ref Owner
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
