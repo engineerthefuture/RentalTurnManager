@@ -256,9 +256,12 @@ jobs:
         run: |
           FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ needs.determine-environment.outputs.environment }}-lambda-${{ env.APP_NAME }}"
           
+          # Create payload file
+          echo '{"forceRescan":false}' > /tmp/payload.json
+          
           RESPONSE=$(aws lambda invoke \
             --function-name ${FUNCTION_NAME} \
-            --payload '{"forceRescan":false}' \
+            --payload file:///tmp/payload.json \
             --region ${{ env.AWS_REGION }} \
             /tmp/response.json)
           
