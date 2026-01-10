@@ -39,7 +39,7 @@ public class FunctionTests
         services.AddSingleton(_mockStepFunction.Object);
 
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string>())
+            .AddInMemoryCollection(new Dictionary<string, string?>())
             .Build();
 
         services.AddSingleton<IConfiguration>(configuration);
@@ -63,7 +63,7 @@ public class FunctionTests
 
         var context = new TestLambdaContext
         {
-            RequestId = "test-request-id"
+            AwsRequestId = "test-request-id"
         };
 
         var request = new LambdaRequest();
