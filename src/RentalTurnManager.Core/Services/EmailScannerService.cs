@@ -28,9 +28,24 @@ public class EmailScannerService : IEmailScannerService
         {
             using var client = new ImapClient();
             
-            _logger.LogInformation($"Connecting to IMAP server {credentials.Host}:{credentials.Port}");
+            _logger.LogInformation($"Connecting to IMAP server {credentials.Host}:{credentials.Port} (SSL: {credentials.UseSsl})");
             await client.ConnectAsync(credentials.Host, credentials.Port, credentials.UseSsl);
-            await client.AuthenticateAsync(credentials.Username, credentials.Password);
+            
+            _logger.LogInformation($"Authenticating as user: {credentials.Username}");
+            try
+            {
+                await client.AuthenticateAsync(credentials.Username, credentials.Password);
+            }
+            catch (MailKit.Security.AuthenticationException authEx)
+            {
+                _logger.LogError(authEx, $"Authentication failed for {credentials.Username} at {credentials.Host}. " +
+                    "Common fixes: " +
+                    "1) Gmail: Use app-specific password (https://myaccount.google.com/apppasswords), " +
+                    "2) iCloud: Generate app-specific password at appleid.apple.com (Account Security > App-Specific Passwords), " +
+                    "3) Outlook: Verify IMAP is enabled, " +
+                    "4) Check username format (often requires full email address)");
+                throw;
+            }
 
             _logger.LogInformation("Successfully connected to IMAP server");
 
