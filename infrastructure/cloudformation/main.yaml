@@ -172,7 +172,7 @@ Resources:
           IMAP_PORT: !Ref ImapPort
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
-        S3Key: !Sub '${AppName}/lambda/initial/lambda-deployment.zip'
+        S3Key: !Sub '${AppName}/lambda/lambda-deployment.zip'
       Tags:
         - Key: OwnerName
           Value: !Ref OwnerName

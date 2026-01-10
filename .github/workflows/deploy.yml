@@ -126,7 +126,7 @@ jobs:
 
       - name: Upload Lambda package to S3
         run: |
-          aws s3 cp lambda-deployment.zip s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/lambda/${{ github.sha }}/lambda-deployment.zip
+          aws s3 cp lambda-deployment.zip s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/lambda/lambda-deployment.zip
 
       - name: Upload Step Functions definition to S3
         run: |
@@ -194,7 +194,7 @@ jobs:
           aws lambda update-function-code \
             --function-name ${FUNCTION_NAME} \
             --s3-bucket ${{ env.BUCKET_NAME }} \
-            --s3-key ${{ env.APP_NAME }}/lambda/${{ github.sha }}/lambda-deployment.zip \
+            --s3-key ${{ env.APP_NAME }}/lambda/lambda-deployment.zip \
             --region ${{ env.AWS_REGION }}
           
           # Wait for update to complete
