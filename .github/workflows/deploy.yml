@@ -135,7 +135,9 @@ jobs:
       - name: Prepare properties configuration
         run: |
           if [ -n "${{ vars.PROPERTIES_CONFIG }}" ]; then
-            echo '${{ vars.PROPERTIES_CONFIG }}' > config/properties.json
+            cat > config/properties.json <<'EOF'
+          ${{ vars.PROPERTIES_CONFIG }}
+          EOF
           fi
 
       - name: Upload configuration files to S3
