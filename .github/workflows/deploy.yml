@@ -165,17 +165,17 @@ jobs:
             --parameters \
               ParameterKey=EmailUsername,ParameterValue="${{ secrets.EMAIL_USERNAME }}" \
               ParameterKey=EmailPassword,ParameterValue="${{ secrets.EMAIL_PASSWORD }}" \
-              ParameterKey=OwnerEmail,ParameterValue="${{ secrets.OWNER_EMAIL }}" \
+              ParameterKey=OwnerEmail,ParameterValue="${{ vars.OWNER_EMAIL }}" \
               ParameterKey=ImapHost,ParameterValue="${{ vars.IMAP_HOST }}" \
               ParameterKey=ImapPort,ParameterValue="${{ vars.IMAP_PORT || '993' }}" \
               ParameterKey=ScheduleInterval,ParameterValue="${{ vars.SCHEDULE_INTERVAL || 'rate(15 minutes)' }}" \
-              ParameterKey=Owner,ParameterValue="${{ secrets.OWNER_NAME }}" \
+              ParameterKey=OwnerName,ParameterValue="${{ vars.OWNER_NAME || 'Property Owner' }}" \
               ParameterKey=NamespacePrefix,ParameterValue="${{ env.NAMESPACE_PREFIX }}" \
               ParameterKey=AppName,ParameterValue="${{ env.APP_NAME }}" \
             --capabilities CAPABILITY_NAMED_IAM \
             --region ${{ env.AWS_REGION }} \
             --tags \
-              Key=Owner,Value="${{ secrets.OWNER_EMAIL }}" \
+              Key=OwnerName,Value="${{ vars.OWNER_NAME || 'Owner Name' }}" \
               Key=Environment,Value="${{ env.ENVIRONMENT }}" \
               Key=AppName,Value="${{ env.APP_NAME }}" \
               Key=Description,Value="${{ vars.APP_DESCRIPTION || 'Rental property turnover management system' }}" \

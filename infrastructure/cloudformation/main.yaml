@@ -40,10 +40,10 @@ Parameters:
     Description: Email account password
     NoEcho: true
 
-  Owner:
+  OwnerName:
     Type: String
-    Description: Owner tag value
-    Default: RentalPropertyOwner
+    Description: Owner name for tagging
+    Default: Property Owner
 
   NamespacePrefix:
     Type: String
@@ -62,6 +62,8 @@ Metadata:
           default: Environment Configuration
         Parameters:
           - Environment
+          - NamespacePrefix
+          - AppName
           - Owner
       - Label:
           default: Email Configuration

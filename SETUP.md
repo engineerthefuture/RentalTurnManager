@@ -17,8 +17,6 @@ Add the following **secrets**:
 
 - `EMAIL_USERNAME`: IMAP email username
 - `EMAIL_PASSWORD`: IMAP email password
-- `OWNER_EMAIL`: Property owner email address
-- `OWNER_NAME`: Property owner name
 
 ### 2. Configure GitHub Variables
 
@@ -28,6 +26,8 @@ Add the following **variables**:
 - `AWS_ACCOUNT_ID`: Your AWS account ID (12-digit number)
 - `OIDC_ROLE_NAME`: GitHubActionsOIDCRole
 - `NAMESPACE_PREFIX`: Namespace prefix for AWS resources - Optional, defaults to "bf"
+- `OWNER_EMAIL`: Property owner email address
+- `OWNER_NAME`: Property owner name - Optional, defaults to "Property Owner"
 - `PROPERTIES_CONFIG`: JSON configuration for your rental properties (see Properties Configuration section below)
 - `IMAP_HOST`: IMAP server hostname (e.g., `imap.mail.me.com` or `imap.gmail.com`)
 - `IMAP_PORT`: IMAP port (usually `993`) - Optional, defaults to 993
