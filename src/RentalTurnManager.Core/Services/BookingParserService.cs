@@ -137,14 +137,14 @@ public class BookingParserService : IBookingParserService
             // If year is missing, infer from check-in date
             if (!checkOutStr.Contains("20"))
             {
-                var year = booking.CheckInDate?.Year ?? DateTime.Now.Year;
+                var year = booking.CheckInDate != default ? booking.CheckInDate.Year : DateTime.Now.Year;
                 checkOutStr += $", {year}";
                 
                 // Try parsing
-                if (DateTime.TryParse(checkOutStr, out var tempCheckOut) && booking.CheckInDate.HasValue)
+                if (DateTime.TryParse(checkOutStr, out var tempCheckOut) && booking.CheckInDate != default)
                 {
                     // If checkout is before checkin, it must be next year
-                    if (tempCheckOut < booking.CheckInDate.Value)
+                    if (tempCheckOut < booking.CheckInDate)
                     {
                         checkOutStr = $"{checkOutMatch.Groups[1].Value}, {year + 1}";
                     }
