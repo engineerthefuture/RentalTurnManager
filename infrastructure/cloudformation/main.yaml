@@ -94,7 +94,7 @@ Resources:
           "useSsl": true
         }
       Tags:
-        - Key: Owner
+        - Key: OwnerName
           Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
@@ -179,7 +179,7 @@ Resources:
               }
           }
       Tags:
-        - Key: Owner
+        - Key: OwnerName
           Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
@@ -195,7 +195,7 @@ Resources:
       LogGroupName: !Sub '/aws/lambda/${EmailScannerLambda}'
       RetentionInDays: 30
       Tags:
-        - Key: Owner
+        - Key: OwnerName
           Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
@@ -216,7 +216,7 @@ Resources:
         - Arn: !GetAtt EmailScannerLambda.Arn
           Id: EmailScannerLambdaTarget
       Tags:
-        - Key: Owner
+        - Key: OwnerName
           Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
@@ -272,7 +272,7 @@ Resources:
                   - logs:DescribeLogGroups
                 Resource: '*'
       Tags:
-        - Key: Owner
+        - Key: OwnerName
           Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
@@ -292,7 +292,7 @@ Resources:
         Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         Key: !Sub '${AppName}/stepfunctions/${Environment}/cleaner-workflow.json'
       Tags:
-        - Key: Owner
+        - Key: OwnerName
           Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
@@ -308,7 +308,7 @@ Resources:
       LogGroupName: !Sub '/aws/stepfunctions/${CleanerWorkflowStateMachine}'
       RetentionInDays: 30
       Tags:
-        - Key: Owner
+        - Key: OwnerName
           Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
