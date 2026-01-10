@@ -133,12 +133,11 @@ jobs:
           aws s3 cp infrastructure/stepfunctions/cleaner-workflow.json s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/stepfunctions/${{ env.ENVIRONMENT }}/cleaner-workflow.json
 
       - name: Prepare properties configuration
+        if: vars.PROPERTIES_CONFIG != ''
         run: |
-          if [ -n "${{ vars.PROPERTIES_CONFIG }}" ]; then
-            cat > config/properties.json <<'EOF'
+          cat > config/properties.json << 'EOF'
           ${{ vars.PROPERTIES_CONFIG }}
           EOF
-          fi
 
       - name: Upload configuration files to S3
         run: |
