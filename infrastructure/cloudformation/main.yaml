@@ -160,7 +160,7 @@ Resources:
       Runtime: dotnet10
       Handler: RentalTurnManager.Lambda::RentalTurnManager.Lambda.Function::FunctionHandler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 300
+      Timeout: 180
       MemorySize: 512
       Environment:
         Variables:

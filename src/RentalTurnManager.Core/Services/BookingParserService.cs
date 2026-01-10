@@ -99,61 +99,80 @@ public class BookingParserService : IBookingParserService
         // Extract dates - Airbnb uses multiple formats:
         // 1. "Wed, Dec 3" (weekday, month abbreviation, day - without year)
         // 2. "December 3, 2025" (full month name with year)
-        // 3. "12/3/2025" (numeric format)
+        // 3. "12/3/2025" or "01/15/2026" (numeric format)
         
-        // Try format: "Mon, Dec 3" or "Monday, December 3"
-        var checkInMatch = Regex.Match(content, @"check[\s-]*in[:\s>]+(?:\w+,?\s+)?(\w+\s+\d{1,2}(?:,?\s+\d{4})?)", RegexOptions.IgnoreCase);
-        var checkOutMatch = Regex.Match(content, @"check[\s-]*out[:\s>]+(?:\w+,?\s+)?(\w+\s+\d{1,2}(?:,?\s+\d{4})?)", RegexOptions.IgnoreCase);
-
-        if (checkInMatch.Success)
+        // Try numeric format first: "01/15/2026"
+        var numericCheckInMatch = Regex.Match(content, @"check[\s-]*in[:\s>]+(\d{1,2}/\d{1,2}/\d{4})", RegexOptions.IgnoreCase);
+        var numericCheckOutMatch = Regex.Match(content, @"check[\s-]*out[:\s>]+(\d{1,2}/\d{1,2}/\d{4})", RegexOptions.IgnoreCase);
+        
+        if (numericCheckInMatch.Success && DateTime.TryParse(numericCheckInMatch.Groups[1].Value, out var numericCheckIn))
         {
-            var checkInStr = checkInMatch.Groups[1].Value;
-            // If year is missing, add current year or next year if date has passed
-            if (!checkInStr.Contains("20"))
+            booking.CheckInDate = numericCheckIn;
+        }
+        
+        if (numericCheckOutMatch.Success && DateTime.TryParse(numericCheckOutMatch.Groups[1].Value, out var numericCheckOut))
+        {
+            booking.CheckOutDate = numericCheckOut;
+        }
+        
+        // If dates not found, try format: "Mon, Dec 3" or "Monday, December 3"
+        if (booking.CheckInDate == default)
+        {
+            var checkInMatch = Regex.Match(content, @"check[\s-]*in[:\s>]+(?:\w+,?\s+)?(\w+\s+\d{1,2}(?:,?\s+\d{4})?)", RegexOptions.IgnoreCase);
+            if (checkInMatch.Success)
             {
-                var currentYear = DateTime.Now.Year;
-                checkInStr += $", {currentYear}";
-                
-                // Try parsing with current year
-                if (DateTime.TryParse(checkInStr, out var tempCheckIn))
+                var checkInStr = checkInMatch.Groups[1].Value;
+                // If year is missing, add current year or next year if date has passed
+                if (!checkInStr.Contains("20"))
                 {
-                    // If the date is more than 30 days in the past, it's probably next year
-                    if (tempCheckIn < DateTime.Now.AddDays(-30))
+                    var currentYear = DateTime.Now.Year;
+                    checkInStr += $", {currentYear}";
+                    
+                    // Try parsing with current year
+                    if (DateTime.TryParse(checkInStr, out var tempCheckIn))
                     {
-                        checkInStr = $"{checkInMatch.Groups[1].Value}, {currentYear + 1}";
+                        // If the date is more than 30 days in the past, it's probably next year
+                        if (tempCheckIn < DateTime.Now.AddDays(-30))
+                        {
+                            checkInStr = $"{checkInMatch.Groups[1].Value}, {currentYear + 1}";
+                        }
                     }
                 }
-            }
-            
-            if (DateTime.TryParse(checkInStr, out var checkIn))
-            {
-                booking.CheckInDate = checkIn;
+                
+                if (DateTime.TryParse(checkInStr, out var checkIn))
+                {
+                    booking.CheckInDate = checkIn;
+                }
             }
         }
-
-        if (checkOutMatch.Success)
+        
+        if (booking.CheckOutDate == default)
         {
-            var checkOutStr = checkOutMatch.Groups[1].Value;
-            // If year is missing, infer from check-in date
-            if (!checkOutStr.Contains("20"))
+            var checkOutMatch = Regex.Match(content, @"check[\s-]*out[:\s>]+(?:\w+,?\s+)?(\w+\s+\d{1,2}(?:,?\s+\d{4})?)", RegexOptions.IgnoreCase);
+            if (checkOutMatch.Success)
             {
-                var year = booking.CheckInDate != default ? booking.CheckInDate.Year : DateTime.Now.Year;
-                checkOutStr += $", {year}";
-                
-                // Try parsing
-                if (DateTime.TryParse(checkOutStr, out var tempCheckOut) && booking.CheckInDate != default)
+                var checkOutStr = checkOutMatch.Groups[1].Value;
+                // If year is missing, infer from check-in date
+                if (!checkOutStr.Contains("20"))
                 {
-                    // If checkout is before checkin, it must be next year
-                    if (tempCheckOut < booking.CheckInDate)
+                    var year = booking.CheckInDate != default ? booking.CheckInDate.Year : DateTime.Now.Year;
+                    checkOutStr += $", {year}";
+                    
+                    // Try parsing
+                    if (DateTime.TryParse(checkOutStr, out var tempCheckOut) && booking.CheckInDate != default)
                     {
-                        checkOutStr = $"{checkOutMatch.Groups[1].Value}, {year + 1}";
+                        // If checkout is before checkin, it must be next year
+                        if (tempCheckOut < booking.CheckInDate)
+                        {
+                            checkOutStr = $"{checkOutMatch.Groups[1].Value}, {year + 1}";
+                        }
                     }
                 }
-            }
-            
-            if (DateTime.TryParse(checkOutStr, out var checkOut))
-            {
-                booking.CheckOutDate = checkOut;
+                
+                if (DateTime.TryParse(checkOutStr, out var checkOut))
+                {
+                    booking.CheckOutDate = checkOut;
+                }
             }
         }
 
