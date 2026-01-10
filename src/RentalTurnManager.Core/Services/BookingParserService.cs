@@ -60,10 +60,16 @@ public class BookingParserService : IBookingParserService
     {
         var content = (email.HtmlBody ?? "") + " " + (email.Body ?? "");
         
-        // Look for confirmation/reservation keywords
-        if (!content.Contains("reservation", StringComparison.OrdinalIgnoreCase) &&
-            !content.Contains("booking", StringComparison.OrdinalIgnoreCase) &&
-            !content.Contains("confirmed", StringComparison.OrdinalIgnoreCase))
+        // Look for confirmation/reservation keywords along with key booking identifiers
+        var hasConfirmationKeyword = content.Contains("reservation", StringComparison.OrdinalIgnoreCase) ||
+                                     content.Contains("booking", StringComparison.OrdinalIgnoreCase) ||
+                                     content.Contains("confirmed", StringComparison.OrdinalIgnoreCase);
+        
+        // Check if it has booking-specific content (not just performance/marketing emails)
+        var hasBookingContent = Regex.IsMatch(content, @"check[\s-]*in", RegexOptions.IgnoreCase) ||
+                               Regex.IsMatch(content, @"(?:confirmation|reservation)\s*(?:code|number)[:\s]+[A-Z0-9]", RegexOptions.IgnoreCase);
+        
+        if (!hasConfirmationKeyword || !hasBookingContent)
         {
             return null;
         }
@@ -136,7 +142,7 @@ public class BookingParserService : IBookingParserService
         };
 
         // VRBO uses different patterns - adjust as needed
-        var refMatch = Regex.Match(content, @"(?:confirmation|reservation)[:\s#]+([0-9]{8,})", RegexOptions.IgnoreCase);
+        var refMatch = Regex.Match(content, @"(?:confirmation|reservation)\s*(?:number)?[:\s#]+([0-9]{8,})", RegexOptions.IgnoreCase);
         if (refMatch.Success)
         {
             booking.BookingReference = refMatch.Groups[1].Value;
@@ -206,10 +212,10 @@ public class BookingParserService : IBookingParserService
             booking.PropertyId = propertyMatch.Groups[1].Value;
         }
 
-        var guestMatch = Regex.Match(content, @"guest name[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)", RegexOptions.IgnoreCase);
+        var guestMatch = Regex.Match(content, @"guest\s+name[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+)\b", RegexOptions.IgnoreCase);
         if (guestMatch.Success)
         {
-            booking.GuestName = guestMatch.Groups[1].Value;
+            booking.GuestName = guestMatch.Groups[1].Value.Trim();
         }
 
         return booking;
