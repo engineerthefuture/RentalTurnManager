@@ -256,14 +256,17 @@ jobs:
         run: |
           FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ needs.determine-environment.outputs.environment }}-lambda-${{ env.APP_NAME }}"
           
-          # Create payload file
-          echo '{"forceRescan":false}' > /tmp/payload.json
+          echo "Invoking Lambda function: ${FUNCTION_NAME}"
           
-          RESPONSE=$(aws lambda invoke \
+          # Use base64 encoded payload to avoid shell escaping issues
+          PAYLOAD=$(echo -n '{"forceRescan":false}' | base64)
+          
+          aws lambda invoke \
             --function-name ${FUNCTION_NAME} \
-            --payload file:///tmp/payload.json \
+            --payload "${PAYLOAD}" \
             --region ${{ env.AWS_REGION }} \
-            /tmp/response.json)
+            /tmp/response.json \
+            --cli-binary-format raw-in-base64-out > /dev/null
           
           echo "Lambda invocation response:"
           cat /tmp/response.json
