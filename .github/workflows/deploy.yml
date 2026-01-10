@@ -113,6 +113,13 @@ jobs:
       - name: Install Lambda tools
         run: dotnet tool install -g Amazon.Lambda.Tools
 
+      - name: Prepare properties configuration
+        if: vars.PROPERTIES_CONFIG != ''
+        run: |
+          cat > config/properties.json << 'EOF'
+          ${{ vars.PROPERTIES_CONFIG }}
+          EOF
+
       - name: Build Lambda package
         run: |
           cd src/RentalTurnManager.Lambda
@@ -131,13 +138,6 @@ jobs:
       - name: Upload Step Functions definition to S3
         run: |
           aws s3 cp infrastructure/stepfunctions/cleaner-workflow.json s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/stepfunctions/${{ env.ENVIRONMENT }}/cleaner-workflow.json
-
-      - name: Prepare properties configuration
-        if: vars.PROPERTIES_CONFIG != ''
-        run: |
-          cat > config/properties.json << 'EOF'
-          ${{ vars.PROPERTIES_CONFIG }}
-          EOF
 
       - name: Upload configuration files to S3
         run: |

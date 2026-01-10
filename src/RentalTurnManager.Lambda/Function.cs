@@ -27,12 +27,21 @@ public class Function
     public Function()
     {
         // Build configuration
-        _configuration = new ConfigurationBuilder()
+        var configBuilder = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
-            .AddJsonFile("config/properties.json", optional: false)
-            .AddJsonFile("config/message-templates.json", optional: false)
-            .AddEnvironmentVariables()
-            .Build();
+            .AddEnvironmentVariables();
+        
+        // Add config files if they exist
+        var propertiesPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "properties.json");
+        var templatesPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "message-templates.json");
+        
+        if (File.Exists(propertiesPath))
+            configBuilder.AddJsonFile(propertiesPath, optional: true);
+        
+        if (File.Exists(templatesPath))
+            configBuilder.AddJsonFile(templatesPath, optional: true);
+        
+        _configuration = configBuilder.Build();
 
         // Setup dependency injection
         var serviceCollection = new ServiceCollection();
