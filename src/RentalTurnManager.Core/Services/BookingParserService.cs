@@ -59,11 +59,13 @@ public class BookingParserService : IBookingParserService
     private Booking? ParseAirbnbBooking(EmailMessage email)
     {
         var content = (email.HtmlBody ?? "") + " " + (email.Body ?? "");
+        var subject = email.Subject ?? "";
         
         // Look for confirmation/reservation keywords along with key booking identifiers
         var hasConfirmationKeyword = content.Contains("reservation", StringComparison.OrdinalIgnoreCase) ||
                                      content.Contains("booking", StringComparison.OrdinalIgnoreCase) ||
-                                     content.Contains("confirmed", StringComparison.OrdinalIgnoreCase);
+                                     content.Contains("confirmed", StringComparison.OrdinalIgnoreCase) ||
+                                     subject.Contains("confirmed", StringComparison.OrdinalIgnoreCase);
         
         // Check if it has booking-specific content (not just performance/marketing emails)
         var hasBookingContent = Regex.IsMatch(content, @"check[\s-]*in", RegexOptions.IgnoreCase) ||
@@ -80,43 +82,99 @@ public class BookingParserService : IBookingParserService
             RawEmailContent = content
         };
 
-        // Extract booking reference (e.g., HM123456789)
-        var refMatch = Regex.Match(content, @"(?:reservation|confirmation)\s*(?:code|number)?[:\s]+([A-Z]{2}\d+|[A-Z0-9]{10,})", RegexOptions.IgnoreCase);
+        // Extract booking reference - Airbnb uses codes like HMXX8RX9P5
+        var refMatch = Regex.Match(content, @"(?:confirmation|reservation)\s*(?:code|number)?[:\s>]+([A-Z0-9]{8,12})\b", RegexOptions.IgnoreCase);
         if (refMatch.Success)
         {
             booking.BookingReference = refMatch.Groups[1].Value;
         }
 
-        // Extract property ID from listing number (should come before guests to avoid conflict)
-        var listingMatch = Regex.Match(content, @"listing[:\s#]+(\d+)", RegexOptions.IgnoreCase);
+        // Extract property ID from listing/room number - can be very long numbers
+        var listingMatch = Regex.Match(content, @"(?:listing|rooms?)[/:\s#]+(\d{10,})", RegexOptions.IgnoreCase);
         if (listingMatch.Success)
         {
             booking.PropertyId = listingMatch.Groups[1].Value;
         }
 
-        // Extract dates - looking for check-in and check-out
-        var checkInMatch = Regex.Match(content, @"check[\s-]*in[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})", RegexOptions.IgnoreCase);
-        var checkOutMatch = Regex.Match(content, @"check[\s-]*out[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})", RegexOptions.IgnoreCase);
+        // Extract dates - Airbnb uses multiple formats:
+        // 1. "Wed, Dec 3" (weekday, month abbreviation, day - without year)
+        // 2. "December 3, 2025" (full month name with year)
+        // 3. "12/3/2025" (numeric format)
+        
+        // Try format: "Mon, Dec 3" or "Monday, December 3"
+        var checkInMatch = Regex.Match(content, @"check[\s-]*in[:\s>]+(?:\w+,?\s+)?(\w+\s+\d{1,2}(?:,?\s+\d{4})?)", RegexOptions.IgnoreCase);
+        var checkOutMatch = Regex.Match(content, @"check[\s-]*out[:\s>]+(?:\w+,?\s+)?(\w+\s+\d{1,2}(?:,?\s+\d{4})?)", RegexOptions.IgnoreCase);
 
-        if (checkInMatch.Success && DateTime.TryParse(checkInMatch.Groups[1].Value, out var checkIn))
+        if (checkInMatch.Success)
         {
-            booking.CheckInDate = checkIn;
+            var checkInStr = checkInMatch.Groups[1].Value;
+            // If year is missing, add current year or next year if date has passed
+            if (!checkInStr.Contains("20"))
+            {
+                var currentYear = DateTime.Now.Year;
+                checkInStr += $", {currentYear}";
+                
+                // Try parsing with current year
+                if (DateTime.TryParse(checkInStr, out var tempCheckIn))
+                {
+                    // If the date is more than 30 days in the past, it's probably next year
+                    if (tempCheckIn < DateTime.Now.AddDays(-30))
+                    {
+                        checkInStr = $"{checkInMatch.Groups[1].Value}, {currentYear + 1}";
+                    }
+                }
+            }
+            
+            if (DateTime.TryParse(checkInStr, out var checkIn))
+            {
+                booking.CheckInDate = checkIn;
+            }
         }
 
-        if (checkOutMatch.Success && DateTime.TryParse(checkOutMatch.Groups[1].Value, out var checkOut))
+        if (checkOutMatch.Success)
         {
-            booking.CheckOutDate = checkOut;
+            var checkOutStr = checkOutMatch.Groups[1].Value;
+            // If year is missing, infer from check-in date
+            if (!checkOutStr.Contains("20"))
+            {
+                var year = booking.CheckInDate?.Year ?? DateTime.Now.Year;
+                checkOutStr += $", {year}";
+                
+                // Try parsing
+                if (DateTime.TryParse(checkOutStr, out var tempCheckOut) && booking.CheckInDate.HasValue)
+                {
+                    // If checkout is before checkin, it must be next year
+                    if (tempCheckOut < booking.CheckInDate.Value)
+                    {
+                        checkOutStr = $"{checkOutMatch.Groups[1].Value}, {year + 1}";
+                    }
+                }
+            }
+            
+            if (DateTime.TryParse(checkOutStr, out var checkOut))
+            {
+                booking.CheckOutDate = checkOut;
+            }
         }
 
-        // Extract guest name
-        var guestMatch = Regex.Match(content, @"(?:guest|reserved by)[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+)", RegexOptions.IgnoreCase);
-        if (guestMatch.Success)
+        // Extract guest name - check subject first ("Angel Tristan arrives Dec 3")
+        var subjectGuestMatch = Regex.Match(subject, @"([A-Z][a-z]+\s+[A-Z][a-z]+)\s+arrives", RegexOptions.IgnoreCase);
+        if (subjectGuestMatch.Success)
         {
-            booking.GuestName = guestMatch.Groups[1].Value;
+            booking.GuestName = subjectGuestMatch.Groups[1].Value;
+        }
+        else
+        {
+            // Try content
+            var guestMatch = Regex.Match(content, @"(?:guest|reserved by|send\s+\w+\s+a\s+message)[:\s>]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)", RegexOptions.IgnoreCase);
+            if (guestMatch.Success)
+            {
+                booking.GuestName = guestMatch.Groups[1].Value;
+            }
         }
 
-        // Extract number of guests - use word boundary to avoid matching listing numbers
-        var guestsMatch = Regex.Match(content, @"\b(\d+)\s+guests?\b", RegexOptions.IgnoreCase);
+        // Extract number of guests - look for "2 adults", "3 guests", etc.
+        var guestsMatch = Regex.Match(content, @"\b(\d+)\s+(adults?|guests?)\b", RegexOptions.IgnoreCase);
         if (guestsMatch.Success && int.TryParse(guestsMatch.Groups[1].Value, out var guests))
         {
             booking.NumberOfGuests = guests;
@@ -128,9 +186,12 @@ public class BookingParserService : IBookingParserService
     private Booking? ParseVrboBooking(EmailMessage email)
     {
         var content = (email.HtmlBody ?? "") + " " + (email.Body ?? "");
+        var subject = email.Subject ?? "";
         
+        // VRBO emails have distinctive markers
         if (!content.Contains("reservation", StringComparison.OrdinalIgnoreCase) &&
-            !content.Contains("confirmation", StringComparison.OrdinalIgnoreCase))
+            !content.Contains("booking", StringComparison.OrdinalIgnoreCase) &&
+            !subject.Contains("vrbo", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
@@ -141,30 +202,91 @@ public class BookingParserService : IBookingParserService
             RawEmailContent = content
         };
 
-        // VRBO uses different patterns - adjust as needed
-        var refMatch = Regex.Match(content, @"(?:confirmation|reservation)\s*(?:number)?[:\s#]+([0-9]{8,})", RegexOptions.IgnoreCase);
+        // Extract Reservation ID (format: HA-T65Q42)
+        var refMatch = Regex.Match(content, @"Reservation\s+ID[:\s>]+([A-Z]{2}-[A-Z0-9]{6,})", RegexOptions.IgnoreCase);
         if (refMatch.Success)
         {
             booking.BookingReference = refMatch.Groups[1].Value;
         }
 
-        var checkInMatch = Regex.Match(content, @"arrival[:\s]+(\w+\s+\d{1,2},?\s+\d{4})", RegexOptions.IgnoreCase);
-        var checkOutMatch = Regex.Match(content, @"departure[:\s]+(\w+\s+\d{1,2},?\s+\d{4})", RegexOptions.IgnoreCase);
-
-        if (checkInMatch.Success && DateTime.TryParse(checkInMatch.Groups[1].Value, out var checkIn))
+        // Extract Unit/Property ID (format: unit_5480548)
+        var unitMatch = Regex.Match(content, @"Unit[:\s>]+(unit_\d+)", RegexOptions.IgnoreCase);
+        if (unitMatch.Success)
         {
-            booking.CheckInDate = checkIn;
+            booking.PropertyId = unitMatch.Groups[1].Value;
+        }
+        else
+        {
+            // Try extracting from subject line "Vrbo #4906384"
+            var subjectPropertyMatch = Regex.Match(subject, @"Vrbo\s+#(\d+)", RegexOptions.IgnoreCase);
+            if (subjectPropertyMatch.Success)
+            {
+                booking.PropertyId = subjectPropertyMatch.Groups[1].Value;
+            }
         }
 
-        if (checkOutMatch.Success && DateTime.TryParse(checkOutMatch.Groups[1].Value, out var checkOut))
+        // VRBO uses date range format: "Dec 31, 2025 - Jan 2, 2026"
+        // Try extracting from subject first (more reliable)
+        var subjectDateMatch = Regex.Match(subject, @"(\w+\s+\d{1,2},\s+\d{4})\s*-\s*(\w+\s+\d{1,2},\s+\d{4})", RegexOptions.IgnoreCase);
+        if (subjectDateMatch.Success)
         {
-            booking.CheckOutDate = checkOut;
+            if (DateTime.TryParse(subjectDateMatch.Groups[1].Value, out var checkIn))
+            {
+                booking.CheckInDate = checkIn;
+            }
+            if (DateTime.TryParse(subjectDateMatch.Groups[2].Value, out var checkOut))
+            {
+                booking.CheckOutDate = checkOut;
+            }
+        }
+        else
+        {
+            // Try content - look for "Dates" section with format "Dec 31, 2025 - Jan 2, 2026"
+            var datesMatch = Regex.Match(content, @"Dates[:\s>]+[^<>]*?(\w+\s+\d{1,2},\s+\d{4})\s*-\s*(\w+\s+\d{1,2},\s+\d{4})", RegexOptions.IgnoreCase);
+            if (datesMatch.Success)
+            {
+                if (DateTime.TryParse(datesMatch.Groups[1].Value, out var checkIn))
+                {
+                    booking.CheckInDate = checkIn;
+                }
+                if (DateTime.TryParse(datesMatch.Groups[2].Value, out var checkOut))
+                {
+                    booking.CheckOutDate = checkOut;
+                }
+            }
         }
 
-        var propertyMatch = Regex.Match(content, @"property[:\s#]+([0-9]+)", RegexOptions.IgnoreCase);
-        if (propertyMatch.Success)
+        // Extract guest name - from subject "Instant Booking from Mehrshad Nikfam:"
+        var subjectGuestMatch = Regex.Match(subject, @"(?:Instant\s+Booking\s+from|from)\s+([A-Z][a-z]+\s+[A-Z][a-z]+):", RegexOptions.IgnoreCase);
+        if (subjectGuestMatch.Success)
         {
-            booking.PropertyId = propertyMatch.Groups[1].Value;
+            booking.GuestName = subjectGuestMatch.Groups[1].Value;
+        }
+        else
+        {
+            // Try content - look for "Traveler Name"
+            var guestMatch = Regex.Match(content, @"Traveler\s+Name[:\s>]+([A-Z][a-z]+\s+[A-Z][a-z]+)", RegexOptions.IgnoreCase);
+            if (guestMatch.Success)
+            {
+                booking.GuestName = guestMatch.Groups[1].Value;
+            }
+        }
+
+        // Extract number of guests - format: "6 adults, 0 children"
+        var guestsMatch = Regex.Match(content, @"Guests[:\s>]+(\d+)\s+adults?", RegexOptions.IgnoreCase);
+        if (guestsMatch.Success && int.TryParse(guestsMatch.Groups[1].Value, out var adults))
+        {
+            // Also check for children
+            var childrenMatch = Regex.Match(content, @"(\d+)\s+children", RegexOptions.IgnoreCase);
+            var children = 0;
+            if (childrenMatch.Success && int.TryParse(childrenMatch.Groups[1].Value, out children))
+            {
+                booking.NumberOfGuests = adults + children;
+            }
+            else
+            {
+                booking.NumberOfGuests = adults;
+            }
         }
 
         return booking;
