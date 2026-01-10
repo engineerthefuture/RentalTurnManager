@@ -305,7 +305,7 @@ Resources:
   StepFunctionsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub '/aws/stepfunctions/${CleanerWorkflowStateMachine}'
+      LogGroupName: !Sub '/aws/stepfunctions/${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
       RetentionInDays: 30
       Tags:
         - Key: OwnerName
