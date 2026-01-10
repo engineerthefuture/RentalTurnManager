@@ -6,6 +6,7 @@ using Amazon.Lambda.TestUtilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using RentalTurnManager.Lambda;
 using RentalTurnManager.Core.Services;
 using RentalTurnManager.Models;
 
