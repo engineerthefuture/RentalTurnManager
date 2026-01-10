@@ -1,4 +1,6 @@
 using Amazon.Lambda.Core;
+using Amazon.SecretsManager;
+using Amazon.SimpleEmail;
 using Amazon.StepFunctions;
 using Amazon.StepFunctions.Model;
 using Microsoft.Extensions.Configuration;
@@ -56,7 +58,7 @@ public class Function
         services.AddLogging(builder =>
         {
             builder.AddConsole();
-            builder.SetMinimumLevel(LogLevel.Information);
+            builder.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Information);
         });
 
         // Add configuration
@@ -81,11 +83,11 @@ public class Function
     public async Task<LambdaResponse> FunctionHandler(LambdaRequest input, ILambdaContext context)
     {
         _logger.LogInformation("Starting RentalTurnManager email scan");
-        _logger.LogInformation($"Request ID: {context.RequestId}");
+        _logger.LogInformation($"Request ID: {context.AwsRequestId}");
 
         var response = new LambdaResponse
         {
-            RequestId = context.RequestId,
+            RequestId = context.AwsRequestId,
             Timestamp = DateTime.UtcNow,
             BookingsProcessed = 0,
             WorkflowsStarted = 0,
