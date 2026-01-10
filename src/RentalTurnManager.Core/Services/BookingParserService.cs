@@ -58,11 +58,12 @@ public class BookingParserService : IBookingParserService
 
     private Booking? ParseAirbnbBooking(EmailMessage email)
     {
-        var content = email.HtmlBody + " " + email.Body;
+        var content = (email.HtmlBody ?? "") + " " + (email.Body ?? "");
         
         // Look for confirmation/reservation keywords
         if (!content.Contains("reservation", StringComparison.OrdinalIgnoreCase) &&
-            !content.Contains("booking", StringComparison.OrdinalIgnoreCase))
+            !content.Contains("booking", StringComparison.OrdinalIgnoreCase) &&
+            !content.Contains("confirmed", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
@@ -74,10 +75,17 @@ public class BookingParserService : IBookingParserService
         };
 
         // Extract booking reference (e.g., HM123456789)
-        var refMatch = Regex.Match(content, @"(?:confirmation|reservation)\s*(?:code|number)?[:\s]+([A-Z0-9]{10,})", RegexOptions.IgnoreCase);
+        var refMatch = Regex.Match(content, @"(?:reservation|confirmation)\s*(?:code|number)?[:\s]+([A-Z]{2}\d+|[A-Z0-9]{10,})", RegexOptions.IgnoreCase);
         if (refMatch.Success)
         {
             booking.BookingReference = refMatch.Groups[1].Value;
+        }
+
+        // Extract property ID from listing number (should come before guests to avoid conflict)
+        var listingMatch = Regex.Match(content, @"listing[:\s#]+(\d+)", RegexOptions.IgnoreCase);
+        if (listingMatch.Success)
+        {
+            booking.PropertyId = listingMatch.Groups[1].Value;
         }
 
         // Extract dates - looking for check-in and check-out
@@ -101,15 +109,8 @@ public class BookingParserService : IBookingParserService
             booking.GuestName = guestMatch.Groups[1].Value;
         }
 
-        // Extract property ID from listing number
-        var listingMatch = Regex.Match(content, @"listing[:\s#]+(\d+)", RegexOptions.IgnoreCase);
-        if (listingMatch.Success)
-        {
-            booking.PropertyId = listingMatch.Groups[1].Value;
-        }
-
-        // Extract number of guests
-        var guestsMatch = Regex.Match(content, @"(\d+)\s+guest", RegexOptions.IgnoreCase);
+        // Extract number of guests - use word boundary to avoid matching listing numbers
+        var guestsMatch = Regex.Match(content, @"\b(\d+)\s+guests?\b", RegexOptions.IgnoreCase);
         if (guestsMatch.Success && int.TryParse(guestsMatch.Groups[1].Value, out var guests))
         {
             booking.NumberOfGuests = guests;
@@ -120,9 +121,10 @@ public class BookingParserService : IBookingParserService
 
     private Booking? ParseVrboBooking(EmailMessage email)
     {
-        var content = email.HtmlBody + " " + email.Body;
+        var content = (email.HtmlBody ?? "") + " " + (email.Body ?? "");
         
-        if (!content.Contains("reservation", StringComparison.OrdinalIgnoreCase))
+        if (!content.Contains("reservation", StringComparison.OrdinalIgnoreCase) &&
+            !content.Contains("confirmation", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
@@ -164,9 +166,10 @@ public class BookingParserService : IBookingParserService
 
     private Booking? ParseBookingComBooking(EmailMessage email)
     {
-        var content = email.HtmlBody + " " + email.Body;
+        var content = (email.HtmlBody ?? "") + " " + (email.Body ?? "");
         
-        if (!content.Contains("confirmation", StringComparison.OrdinalIgnoreCase))
+        if (!content.Contains("confirmation", StringComparison.OrdinalIgnoreCase) &&
+            !content.Contains("booking", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
