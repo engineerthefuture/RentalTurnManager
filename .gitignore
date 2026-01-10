@@ -1,0 +1,67 @@
+# .NET Core
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+*.pidb
+*.sln.ide
+*.sln.docstates
+*.cache
+*.log
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# NuGet
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+# Test Coverage
+coverage/
+TestResults/
+*.coverage
+*.coveragexml
+
+# AWS
+.aws-sam/
+samconfig.toml
+packaged.yaml
+
+# IDE
+.vscode/
+.vs/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+*.local.json
+
+# Lambda deployment packages
+*.zip
+lambda-deployment/
+
+# Rider
+.idea.powershell/
+_ReSharper.Caches/

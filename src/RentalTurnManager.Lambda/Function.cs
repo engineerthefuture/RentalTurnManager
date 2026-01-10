@@ -1,0 +1,178 @@
+using Amazon.Lambda.Core;
+using Amazon.StepFunctions;
+using Amazon.StepFunctions.Model;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using RentalTurnManager.Core.Services;
+using RentalTurnManager.Models;
+using System.Text.Json;
+
+// Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
+[assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
+
+namespace RentalTurnManager.Lambda;
+
+/// <summary>
+/// Lambda function handler for scanning emails and triggering cleaner workflows
+/// </summary>
+public class Function
+{
+    private readonly IServiceProvider _serviceProvider;
+    private readonly ILogger<Function> _logger;
+    private readonly IConfiguration _configuration;
+
+    public Function()
+    {
+        // Build configuration
+        _configuration = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("config/properties.json", optional: false)
+            .AddJsonFile("config/message-templates.json", optional: false)
+            .AddEnvironmentVariables()
+            .Build();
+
+        // Setup dependency injection
+        var serviceCollection = new ServiceCollection();
+        ConfigureServices(serviceCollection);
+        _serviceProvider = serviceCollection.BuildServiceProvider();
+
+        _logger = _serviceProvider.GetRequiredService<ILogger<Function>>();
+    }
+
+    /// <summary>
+    /// Test constructor for dependency injection
+    /// </summary>
+    public Function(IServiceProvider serviceProvider, IConfiguration configuration)
+    {
+        _serviceProvider = serviceProvider;
+        _configuration = configuration;
+        _logger = _serviceProvider.GetRequiredService<ILogger<Function>>();
+    }
+
+    private void ConfigureServices(IServiceCollection services)
+    {
+        // Add logging
+        services.AddLogging(builder =>
+        {
+            builder.AddConsole();
+            builder.SetMinimumLevel(LogLevel.Information);
+        });
+
+        // Add configuration
+        services.AddSingleton(_configuration);
+
+        // Add AWS services
+        services.AddAWSService<IAmazonSecretsManager>();
+        services.AddAWSService<IAmazonStepFunctions>();
+        services.AddAWSService<IAmazonSimpleEmailService>();
+
+        // Add application services
+        services.AddSingleton<ISecretsService, SecretsService>();
+        services.AddSingleton<IEmailScannerService, EmailScannerService>();
+        services.AddSingleton<IBookingParserService, BookingParserService>();
+        services.AddSingleton<IPropertyConfigService, PropertyConfigService>();
+        services.AddSingleton<IStepFunctionService, StepFunctionService>();
+    }
+
+    /// <summary>
+    /// Lambda function handler - scans emails for new bookings
+    /// </summary>
+    public async Task<LambdaResponse> FunctionHandler(LambdaRequest input, ILambdaContext context)
+    {
+        _logger.LogInformation("Starting RentalTurnManager email scan");
+        _logger.LogInformation($"Request ID: {context.RequestId}");
+
+        var response = new LambdaResponse
+        {
+            RequestId = context.RequestId,
+            Timestamp = DateTime.UtcNow,
+            BookingsProcessed = 0,
+            WorkflowsStarted = 0,
+            Errors = new List<string>()
+        };
+
+        try
+        {
+            // Get services
+            var secretsService = _serviceProvider.GetRequiredService<ISecretsService>();
+            var emailScanner = _serviceProvider.GetRequiredService<IEmailScannerService>();
+            var bookingParser = _serviceProvider.GetRequiredService<IBookingParserService>();
+            var propertyConfig = _serviceProvider.GetRequiredService<IPropertyConfigService>();
+            var stepFunctionService = _serviceProvider.GetRequiredService<IStepFunctionService>();
+
+            // Retrieve email credentials from Secrets Manager
+            var emailCredentials = await secretsService.GetEmailCredentialsAsync();
+            
+            // Scan emails for new bookings
+            _logger.LogInformation("Scanning emails for new bookings");
+            var emails = await emailScanner.ScanForBookingEmailsAsync(emailCredentials);
+            _logger.LogInformation($"Found {emails.Count} potential booking emails");
+
+            foreach (var email in emails)
+            {
+                try
+                {
+                    // Parse booking information
+                    var booking = bookingParser.ParseBooking(email);
+                    if (booking == null)
+                    {
+                        _logger.LogWarning($"Could not parse booking from email: {email.Subject}");
+                        continue;
+                    }
+
+                    response.BookingsProcessed++;
+                    _logger.LogInformation($"Parsed booking: {booking.Platform} - {booking.BookingReference}");
+
+                    // Find matching property configuration
+                    var property = propertyConfig.FindPropertyByPlatformId(booking.Platform, booking.PropertyId);
+                    if (property == null)
+                    {
+                        var error = $"No property configuration found for {booking.Platform} property {booking.PropertyId}";
+                        _logger.LogError(error);
+                        response.Errors.Add(error);
+                        continue;
+                    }
+
+                    // Calculate cleaning time (day before check-in)
+                    var cleaningDate = booking.CheckInDate.AddDays(-1);
+                    var cleaningTime = new TimeSpan(14, 0, 0); // 2 PM default
+
+                    // Start Step Functions workflow
+                    var workflowInput = new CleanerWorkflowInput
+                    {
+                        Booking = booking,
+                        Property = property,
+                        CleaningDateTime = cleaningDate.Add(cleaningTime),
+                        CurrentCleanerIndex = 0,
+                        AttemptCount = 0
+                    };
+
+                    var executionArn = await stepFunctionService.StartCleanerWorkflowAsync(workflowInput);
+                    response.WorkflowsStarted++;
+                    _logger.LogInformation($"Started workflow: {executionArn}");
+
+                    // Mark email as processed
+                    await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, email);
+                }
+                catch (Exception ex)
+                {
+                    var error = $"Error processing email '{email.Subject}': {ex.Message}";
+                    _logger.LogError(ex, error);
+                    response.Errors.Add(error);
+                }
+            }
+
+            _logger.LogInformation($"Email scan complete. Processed {response.BookingsProcessed} bookings, started {response.WorkflowsStarted} workflows");
+            response.Success = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Fatal error in email scanning");
+            response.Success = false;
+            response.Errors.Add($"Fatal error: {ex.Message}");
+        }
+
+        return response;
+    }
+}

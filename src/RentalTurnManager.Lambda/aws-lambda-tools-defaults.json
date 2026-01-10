@@ -1,0 +1,17 @@
+{
+  "lambda-tools-defaults": {
+    "profile": "",
+    "region": "",
+    "configuration": "Release",
+    "function-architecture": "x86_64",
+    "function-runtime": "dotnet10",
+    "function-memory-size": 512,
+    "function-timeout": 300,
+    "function-handler": "RentalTurnManager.Lambda::RentalTurnManager.Lambda.Function::FunctionHandler",
+    "framework": "net10.0",
+    "function-name": "",
+    "function-role": "",
+    "tracing-mode": "PassThrough",
+    "environment-variables": ""
+  }
+}

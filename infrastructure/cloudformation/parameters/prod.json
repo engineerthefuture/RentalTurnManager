@@ -1,0 +1,34 @@
+[
+  {
+    "ParameterKey": "Environment",
+    "ParameterValue": "prod"
+  },
+  {
+    "ParameterKey": "OwnerEmail",
+    "ParameterValue": "your-email@example.com"
+  },
+  {
+    "ParameterKey": "ImapHost",
+    "ParameterValue": "imap.your-provider.com"
+  },
+  {
+    "ParameterKey": "ImapPort",
+    "ParameterValue": "993"
+  },
+  {
+    "ParameterKey": "ScheduleInterval",
+    "ParameterValue": "rate(15 minutes)"
+  },
+  {
+    "ParameterKey": "Owner",
+    "ParameterValue": "Your Name"
+  },
+  {
+    "ParameterKey": "NamespacePrefix",
+    "ParameterValue": "bf"
+  },
+  {
+    "ParameterKey": "AppName",
+    "ParameterValue": "RentalTurnManager"
+  }
+]

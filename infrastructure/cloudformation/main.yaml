@@ -1,0 +1,335 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'RentalTurnManager - Automated rental property turnover scheduling system'
+
+Parameters:
+  Environment:
+    Type: String
+    Description: Environment name (dev or prod)
+    AllowedValues:
+      - dev
+      - prod
+    Default: dev
+
+  OwnerEmail:
+    Type: String
+    Description: Property owner email address for notifications
+    Default: owner@example.com
+
+  ImapHost:
+    Type: String
+    Description: IMAP server hostname
+    Default: imap.gmail.com
+
+  ImapPort:
+    Type: Number
+    Description: IMAP server port
+    Default: 993
+
+  ScheduleInterval:
+    Type: String
+    Description: Schedule expression for Lambda execution
+    Default: rate(15 minutes)
+
+  EmailUsername:
+    Type: String
+    Description: Email account username
+    NoEcho: true
+
+  EmailPassword:
+    Type: String
+    Description: Email account password
+    NoEcho: true
+
+  Owner:
+    Type: String
+    Description: Owner tag value
+    Default: RentalPropertyOwner
+
+  NamespacePrefix:
+    Type: String
+    Description: Namespace prefix for AWS resource names
+    Default: bf
+
+  AppName:
+    Type: String
+    Description: Application name for AWS resource names
+    Default: RentalTurnManager
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Environment Configuration
+        Parameters:
+          - Environment
+          - Owner
+      - Label:
+          default: Email Configuration
+        Parameters:
+          - ImapHost
+          - ImapPort
+          - EmailUsername
+          - EmailPassword
+          - OwnerEmail
+      - Label:
+          default: Scheduling Configuration
+        Parameters:
+          - ScheduleInterval
+
+Resources:
+  # Secrets Manager Secret for Email Credentials
+  EmailCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${NamespacePrefix}-${Environment}-secret-${AppName}-EmailCredentials'
+      Description: Email account credentials for IMAP access
+      SecretString: !Sub |
+        {
+          "host": "${ImapHost}",
+          "port": ${ImapPort},
+          "username": "${EmailUsername}",
+          "password": "${EmailPassword}",
+          "useSsl": true
+        }
+      Tags:
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Email credentials for booking notifications
+
+  # IAM Role for Lambda Function
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${NamespacePrefix}-${Environment}-role-${AppName}-Lambda'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: RentalTurnManagerLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref EmailCredentialsSecret
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource: !Ref CleanerWorkflowStateMachine
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
+      Tags:
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Execution role for Lambda function
+
+  # Lambda Function
+  EmailScannerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${NamespacePrefix}-${Environment}-lambda-${AppName}'
+      Description: Scans IMAP inbox for booking emails and triggers cleaner workflows
+      Runtime: dotnet8
+      Handler: RentalTurnManager.Lambda::RentalTurnManager.Lambda.Function::FunctionHandler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          EMAIL_SECRET_NAME: !Ref EmailCredentialsSecret
+          CLEANER_WORKFLOW_STATE_MACHINE_ARN: !Ref CleanerWorkflowStateMachine
+          OWNER_EMAIL: !Ref OwnerEmail
+          IMAP_HOST: !Ref ImapHost
+          IMAP_PORT: !Ref ImapPort
+      Code:
+        ZipFile: |
+          // Placeholder - will be replaced during deployment
+          public class Function {
+              public string FunctionHandler(object input) {
+                  return "Placeholder";
+              }
+          }
+      Tags:
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Email scanner Lambda function
+
+  # CloudWatch Log Group for Lambda
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${EmailScannerLambda}'
+      RetentionInDays: 30
+      Tags:
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Lambda function logs
+
+  # EventBridge Rule for Scheduled Execution
+  ScheduledRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${NamespacePrefix}-${Environment}-schedule-${AppName}'
+      Description: Triggers email scanner Lambda on a schedule
+      ScheduleExpression: !Ref ScheduleInterval
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt EmailScannerLambda.Arn
+          Id: EmailScannerLambdaTarget
+      Tags:
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Scheduled trigger for email scanning
+
+  # Permission for EventBridge to invoke Lambda
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref EmailScannerLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduledRule.Arn
+
+  # IAM Role for Step Functions
+  StepFunctionsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${NamespacePrefix}-${Environment}-role-${AppName}-StepFunctions'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StepFunctionsExecutionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogDelivery
+                  - logs:GetLogDelivery
+                  - logs:UpdateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:ListLogDeliveries
+                  - logs:PutResourcePolicy
+                  - logs:DescribeResourcePolicies
+                  - logs:DescribeLogGroups
+                Resource: '*'
+      Tags:
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Execution role for Step Functions
+
+  # Step Functions State Machine
+  CleanerWorkflowStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub '${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
+      StateMachineType: STANDARD
+      RoleArn: !GetAtt StepFunctionsExecutionRole.Arn
+      DefinitionS3Location:
+        Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
+        Key: !Sub '${AppName}/stepfunctions/${Environment}/cleaner-workflow.json'
+      Tags:
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Cleaner coordination workflow
+
+  # CloudWatch Log Group for Step Functions
+  StepFunctionsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/stepfunctions/${CleanerWorkflowStateMachine}'
+      RetentionInDays: 30
+      Tags:
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Step Functions execution logs
+
+Outputs:
+  LambdaFunctionArn:
+    Description: ARN of the email scanner Lambda function
+    Value: !GetAtt EmailScannerLambda.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaArn'
+
+  StateMachineArn:
+    Description: ARN of the cleaner workflow state machine
+    Value: !Ref CleanerWorkflowStateMachine
+    Export:
+      Name: !Sub '${AWS::StackName}-StateMachineArn'
+
+  EmailSecretArn:
+    Description: ARN of the email credentials secret
+    Value: !Ref EmailCredentialsSecret
+    Export:
+      Name: !Sub '${AWS::StackName}-EmailSecretArn'
