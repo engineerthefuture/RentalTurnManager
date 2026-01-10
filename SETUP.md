@@ -28,6 +28,7 @@ Add the following **variables**:
 - `AWS_ACCOUNT_ID`: Your AWS account ID (12-digit number)
 - `OIDC_ROLE_NAME`: GitHubActionsOIDCRole
 - `NAMESPACE_PREFIX`: Namespace prefix for AWS resources - Optional, defaults to "bf"
+- `PROPERTIES_CONFIG`: JSON configuration for your rental properties (see Properties Configuration section below)
 - `IMAP_HOST`: IMAP server hostname (e.g., `imap.mail.me.com` or `imap.gmail.com`)
 - `IMAP_PORT`: IMAP port (usually `993`) - Optional, defaults to 993
 - `SCHEDULE_INTERVAL`: Lambda schedule expression (e.g., `rate(15 minutes)`) - Optional, defaults to rate(15 minutes)
@@ -35,9 +36,11 @@ Add the following **variables**:
 - `APP_DESCRIPTION`: Application description - Optional, defaults to "Rental property turnover management system"
 
 
-### 3. Configure Properties
+### 3. Properties Configuration
 
-Edit `config/properties.json` to add your rental properties:
+Create a GitHub variable called `PROPERTIES_CONFIG` with your rental property configuration as a JSON string. This keeps your property details private and out of the repository.
+
+**Format:**
 
 ```json
 {
@@ -64,12 +67,15 @@ Edit `config/properties.json` to add your rental properties:
         "bathrooms": 2,
         "cleaningDuration": "3 hours",
         "accessInstructions": "Access instructions",
-        "specialInstructions": "Special cleaning notes"
+        "specialInstructions": "Special cleaning notes",
+        "ownerName": "Owner Name"
       }
     }
   ]
 }
 ```
+
+**Note:** Store the entire JSON as a single-line string in the GitHub variable. The workflow will write this to `config/properties.json` during deployment.
 
 ### 4. Email Setup
 

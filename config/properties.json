@@ -3,33 +3,27 @@
     {
       "propertyId": "property-1",
       "platformIds": {
-        "airbnb": "Waterfront Lake Anna - Kayaks, Firepit, Family Fun",
-        "vrbo": "4906384",
-        "bookingcom": "15231544"
+        "airbnb": "Your Airbnb Property Name or ID",
+        "vrbo": "1234567",
+        "bookingcom": "12345678"
       },
-      "address": "157 Cooke Ln, Bumpass, VA 23024",
+      "address": "123 Main St, City, ST 12345",
       "cleaners": [
         {
-          "name": "Roots Cleaning Solutions",
-          "email": "brent@brentfoster.me",
-          "phone": "+1-480-251-7828",
+          "name": "Cleaner Name",
+          "email": "cleaner@example.com",
+          "phone": "+1-555-0100",
           "rank": 1
-        },
-        {
-          "name": "Cleaner Test 2",
-          "email": "brent.m.foster@icloud.com",
-          "phone": "+1-123-456-7890",
-          "rank": 2
         }
       ],
       "metadata": {
-        "propertyName": "Waterfront Lake Anna (157 Cooke Ln, Bumpass, VA 23024)",
+        "propertyName": "Property Name",
         "bedrooms": 3,
-        "bathrooms": 2.5,
-        "cleaningDuration": "2.5 hours",
-        "accessInstructions": "Access code: 1234",
-        "specialInstructions": "extra instructions here",
-        "ownerName": "Brent Foster"
+        "bathrooms": 2,
+        "cleaningDuration": "2-3 hours",
+        "accessInstructions": "Access instructions here",
+        "specialInstructions": "Special cleaning instructions",
+        "ownerName": "Property Owner"
       }
     }
   ]
