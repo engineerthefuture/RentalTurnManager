@@ -57,8 +57,15 @@ public class FunctionTests
             .Setup(x => x.GetEmailCredentialsAsync())
             .ReturnsAsync(credentials);
 
+        _mockPropertyConfig
+            .Setup(x => x.GetBookingPlatformFromAddresses())
+            .Returns(new List<string> { "airbnb.com", "vrbo.com", "booking.com" });
+
         _mockEmailScanner
-            .Setup(x => x.ScanForBookingEmailsAsync(It.IsAny<EmailCredentials>()))
+            .Setup(x => x.ScanForBookingEmailsAsync(
+                It.IsAny<EmailCredentials>(), 
+                It.IsAny<bool>(), 
+                It.IsAny<List<string>?>()))
             .ReturnsAsync(new List<EmailMessage>());
 
         var context = new TestLambdaContext
@@ -109,8 +116,15 @@ public class FunctionTests
             .Setup(x => x.GetEmailCredentialsAsync())
             .ReturnsAsync(credentials);
 
+        _mockPropertyConfig
+            .Setup(x => x.GetBookingPlatformFromAddresses())
+            .Returns(new List<string> { "airbnb.com", "vrbo.com", "booking.com" });
+
         _mockEmailScanner
-            .Setup(x => x.ScanForBookingEmailsAsync(It.IsAny<EmailCredentials>()))
+            .Setup(x => x.ScanForBookingEmailsAsync(
+                It.IsAny<EmailCredentials>(), 
+                It.IsAny<bool>(), 
+                It.IsAny<List<string>?>()))
             .ReturnsAsync(new List<EmailMessage> { email });
 
         _mockBookingParser
@@ -165,8 +179,15 @@ public class FunctionTests
             .Setup(x => x.GetEmailCredentialsAsync())
             .ReturnsAsync(credentials);
 
+        _mockPropertyConfig
+            .Setup(x => x.GetBookingPlatformFromAddresses())
+            .Returns(new List<string> { "airbnb.com", "vrbo.com", "booking.com" });
+
         _mockEmailScanner
-            .Setup(x => x.ScanForBookingEmailsAsync(It.IsAny<EmailCredentials>()))
+            .Setup(x => x.ScanForBookingEmailsAsync(
+                It.IsAny<EmailCredentials>(), 
+                It.IsAny<bool>(), 
+                It.IsAny<List<string>?>()))
             .ReturnsAsync(new List<EmailMessage> { email });
 
         _mockBookingParser
