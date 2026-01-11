@@ -210,7 +210,7 @@ public class Function
 
                     // Calculate cleaning time (on checkout date)
                     var cleaningDate = booking.CheckOutDate;
-                    var cleaningTime = new TimeSpan(14, 0, 0); // 2 PM default
+                    var cleaningTime = new TimeSpan(12, 0, 0); // 12 PM default
 
                     // Start Step Functions workflow
                     var workflowInput = new CleanerWorkflowInput
@@ -219,7 +219,8 @@ public class Function
                         Property = property,
                         CleaningDateTime = cleaningDate.Add(cleaningTime),
                         CurrentCleanerIndex = 0,
-                        AttemptCount = 0
+                        AttemptCount = 0,
+                        OwnerEmail = _configuration["OwnerEmail"] ?? "owner@example.com"
                     };
 
                     var executionArn = await stepFunctionService.StartCleanerWorkflowAsync(workflowInput);

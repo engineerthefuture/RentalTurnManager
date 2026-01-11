@@ -11,6 +11,7 @@ public class CleanerWorkflowInput
     public int CurrentCleanerIndex { get; set; }
     public int AttemptCount { get; set; }
     public string? LastResponse { get; set; }
+    public string OwnerEmail { get; set; } = string.Empty;
 }
 
 /// <summary>
