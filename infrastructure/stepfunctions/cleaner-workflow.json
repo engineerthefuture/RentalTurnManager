@@ -57,11 +57,11 @@
         },
         "Message": {
           "Subject": {
-            "Data": "States.Format('Cleaning Request for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
+            "Data.$": "States.Format('Cleaning Request for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
           },
           "Body": {
             "Text": {
-              "Data": "States.Format('Hello {},\\n\\nWe have a new booking for {} and need a cleaning and laundry turnover.\\n\\nDetails:\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n- Estimated Duration: {}\\n\\nAre you available on {} at 12:00 PM to do a cleaning and laundry turnover at {}?\\n\\nPlease reply with \"yes\" or \"no\".\\n\\nThank you,\\nRentalTurnManager', $.state.currentCleaner.cleaner.name, $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.property.metadata.cleaningDuration, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address)"
+              "Data.$": "States.Format('Hello {},\\n\\nWe have a new booking for {} and need a cleaning and laundry turnover.\\n\\nDetails:\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n- Estimated Duration: {}\\n\\nAre you available on {} at 12:00 PM to do a cleaning and laundry turnover at {}?\\n\\nPlease reply with \"yes\" or \"no\".\\n\\nThank you,\\nRentalTurnManager', $.state.currentCleaner.cleaner.name, $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.property.metadata.cleaningDuration, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address)"
             }
           }
         }
@@ -121,11 +121,11 @@
                 },
                 "Message": {
                   "Subject": {
-                    "Data": "States.Format('Cleaning Confirmed for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
+                    "Data.$": "States.Format('Cleaning Confirmed for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
                   },
                   "Body": {
                     "Text": {
-                      "Data": "States.Format('Hello {},\\n\\nThank you for confirming your availability!\\n\\nYour cleaning appointment has been scheduled:\\n- Property: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n- Duration: {}\\n\\nAccess Instructions:\\n{}\\n\\nSpecial Instructions:\\n{}\\n\\nA calendar invite has been sent to you separately.\\n\\nThank you,\\nRentalTurnManager', $.state.currentCleaner.cleaner.name, $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.property.metadata.cleaningDuration, $.state.input.property.metadata.accessInstructions, $.state.input.property.metadata.specialInstructions)"
+                      "Data.$": "States.Format('Hello {},\\n\\nThank you for confirming your availability!\\n\\nYour cleaning appointment has been scheduled:\\n- Property: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n- Duration: {}\\n\\nAccess Instructions:\\n{}\\n\\nSpecial Instructions:\\n{}\\n\\nA calendar invite has been sent to you separately.\\n\\nThank you,\\nRentalTurnManager', $.state.currentCleaner.cleaner.name, $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.property.metadata.cleaningDuration, $.state.input.property.metadata.accessInstructions, $.state.input.property.metadata.specialInstructions)"
                     }
                   }
                 }
@@ -147,11 +147,11 @@
                 },
                 "Message": {
                   "Subject": {
-                    "Data": "States.Format('Cleaning Scheduled for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
+                    "Data.$": "States.Format('Cleaning Scheduled for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
                   },
                   "Body": {
                     "Text": {
-                      "Data": "States.Format('Hello,\\n\\nA cleaning has been scheduled for {}:\\n\\n- Cleaner: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n\\nYou have been copied on the calendar invite.\\n\\nThank you,\\nRentalTurnManager', $.state.input.property.metadata.propertyName, $.state.currentCleaner.cleaner.name, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address)"
+                      "Data.$": "States.Format('Hello,\\n\\nA cleaning has been scheduled for {}:\\n\\n- Cleaner: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n\\nYou have been copied on the calendar invite.\\n\\nThank you,\\nRentalTurnManager', $.state.input.property.metadata.propertyName, $.state.currentCleaner.cleaner.name, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address)"
                     }
                   }
                 }
@@ -194,11 +194,11 @@
         },
         "Message": {
           "Subject": {
-            "Data": "States.Format('URGENT: Unable to Schedule Cleaning for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
+            "Data.$": "States.Format('URGENT: Unable to Schedule Cleaning for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
           },
           "Body": {
             "Text": {
-              "Data": "States.Format('Hello,\\n\\nWe were unable to secure a cleaner for the following booking:\\n\\n- Property: {}\\n- Check-in Date: {}\\n- Checkout Date: {}\\n- Cleaning Needed: {}\\n- Address: {}\\n\\nAll preferred cleaners were contacted and either declined or did not respond.\\n\\nPlease arrange for cleaning services manually.\\n\\nBooking Details:\\n- Platform: {}\\n- Booking Reference: {}\\n- Guest Name: {}\\n\\nThank you,\\nRentalTurnManager', $.state.input.property.metadata.propertyName, $.state.input.booking.checkInDate, $.state.input.booking.checkOutDate, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.booking.platform, $.state.input.booking.bookingReference, $.state.input.booking.guestName)"
+              "Data.$": "States.Format('Hello,\\n\\nWe were unable to secure a cleaner for the following booking:\\n\\n- Property: {}\\n- Check-in Date: {}\\n- Checkout Date: {}\\n- Cleaning Needed: {}\\n- Address: {}\\n\\nAll preferred cleaners were contacted and either declined or did not respond.\\n\\nPlease arrange for cleaning services manually.\\n\\nBooking Details:\\n- Platform: {}\\n- Booking Reference: {}\\n- Guest Name: {}\\n\\nThank you,\\nRentalTurnManager', $.state.input.property.metadata.propertyName, $.state.input.booking.checkInDate, $.state.input.booking.checkOutDate, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.booking.platform, $.state.input.booking.bookingReference, $.state.input.booking.guestName)"
             }
           }
         }
