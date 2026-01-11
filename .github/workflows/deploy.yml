@@ -168,12 +168,12 @@ jobs:
               ParameterKey=OwnerEmail,ParameterValue="${{ vars.OWNER_EMAIL }}" \
               ParameterKey=ImapHost,ParameterValue="${{ vars.IMAP_HOST }}" \
               ParameterKey=ImapPort,ParameterValue="${{ vars.IMAP_PORT || '993' }}" \
-              ParameterKey=ScheduleInterval,ParameterValue="${{ vars.SCHEDULE_INTERVAL || 'rate(15 minutes)' }}" \
+              ParameterKey=ScheduleInterval,ParameterValue='${{ vars.SCHEDULE_INTERVAL || 'rate(15 minutes)' }}' \
               ParameterKey=OwnerName,ParameterValue="${{ vars.OWNER_NAME || 'Property Owner' }}" \
               ParameterKey=NamespacePrefix,ParameterValue="${{ env.NAMESPACE_PREFIX }}" \
               ParameterKey=AppName,ParameterValue="${{ env.APP_NAME }}" \
-              ParameterKey=PropertiesConfig,ParameterValue="${{ vars.PROPERTIES_CONFIG || '{}' }}" \
-              ParameterKey=MessageTemplates,ParameterValue="${{ vars.MESSAGE_TEMPLATES || '{}' }}" \
+              ParameterKey=PropertiesConfig,ParameterValue='${{ vars.PROPERTIES_CONFIG || '{}' }}' \
+              ParameterKey=MessageTemplates,ParameterValue='${{ vars.MESSAGE_TEMPLATES || '{}' }}' \
             --capabilities CAPABILITY_NAMED_IAM \
             --region ${{ env.AWS_REGION }} \
             --tags \
