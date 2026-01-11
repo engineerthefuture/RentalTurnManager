@@ -249,9 +249,21 @@ public class Function
                         continue;
                     }
 
-                    // Calculate cleaning time (on checkout date)
+                    // Calculate cleaning time (on checkout date at 12:00 PM Eastern Time)
                     var cleaningDate = booking.CheckOutDate;
-                    var cleaningTime = new TimeSpan(12, 0, 0); // 12 PM default
+                    var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+                    
+                    // Create DateTime at 12:00 PM on checkout date in Eastern Time
+                    var cleaningDateTimeEastern = new DateTime(
+                        cleaningDate.Year, 
+                        cleaningDate.Month, 
+                        cleaningDate.Day, 
+                        12, 0, 0, 
+                        DateTimeKind.Unspecified
+                    );
+                    
+                    // Convert to UTC for storage and transmission
+                    var cleaningDateTimeUtc = TimeZoneInfo.ConvertTimeToUtc(cleaningDateTimeEastern, easternZone);
 
                     // Get owner email from environment variable
                     var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL");
@@ -285,7 +297,7 @@ public class Function
                     {
                         Booking = booking,
                         Property = property,
-                        CleaningDateTime = cleaningDate.Add(cleaningTime),
+                        CleaningDateTime = cleaningDateTimeUtc,
                         CurrentCleanerIndex = 0,
                         AttemptCount = 0,
                         OwnerEmail = ownerEmail,
