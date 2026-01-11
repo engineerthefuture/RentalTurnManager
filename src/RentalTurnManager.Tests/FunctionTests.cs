@@ -61,10 +61,15 @@ public class FunctionTests
             .Setup(x => x.GetBookingPlatformFromAddresses())
             .Returns(new List<string> { "airbnb.com", "vrbo.com", "booking.com" });
 
+        _mockPropertyConfig
+            .Setup(x => x.GetSubjectPatterns())
+            .Returns(new List<string> { "Reservation confirmed", "Instant Booking from", "booking confirmation" });
+
         _mockEmailScanner
             .Setup(x => x.ScanForBookingEmailsAsync(
                 It.IsAny<EmailCredentials>(), 
                 It.IsAny<bool>(), 
+                It.IsAny<List<string>?>(),
                 It.IsAny<List<string>?>()))
             .ReturnsAsync(new List<EmailMessage>());
 
@@ -120,10 +125,15 @@ public class FunctionTests
             .Setup(x => x.GetBookingPlatformFromAddresses())
             .Returns(new List<string> { "airbnb.com", "vrbo.com", "booking.com" });
 
+        _mockPropertyConfig
+            .Setup(x => x.GetSubjectPatterns())
+            .Returns(new List<string> { "Reservation confirmed", "Instant Booking from", "booking confirmation" });
+
         _mockEmailScanner
             .Setup(x => x.ScanForBookingEmailsAsync(
                 It.IsAny<EmailCredentials>(), 
                 It.IsAny<bool>(), 
+                It.IsAny<List<string>?>(),
                 It.IsAny<List<string>?>()))
             .ReturnsAsync(new List<EmailMessage> { email });
 
@@ -183,10 +193,15 @@ public class FunctionTests
             .Setup(x => x.GetBookingPlatformFromAddresses())
             .Returns(new List<string> { "airbnb.com", "vrbo.com", "booking.com" });
 
+        _mockPropertyConfig
+            .Setup(x => x.GetSubjectPatterns())
+            .Returns(new List<string> { "Reservation confirmed", "Instant Booking from", "booking confirmation" });
+
         _mockEmailScanner
             .Setup(x => x.ScanForBookingEmailsAsync(
                 It.IsAny<EmailCredentials>(), 
                 It.IsAny<bool>(), 
+                It.IsAny<List<string>?>(),
                 It.IsAny<List<string>?>()))
             .ReturnsAsync(new List<EmailMessage> { email });
 

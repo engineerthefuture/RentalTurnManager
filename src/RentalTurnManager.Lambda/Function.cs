@@ -117,11 +117,11 @@ public class Function
             
             // Get configured from addresses for booking platforms
             var fromAddresses = propertyConfig.GetBookingPlatformFromAddresses();
-            _logger.LogInformation($"Using from addresses: {string.Join(", ", fromAddresses)}");
+            _logger.LogInformation($"Using from addresses: {string.Join(", ", fromAddresses ?? new List<string>())}");
             
             // Get configured subject patterns
             var subjectPatterns = propertyConfig.GetSubjectPatterns();
-            _logger.LogInformation($"Using subject patterns: {string.Join(", ", subjectPatterns)}");
+            _logger.LogInformation($"Using subject patterns: {string.Join(", ", subjectPatterns ?? new List<string>())}");
             
             // Scan emails for new bookings
             _logger.LogInformation($"Scanning emails for new bookings (ForceRescan: {input.ForceRescan})");
