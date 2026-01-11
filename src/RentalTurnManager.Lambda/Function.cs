@@ -31,15 +31,21 @@ public class Function
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddEnvironmentVariables();
         
-        // Add config files if they exist
-        var propertiesPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "properties.json");
-        var templatesPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "message-templates.json");
+        // Load properties configuration from environment variable if present
+        var propertiesJson = Environment.GetEnvironmentVariable("PROPERTIES_CONFIG");
+        if (!string.IsNullOrEmpty(propertiesJson))
+        {
+            var propertiesStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(propertiesJson));
+            configBuilder.AddJsonStream(propertiesStream);
+        }
         
-        if (File.Exists(propertiesPath))
-            configBuilder.AddJsonFile(propertiesPath, optional: true);
-        
-        if (File.Exists(templatesPath))
-            configBuilder.AddJsonFile(templatesPath, optional: true);
+        // Load message templates from environment variable if present
+        var templatesJson = Environment.GetEnvironmentVariable("MESSAGE_TEMPLATES");
+        if (!string.IsNullOrEmpty(templatesJson))
+        {
+            var templatesStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(templatesJson));
+            configBuilder.AddJsonStream(templatesStream);
+        }
         
         _configuration = configBuilder.Build();
 

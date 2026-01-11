@@ -172,6 +172,8 @@ jobs:
               ParameterKey=OwnerName,ParameterValue="${{ vars.OWNER_NAME || 'Property Owner' }}" \
               ParameterKey=NamespacePrefix,ParameterValue="${{ env.NAMESPACE_PREFIX }}" \
               ParameterKey=AppName,ParameterValue="${{ env.APP_NAME }}" \
+              ParameterKey=PropertiesConfig,ParameterValue="${{ vars.PROPERTIES_CONFIG || '{}' }}" \
+              ParameterKey=MessageTemplates,ParameterValue="${{ vars.MESSAGE_TEMPLATES || '{}' }}" \
             --capabilities CAPABILITY_NAMED_IAM \
             --region ${{ env.AWS_REGION }} \
             --tags \

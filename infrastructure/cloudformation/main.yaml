@@ -55,6 +55,16 @@ Parameters:
     Description: Application name for AWS resource names
     Default: RentalTurnManager
 
+  PropertiesConfig:
+    Type: String
+    Description: JSON configuration for properties (from GitHub variable)
+    Default: '{}'
+
+  MessageTemplates:
+    Type: String
+    Description: JSON configuration for message templates (from GitHub variable)
+    Default: '{}'
+
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -65,6 +75,8 @@ Metadata:
           - NamespacePrefix
           - AppName
           - OwnerName
+          - PropertiesConfig
+          - MessageTemplates
       - Label:
           default: Email Configuration
         Parameters:
@@ -168,6 +180,8 @@ Resources:
           EMAIL_SECRET_NAME: !Ref EmailCredentialsSecret
           CLEANER_WORKFLOW_STATE_MACHINE_ARN: !Ref CleanerWorkflowStateMachine
           OWNER_EMAIL: !Ref OwnerEmail
+          PROPERTIES_CONFIG: !Ref PropertiesConfig
+          MESSAGE_TEMPLATES: !Ref MessageTemplates
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         S3Key: !Sub '${AppName}/lambda/lambda-deployment.zip'
