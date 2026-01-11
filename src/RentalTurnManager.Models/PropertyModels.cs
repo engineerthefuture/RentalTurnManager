@@ -30,7 +30,7 @@ public class PropertyMetadata
 {
     public string PropertyName { get; set; } = string.Empty;
     public int Bedrooms { get; set; }
-    public int Bathrooms { get; set; }
+    public double Bathrooms { get; set; }
     public string CleaningDuration { get; set; } = string.Empty;
     public string AccessInstructions { get; set; } = string.Empty;
     public string SpecialInstructions { get; set; } = string.Empty;
