@@ -186,6 +186,7 @@ jobs:
           
           # Create override parameters file using jq to properly escape JSON strings
           jq -n \
+            --arg environment "${{ env.ENVIRONMENT }}" \
             --arg email_user "${{ secrets.EMAIL_USERNAME }}" \
             --arg email_pass "${{ secrets.EMAIL_PASSWORD }}" \
             --arg owner_email "${{ vars.OWNER_EMAIL }}" \
@@ -199,6 +200,7 @@ jobs:
             --arg props_config "${PROPERTIES_CONFIG}" \
             --arg msg_templates "${MESSAGE_TEMPLATES}" \
             '[
+              {ParameterKey: "Environment", ParameterValue: $environment},
               {ParameterKey: "EmailUsername", ParameterValue: $email_user},
               {ParameterKey: "EmailPassword", ParameterValue: $email_pass},
               {ParameterKey: "OwnerEmail", ParameterValue: $owner_email},
