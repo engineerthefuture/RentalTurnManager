@@ -275,6 +275,10 @@ public class Function
                     {
                         property.Metadata.OwnerName = "Property Management";
                     }
+                    
+                    // Get booking state bucket name from environment variable
+                    var bookingStateBucket = Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET") ?? 
+                                           $"{Environment.GetEnvironmentVariable("NAMESPACE_PREFIX") ?? "bf"}-{Environment.GetEnvironmentVariable("ENVIRONMENT") ?? "dev"}-s3-{(Environment.GetEnvironmentVariable("APP_NAME") ?? "RentalTurnManager").ToLower()}-bookings";
 
                     // Start Step Functions workflow
                     var workflowInput = new CleanerWorkflowInput
@@ -285,7 +289,8 @@ public class Function
                         CurrentCleanerIndex = 0,
                         AttemptCount = 0,
                         OwnerEmail = ownerEmail,
-                        CallbackApiUrl = callbackApiUrl
+                        CallbackApiUrl = callbackApiUrl,
+                        BookingStateBucket = bookingStateBucket
                     };
 
                     var executionArn = await stepFunctionService.StartCleanerWorkflowAsync(workflowInput);

@@ -164,7 +164,7 @@
                   "CleaningDuration.$": "$.state.cleaningDuration",
                   "Platform.$": "$.state.input.booking.platform",
                   "BookingReference.$": "$.state.input.booking.bookingReference",
-                  "BookingStateBucket": "${BookingStateBucket}"
+                  "BookingStateBucket.$": "$.state.input.bookingStateBucket"
                 }
               },
               "End": true
@@ -196,7 +196,7 @@
                   "CleaningDuration.$": "$.state.cleaningDuration",
                   "Platform.$": "$.state.input.booking.platform",
                   "BookingReference.$": "$.state.input.booking.bookingReference",
-                  "BookingStateBucket": "${BookingStateBucket}"
+                  "BookingStateBucket.$": "$.state.input.bookingStateBucket"
                 }
               },
               "End": true
