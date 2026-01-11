@@ -262,12 +262,12 @@ public class BookingParserService : IBookingParserService
             booking.NumberOfGuests = guests;
         }
         // Log all parsed booking attributes
-        _logger.LogInformation($\"Parsed Airbnb booking - PropertyId: '{booking.PropertyId}', Reference: '{booking.BookingReference}', CheckIn: {booking.CheckInDate:yyyy-MM-dd}, CheckOut: {booking.CheckOutDate:yyyy-MM-dd}, Guest: '{booking.GuestName}', Guests: {booking.NumberOfGuests}\");
+        _logger.LogInformation($"Parsed Airbnb booking - PropertyId: '{booking.PropertyId}', Reference: '{booking.BookingReference}', CheckIn: {booking.CheckInDate:yyyy-MM-dd}, CheckOut: {booking.CheckOutDate:yyyy-MM-dd}, Guest: '{booking.GuestName}', Guests: {booking.NumberOfGuests}");
 
         // Validate we have minimum required data
         if (string.IsNullOrEmpty(booking.PropertyId) || booking.CheckInDate == default)
         {
-            _logger.LogWarning($\"Incomplete Airbnb booking data - PropertyId: '{booking.PropertyId}', CheckInDate: {booking.CheckInDate}\");
+            _logger.LogWarning($"Incomplete Airbnb booking data - PropertyId: '{booking.PropertyId}', CheckInDate: {booking.CheckInDate}");
             return null;
         }
         return booking;
