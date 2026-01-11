@@ -23,6 +23,7 @@ public class Function
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<Function> _logger;
     private readonly IConfiguration _configuration;
+    private readonly PropertiesConfiguration? _propertiesConfig;
 
     public Function()
     {
@@ -31,12 +32,19 @@ public class Function
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddEnvironmentVariables();
         
-        // Load properties configuration from environment variable if present
+        // Load properties configuration from environment variable
         var propertiesJson = Environment.GetEnvironmentVariable("PROPERTIES_CONFIG");
         if (!string.IsNullOrEmpty(propertiesJson))
         {
-            var propertiesStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(propertiesJson));
-            configBuilder.AddJsonStream(propertiesStream);
+            try
+            {
+                _propertiesConfig = JsonSerializer.Deserialize<PropertiesConfiguration>(propertiesJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (Exception ex)
+            {
+                // Log later when logger is available
+                Console.WriteLine($"Error deserializing PROPERTIES_CONFIG: {ex.Message}");
+            }
         }
         
         // Load message templates from environment variable if present
@@ -51,10 +59,20 @@ public class Function
 
         // Setup dependency injection
         var serviceCollection = new ServiceCollection();
-        ConfigureServices(serviceCollection);
+        ConfigureServices(serviceCollection, _propertiesConfig);
         _serviceProvider = serviceCollection.BuildServiceProvider();
 
         _logger = _serviceProvider.GetRequiredService<ILogger<Function>>();
+        
+        // Now log configuration details
+        if (_propertiesConfig != null)
+        {
+            _logger.LogInformation($"Loaded {_propertiesConfig.Properties?.Count ?? 0} property configurations");
+        }
+        else
+        {
+            _logger.LogWarning("No PROPERTIES_CONFIG environment variable found or failed to parse");
+        }
     }
 
     /// <summary>
@@ -67,7 +85,7 @@ public class Function
         _logger = _serviceProvider.GetRequiredService<ILogger<Function>>();
     }
 
-    private void ConfigureServices(IServiceCollection services)
+    private void ConfigureServices(IServiceCollection services, PropertiesConfiguration? propertiesConfig)
     {
         // Add logging
         services.AddLogging(builder =>
@@ -78,6 +96,12 @@ public class Function
 
         // Add configuration
         services.AddSingleton(_configuration);
+        
+        // Add properties configuration as singleton
+        if (propertiesConfig != null)
+        {
+            services.AddSingleton(propertiesConfig);
+        }
 
         // Add AWS services
         services.AddAWSService<IAmazonSecretsManager>();
@@ -115,19 +139,25 @@ public class Function
             var secretsService = _serviceProvider.GetRequiredService<ISecretsService>();
             var emailScanner = _serviceProvider.GetRequiredService<IEmailScannerService>();
             var bookingParser = _serviceProvider.GetRequiredService<IBookingParserService>();
-            var propertyConfig = _serviceProvider.GetRequiredService<IPropertyConfigService>();
             var stepFunctionService = _serviceProvider.GetRequiredService<IStepFunctionService>();
+
+            if (_propertiesConfig == null)
+            {
+                throw new InvalidOperationException("PROPERTIES_CONFIG environment variable not set or invalid");
+            }
+            
+            _logger.LogInformation($"Using property config with {_propertiesConfig.Properties?.Count ?? 0} properties");
 
             // Retrieve email credentials from Secrets Manager
             var emailCredentials = await secretsService.GetEmailCredentialsAsync();
             
             // Get configured from addresses for booking platforms
-            var fromAddresses = propertyConfig.GetBookingPlatformFromAddresses();
-            _logger.LogInformation($"Using from addresses: {string.Join(", ", fromAddresses ?? new List<string>())}");
+            var fromAddresses = _propertiesConfig.EmailFilters?.BookingPlatformFromAddresses ?? new List<string> { "airbnb.com", "vrbo.com", "booking.com" };
+            _logger.LogInformation($"Using from addresses: {string.Join(", ", fromAddresses)}");
             
             // Get configured subject patterns
-            var subjectPatterns = propertyConfig.GetSubjectPatterns();
-            _logger.LogInformation($"Using subject patterns: {string.Join(", ", subjectPatterns ?? new List<string>())}");
+            var subjectPatterns = _propertiesConfig.EmailFilters?.SubjectPatterns ?? new List<string> { "Reservation confirmed", "Instant Booking from", "booking confirmation" };
+            _logger.LogInformation($"Using subject patterns: {string.Join(", ", subjectPatterns)}");
             
             // Scan emails for new bookings
             _logger.LogInformation($"Scanning emails for new bookings (ForceRescan: {input.ForceRescan})");
@@ -150,12 +180,24 @@ public class Function
                     _logger.LogInformation($"Parsed booking: {booking.Platform} - {booking.BookingReference}");
 
                     // Find matching property configuration
-                    var property = propertyConfig.FindPropertyByPlatformId(booking.Platform, booking.PropertyId);
+                    var normalizedPlatform = booking.Platform.ToLower() switch
+                    {
+                        "airbnb" => "airbnb",
+                        "vrbo" => "vrbo",
+                        "bookingcom" or "booking.com" => "bookingcom",
+                        _ => booking.Platform.ToLower()
+                    };
+                    
+                    var property = _propertiesConfig.Properties?.FirstOrDefault(p =>
+                        p.PlatformIds.TryGetValue(normalizedPlatform, out var id) && 
+                        id.Equals(booking.PropertyId, StringComparison.OrdinalIgnoreCase)
+                    );
+                    
                     if (property == null)
                     {
                         var error = $"No property configuration found for {booking.Platform} property {booking.PropertyId}";
                         _logger.LogError(error);
-                        _logger.LogError("property config: {PropertyConfig}", propertyConfig);
+                        _logger.LogError("Available properties: {PropertyIds}", string.Join(", ", _propertiesConfig.Properties?.Select(p => $"{p.PropertyId}: {string.Join(", ", p.PlatformIds.Select(kv => $"{kv.Key}={kv.Value}"))}") ?? Array.Empty<string>()));
                         response.Errors.Add(error);
                         continue;
                     }
