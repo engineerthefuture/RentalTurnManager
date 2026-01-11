@@ -164,8 +164,8 @@ jobs:
           cat > /tmp/templates.json << 'TEMPLATES_EOF'
           ${{ vars.MESSAGE_TEMPLATES || '{}' }}
           TEMPLATES_EOF
-          PROPERTIES_CONFIG=$(jq -c . /tmp/properties.json | jq -R .)
-          MESSAGE_TEMPLATES=$(jq -c . /tmp/templates.json | jq -R .)
+          PROPERTIES_CONFIG=$(jq -c . /tmp/properties.json)
+          MESSAGE_TEMPLATES=$(jq -c . /tmp/templates.json)
           
           # Create override parameters file using jq to properly escape JSON strings
           jq -n \
@@ -178,8 +178,8 @@ jobs:
             --arg owner_name "${{ vars.OWNER_NAME || 'Property Owner' }}" \
             --arg namespace "${{ env.NAMESPACE_PREFIX }}" \
             --arg app_name "${{ env.APP_NAME }}" \
-            --argjson props_config "${PROPERTIES_CONFIG}" \
-            --argjson msg_templates "${MESSAGE_TEMPLATES}" \
+            --arg props_config "${PROPERTIES_CONFIG}" \
+            --arg msg_templates "${MESSAGE_TEMPLATES}" \
             '[
               {ParameterKey: "EmailUsername", ParameterValue: $email_user},
               {ParameterKey: "EmailPassword", ParameterValue: $email_pass},

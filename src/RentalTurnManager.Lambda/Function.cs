@@ -44,7 +44,12 @@ public class Function
             {
                 // Log later when logger is available
                 Console.WriteLine($"Error deserializing PROPERTIES_CONFIG: {ex.Message}");
+                Console.WriteLine($"PROPERTIES_CONFIG value (first 500 chars): {(propertiesJson.Length > 500 ? propertiesJson.Substring(0, 500) : propertiesJson)}");
             }
+        }
+        else
+        {
+            Console.WriteLine("PROPERTIES_CONFIG environment variable is null or empty");
         }
         
         // Load message templates from environment variable if present
