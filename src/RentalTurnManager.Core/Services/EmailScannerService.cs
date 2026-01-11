@@ -92,11 +92,28 @@ public class EmailScannerService : IEmailScannerService
             // Search for emails from booking platforms
             SearchQuery baseQuery;
             
-            // Check if wildcard (*) is used to match all emails
+            // Check if wildcard (*) is used to match all emails (typically for dev/testing)
             if (fromAddresses.Contains("*"))
             {
-                _logger.LogInformation("Using wildcard (*) - scanning all emails");
-                baseQuery = SearchQuery.All;
+                _logger.LogInformation("Using wildcard (*) for from addresses - matching on subject patterns only");
+                
+                // Build subject pattern query (still filter by subject even with wildcard)
+                SearchQuery subjectQuery;
+                if (subjectFilters.Count == 1)
+                {
+                    subjectQuery = SearchQuery.SubjectContains(subjectFilters[0]);
+                }
+                else
+                {
+                    subjectQuery = subjectFilters
+                        .Skip(1)
+                        .Aggregate<string, SearchQuery>(
+                            SearchQuery.SubjectContains(subjectFilters[0]),
+                            (query, pattern) => query.Or(SearchQuery.SubjectContains(pattern))
+                        );
+                }
+                
+                baseQuery = subjectQuery;
             }
             else
             {
@@ -132,8 +149,8 @@ public class EmailScannerService : IEmailScannerService
                         );
                 }
                 
-                // Combine: match if From OR Subject matches
-                baseQuery = fromQuery.Or(subjectQuery);
+                // Combine: match if From AND Subject both match (must be from platform AND have booking subject)
+                baseQuery = fromQuery.And(subjectQuery);
             }
 
             // Always scan all emails - booking state tracking will handle duplicates
