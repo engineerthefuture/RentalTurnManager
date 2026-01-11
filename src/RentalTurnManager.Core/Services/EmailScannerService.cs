@@ -20,12 +20,13 @@ public class EmailScannerService : IEmailScannerService
         _logger = logger;
     }
 
-    public async Task<List<EmailMessage>> ScanForBookingEmailsAsync(EmailCredentials credentials, bool forceRescan = false, List<string>? platformFromAddresses = null)
+    public async Task<List<EmailMessage>> ScanForBookingEmailsAsync(EmailCredentials credentials, bool forceRescan = false, List<string>? platformFromAddresses = null, List<string>? subjectPatterns = null)
     {
         var emails = new List<EmailMessage>();
         
         // Use provided addresses or fall back to defaults
         var fromAddresses = platformFromAddresses ?? new List<string> { "airbnb.com", "vrbo.com", "booking.com" };
+        var subjectFilters = subjectPatterns ?? new List<string> { "Reservation confirmed", "Instant Booking from", "booking confirmation" };
 
         try
         {
@@ -85,18 +86,42 @@ public class EmailScannerService : IEmailScannerService
                 _logger.LogInformation("Using wildcard (*) - scanning all emails");
                 baseQuery = SearchQuery.All;
             }
-            else if (fromAddresses.Count == 1)
-            {
-                baseQuery = SearchQuery.FromContains(fromAddresses[0]);
-            }
             else
             {
-                baseQuery = fromAddresses
-                    .Skip(1)
-                    .Aggregate<string, SearchQuery>(
-                        SearchQuery.FromContains(fromAddresses[0]),
-                        (query, address) => query.Or(SearchQuery.FromContains(address))
-                    );
+                // Build From address query
+                SearchQuery fromQuery;
+                if (fromAddresses.Count == 1)
+                {
+                    fromQuery = SearchQuery.FromContains(fromAddresses[0]);
+                }
+                else
+                {
+                    fromQuery = fromAddresses
+                        .Skip(1)
+                        .Aggregate<string, SearchQuery>(
+                            SearchQuery.FromContains(fromAddresses[0]),
+                            (query, address) => query.Or(SearchQuery.FromContains(address))
+                        );
+                }
+                
+                // Build subject pattern query
+                SearchQuery subjectQuery;
+                if (subjectFilters.Count == 1)
+                {
+                    subjectQuery = SearchQuery.SubjectContains(subjectFilters[0]);
+                }
+                else
+                {
+                    subjectQuery = subjectFilters
+                        .Skip(1)
+                        .Aggregate<string, SearchQuery>(
+                            SearchQuery.SubjectContains(subjectFilters[0]),
+                            (query, pattern) => query.Or(SearchQuery.SubjectContains(pattern))
+                        );
+                }
+                
+                // Combine: match if From OR Subject matches
+                baseQuery = fromQuery.Or(subjectQuery);
             }
 
             // If not force rescanning, only get unread emails

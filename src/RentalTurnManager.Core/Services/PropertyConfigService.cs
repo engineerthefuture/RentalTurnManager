@@ -13,6 +13,7 @@ public class PropertyConfigService : IPropertyConfigService
     private readonly ILogger<PropertyConfigService> _logger;
     private readonly PropertiesConfiguration _configuration;
     private readonly List<string> _defaultFromAddresses = new() { "airbnb.com", "vrbo.com", "booking.com" };
+    private readonly List<string> _defaultSubjectPatterns = new() { "Reservation confirmed", "Instant Booking from", "booking confirmation" };
 
     public PropertyConfigService(IConfiguration configuration, ILogger<PropertyConfigService> logger)
     {
@@ -72,5 +73,16 @@ public class PropertyConfigService : IPropertyConfigService
         }
         
         return _defaultFromAddresses;
+    }
+
+    public List<string> GetSubjectPatterns()
+    {
+        if (_configuration?.EmailFilters?.SubjectPatterns != null && 
+            _configuration.EmailFilters.SubjectPatterns.Any())
+        {
+            return _configuration.EmailFilters.SubjectPatterns;
+        }
+        
+        return _defaultSubjectPatterns;
     }
 }

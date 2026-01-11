@@ -56,4 +56,11 @@ public class EmailFilterConfiguration
         "vrbo.com",
         "booking.com"
     };
+    
+    public List<string> SubjectPatterns { get; set; } = new()
+    {
+        "Reservation confirmed",
+        "Instant Booking from",
+        "booking confirmation"
+    };
 }

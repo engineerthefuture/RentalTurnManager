@@ -2,6 +2,11 @@
   "emailFilters": {
     "bookingPlatformFromAddresses": [
       "*"
+    ],
+    "subjectPatterns": [
+      "Reservation confirmed",
+      "Instant Booking from",
+      "booking confirmation"
     ]
   },
   "properties": [

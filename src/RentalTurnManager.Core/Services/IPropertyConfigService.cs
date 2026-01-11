@@ -10,4 +10,5 @@ public interface IPropertyConfigService
     PropertyConfiguration? FindPropertyByPlatformId(string platform, string platformPropertyId);
     List<PropertyConfiguration> GetAllProperties();
     List<string> GetBookingPlatformFromAddresses();
+    List<string> GetSubjectPatterns();
 }
