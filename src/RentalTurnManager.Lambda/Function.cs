@@ -113,6 +113,7 @@ public class Function
         services.AddAWSService<IAmazonSecretsManager>();
         services.AddAWSService<IAmazonStepFunctions>();
         services.AddAWSService<IAmazonSimpleEmailService>();
+        services.AddAWSService<Amazon.S3.IAmazonS3>();
 
         // Add application services
         services.AddSingleton<ISecretsService, SecretsService>();
@@ -120,6 +121,16 @@ public class Function
         services.AddSingleton<IBookingParserService, BookingParserService>();
         services.AddSingleton<IPropertyConfigService, PropertyConfigService>();
         services.AddSingleton<IStepFunctionService, StepFunctionService>();
+        
+        // Add BookingStateService
+        services.AddSingleton<IBookingStateService>(sp =>
+        {
+            var s3Client = sp.GetRequiredService<Amazon.S3.IAmazonS3>();
+            var logger = sp.GetRequiredService<ILogger<BookingStateService>>();
+            var bucketName = Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET") ?? 
+                           $"{Environment.GetEnvironmentVariable("NAMESPACE_PREFIX") ?? "bf"}-{Environment.GetEnvironmentVariable("ENVIRONMENT") ?? "dev"}-s3-{(Environment.GetEnvironmentVariable("APP_NAME") ?? "RentalTurnManager").ToLower()}-bookings";
+            return new BookingStateService(s3Client, logger, bucketName);
+        });
     }
 
     /// <summary>
@@ -146,6 +157,7 @@ public class Function
             var emailScanner = _serviceProvider.GetRequiredService<IEmailScannerService>();
             var bookingParser = _serviceProvider.GetRequiredService<IBookingParserService>();
             var stepFunctionService = _serviceProvider.GetRequiredService<IStepFunctionService>();
+            var bookingStateService = _serviceProvider.GetRequiredService<IBookingStateService>();
 
             if (_propertiesConfig == null)
             {
@@ -184,6 +196,16 @@ public class Function
 
                     response.BookingsProcessed++;
                     _logger.LogInformation($"Parsed booking: {booking.Platform} - {booking.BookingReference}");
+
+                    // Check if booking has changed or is new
+                    bool hasChanged = await bookingStateService.HasBookingChangedAsync(booking);
+                    if (!hasChanged)
+                    {  
+                        _logger.LogInformation($"Booking unchanged, skipping workflow: {booking.Platform} - {booking.BookingReference}");
+                        continue;
+                    }
+                    
+                    _logger.LogInformation($"Processing {'new or updated'} booking: {booking.Platform} - {booking.BookingReference}");
 
                     // Find matching property configuration
                     var normalizedPlatform = booking.Platform.ToLower() switch
@@ -250,6 +272,10 @@ public class Function
                     var executionArn = await stepFunctionService.StartCleanerWorkflowAsync(workflowInput);
                     response.WorkflowsStarted++;
                     _logger.LogInformation($"Started workflow: {executionArn}");
+
+                    // Save booking state
+                    await bookingStateService.SaveBookingAsync(booking);
+                    _logger.LogInformation($"Saved booking state: {booking.Platform} - {booking.BookingReference}");
 
                     // Mark email as processed
                     await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, email);

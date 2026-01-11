@@ -190,6 +190,7 @@ jobs:
             --arg owner_name "${{ vars.OWNER_NAME || 'Property Owner' }}" \
             --arg namespace "${{ env.NAMESPACE_PREFIX }}" \
             --arg app_name "${{ env.APP_NAME }}" \
+            --arg app_name_lower "$(echo "${{ env.APP_NAME }}" | tr '[:upper:]' '[:lower:]')" \
             --arg props_config "${PROPERTIES_CONFIG}" \
             --arg msg_templates "${MESSAGE_TEMPLATES}" \
             '[
@@ -202,6 +203,7 @@ jobs:
               {ParameterKey: "OwnerName", ParameterValue: $owner_name},
               {ParameterKey: "NamespacePrefix", ParameterValue: $namespace},
               {ParameterKey: "AppName", ParameterValue: $app_name},
+              {ParameterKey: "AppNameLowercase", ParameterValue: $app_name_lower},
               {ParameterKey: "PropertiesConfig", ParameterValue: $props_config},
               {ParameterKey: "MessageTemplates", ParameterValue: $msg_templates}
             ]' > /tmp/override-params.json

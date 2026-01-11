@@ -55,6 +55,11 @@ Parameters:
     Description: Application name for AWS resource names
     Default: RentalTurnManager
 
+  AppNameLowercase:
+    Type: String
+    Description: Application name in lowercase for S3 bucket naming
+    Default: rentalturnmanager
+
   PropertiesConfig:
     Type: String
     Description: JSON configuration for properties (from GitHub variable)
@@ -115,6 +120,33 @@ Resources:
         - Key: Description
           Value: Email credentials for booking notifications
 
+  # S3 Bucket for Booking State
+  BookingStateBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings'
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 90
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: OwnerName
+          Value: !Ref OwnerName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Storage for booking state tracking
+
   # IAM Role for Lambda Function
   LambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -142,6 +174,16 @@ Resources:
                 Action:
                   - states:StartExecution
                 Resource: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings'
               - Effect: Allow
                 Action:
                   - ses:SendEmail
@@ -183,6 +225,9 @@ Resources:
           PROPERTIES_CONFIG: !Ref PropertiesConfig
           MESSAGE_TEMPLATES: !Ref MessageTemplates
           CALLBACK_API_URL: !Sub 'https://${CallbackApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+          BOOKING_STATE_BUCKET: !Ref BookingStateBucket
+          NAMESPACE_PREFIX: !Ref NamespacePrefix
+          APP_NAME: !Ref AppName
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         S3Key: !Sub '${AppName}/lambda/lambda-deployment.zip'
@@ -471,3 +516,9 @@ Outputs:
     Value: !GetAtt CalendarLambda.Arn
     Export:
       Name: !Sub '${AWS::StackName}-CalendarLambdaArn'
+
+  BookingStateBucket:
+    Description: S3 bucket for booking state storage
+    Value: !Ref BookingStateBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-BookingStateBucket'
