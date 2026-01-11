@@ -30,10 +30,23 @@
         {
           "Variable": "$.state.input.CurrentCleanerIndex",
           "NumericLessThanPath": "$.state.checkData.cleanersCount",
-          "Next": "SendCleanerRequest"
+          "Next": "GetCurrentCleaner"
         }
       ],
       "Default": "AllCleanersExhausted"
+    },
+    "GetCurrentCleaner": {
+      "Type": "Pass",
+      "Comment": "Extract current cleaner object from array",
+      "Parameters": {
+        "input.$": "$.state.input",
+        "currentCleaner.$": "States.ArrayGetItem($.state.input.Property.Cleaners, $.state.input.CurrentCleanerIndex)",
+        "cleanerConfirmed.$": "$.state.cleanerConfirmed",
+        "allCleanersExhausted.$": "$.state.allCleanersExhausted",
+        "checkData.$": "$.state.checkData"
+      },
+      "ResultPath": "$.state",
+      "Next": "SendCleanerRequest"
     },
     "SendCleanerRequest": {
       "Type": "Task",
@@ -90,7 +103,7 @@
               "Parameters": {
                 "Source.$": "$.state.input.OwnerEmail",
                 "Destination": {
-                  "ToAddresses.$": "States.Array(States.ArrayGetItem($.state.input.Property.Cleaners, $.state.input.CurrentCleanerIndex).Email)"
+                  "ToAddresses.$": "States.Array($.state.currentCleaner.Email)"
                 },
                 "Message": {
                   "Subject": {
@@ -98,7 +111,7 @@
                   },
                   "Body": {
                     "Text": {
-                      "Data.$": "States.Format('Hello {},\\n\\nThank you for confirming your availability!\\n\\nYour cleaning appointment has been scheduled:\\n- Property: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n\\nThank you,\\nRentalTurnManager', States.ArrayGetItem($.state.input.Property.Cleaners, $.state.input.CurrentCleanerIndex).Name, $.state.input.Property.Name, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0), $.state.input.Property.Address)"
+                      "Data.$": "States.Format('Hello {},\\n\\nThank you for confirming your availability!\\n\\nYour cleaning appointment has been scheduled:\\n- Property: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n\\nThank you,\\nRentalTurnManager', $.state.currentCleaner.Name, $.state.input.Property.Name, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0), $.state.input.Property.Address)"
                     }
                   }
                 }
@@ -124,7 +137,7 @@
                   },
                   "Body": {
                     "Text": {
-                      "Data.$": "States.Format('Hello,\\n\\nA cleaning has been scheduled for {}:\\n\\n- Cleaner: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n\\nThank you,\\nRentalTurnManager', $.state.input.Property.Name, States.ArrayGetItem($.state.input.Property.Cleaners, $.state.input.CurrentCleanerIndex).Name, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0), $.state.input.Property.Address)"
+                      "Data.$": "States.Format('Hello,\\n\\nA cleaning has been scheduled for {}:\\n\\n- Cleaner: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n\\nThank you,\\nRentalTurnManager', $.state.input.Property.Name, $.state.currentCleaner.Name, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0), $.state.input.Property.Address)"
                     }
                   }
                 }
