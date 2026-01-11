@@ -17,12 +17,12 @@ Parameters:
 
   ImapHost:
     Type: String
-    Description: IMAP server hostname
+    Description: IMAP server hostname (stored in Secrets Manager)
     Default: imap.gmail.com
 
   ImapPort:
     Type: Number
-    Description: IMAP server port
+    Description: IMAP server port (stored in Secrets Manager)
     Default: 993
 
   ScheduleInterval:
@@ -168,8 +168,6 @@ Resources:
           EMAIL_SECRET_NAME: !Ref EmailCredentialsSecret
           CLEANER_WORKFLOW_STATE_MACHINE_ARN: !Ref CleanerWorkflowStateMachine
           OWNER_EMAIL: !Ref OwnerEmail
-          IMAP_HOST: !Ref ImapHost
-          IMAP_PORT: !Ref ImapPort
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         S3Key: !Sub '${AppName}/lambda/lambda-deployment.zip'
