@@ -155,6 +155,7 @@ public class Function
                     {
                         var error = $"No property configuration found for {booking.Platform} property {booking.PropertyId}";
                         _logger.LogError(error);
+                        _logger.LogError("property config: {PropertyConfig}", propertyConfig);
                         response.Errors.Add(error);
                         continue;
                     }
