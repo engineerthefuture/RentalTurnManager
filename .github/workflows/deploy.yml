@@ -224,16 +224,29 @@ jobs:
       - name: Update Lambda function code
         run: |
           FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}"
+          CALLBACK_FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}-Callback"
           
+          # Update main Lambda
           aws lambda update-function-code \
             --function-name ${FUNCTION_NAME} \
             --s3-bucket ${{ env.BUCKET_NAME }} \
             --s3-key ${{ env.APP_NAME }}/lambda/lambda-deployment.zip \
             --region ${{ env.AWS_REGION }}
           
-          # Wait for update to complete
+          # Update Callback Lambda
+          aws lambda update-function-code \
+            --function-name ${CALLBACK_FUNCTION_NAME} \
+            --s3-bucket ${{ env.BUCKET_NAME }} \
+            --s3-key ${{ env.APP_NAME }}/lambda/callback-lambda-deployment.zip \
+            --region ${{ env.AWS_REGION }}
+          
+          # Wait for both updates to complete
           aws lambda wait function-updated \
             --function-name ${FUNCTION_NAME} \
+            --region ${{ env.AWS_REGION }}
+          
+          aws lambda wait function-updated \
+            --function-name ${CALLBACK_FUNCTION_NAME} \
             --region ${{ env.AWS_REGION }}
 
       - name: Get stack outputs
