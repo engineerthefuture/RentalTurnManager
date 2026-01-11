@@ -45,13 +45,40 @@ public class BookingParserService : IBookingParserService
     private string DeterminePlatform(EmailMessage email)
     {
         var from = email.From.ToLower();
+        var subject = (email.Subject ?? "").ToLower();
+        var content = ((email.HtmlBody ?? "") + " " + (email.Body ?? "")).ToLower();
         
+        // First try to determine from From address
         if (from.Contains("airbnb.com"))
             return "airbnb";
         if (from.Contains("vrbo.com"))
             return "vrbo";
         if (from.Contains("booking.com"))
             return "bookingcom";
+
+        // If From address doesn't match, check subject and content for platform indicators
+        // Airbnb indicators
+        if (subject.Contains("reservation confirmed") || 
+            content.Contains("airbnb.com") ||
+            Regex.IsMatch(content, @"confirmation\s*code[:\s]+HM[A-Z0-9]+", RegexOptions.IgnoreCase))
+        {
+            return "airbnb";
+        }
+        
+        // VRBO indicators
+        if (subject.Contains("instant booking from") ||
+            content.Contains("vrbo.com") ||
+            content.Contains("homeaway") ||
+            Regex.IsMatch(content, @"confirmation\s*number[:\s]+(?:HA-)?[A-Z0-9]+", RegexOptions.IgnoreCase))
+        {
+            return "vrbo";
+        }
+        
+        // Booking.com indicators
+        if (content.Contains("booking.com"))
+        {
+            return "bookingcom";
+        }
 
         return string.Empty;
     }
