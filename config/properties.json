@@ -11,7 +11,7 @@
   },
   "properties": [
     {
-      "propertyId": "property-1",
+      "propertyId": "beachfront-condo",
       "platformIds": {
         "airbnb": "Your Airbnb Property Name or ID",
         "vrbo": "1234567",

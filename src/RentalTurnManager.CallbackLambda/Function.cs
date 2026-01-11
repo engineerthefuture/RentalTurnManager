@@ -62,11 +62,29 @@ public class Function
 
             context.Logger.LogInformation($"Processing {response} response for task token");
 
+            // Decode base64 token
+            string decodedToken;
+            try
+            {
+                var tokenBytes = Convert.FromBase64String(taskToken);
+                decodedToken = System.Text.Encoding.UTF8.GetString(tokenBytes);
+            }
+            catch (Exception ex)
+            {
+                context.Logger.LogError($"Failed to decode base64 token: {ex.Message}");
+                return new APIGatewayProxyResponse
+                {
+                    StatusCode = 400,
+                    Body = $"Invalid token format: {ex.Message}",
+                    Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+                };
+            }
+
             // Send response to Step Functions
             var taskResponse = new { response = response };
             await _stepFunctionsClient.SendTaskSuccessAsync(new SendTaskSuccessRequest
             {
-                TaskToken = taskToken,
+                TaskToken = decodedToken,
                 Output = JsonSerializer.Serialize(taskResponse)
             });
 
