@@ -105,8 +105,7 @@ public class BookingParserService : IBookingParserService
 
         var booking = new Booking
         {
-            Platform = "airbnb",
-            RawEmailContent = content
+            Platform = "airbnb"
         };
 
         // Extract booking reference - Airbnb uses codes like HMXX8RX9P5 or HM123456789
@@ -289,8 +288,7 @@ public class BookingParserService : IBookingParserService
 
         var booking = new Booking
         {
-            Platform = "vrbo",
-            RawEmailContent = content
+            Platform = "vrbo"
         };
 
         // Extract Reservation ID (format: HA-T65Q42 or numeric like 98765432)
@@ -419,8 +417,7 @@ public class BookingParserService : IBookingParserService
 
         var booking = new Booking
         {
-            Platform = "bookingcom",
-            RawEmailContent = content
+            Platform = "bookingcom"
         };
 
         var refMatch = Regex.Match(content, @"(?:booking|reservation)\s*(?:number|ID)[:\s#]+([0-9]+)", RegexOptions.IgnoreCase);
