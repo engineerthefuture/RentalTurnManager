@@ -124,11 +124,11 @@ public class EmailScannerService : IEmailScannerService
                 baseQuery = fromQuery.Or(subjectQuery);
             }
 
-            // If not force rescanning, only get unread emails
-            var searchQuery = forceRescan ? baseQuery : SearchQuery.NotSeen.And(baseQuery);
+            // Always scan all emails - booking state tracking will handle duplicates
+            var searchQuery = baseQuery;
 
             var uids = await inbox.SearchAsync(searchQuery);
-            _logger.LogInformation($"Found {uids.Count} {(forceRescan ? "" : "unread ")}booking emails");
+            _logger.LogInformation($"Found {uids.Count} booking emails");
 
             foreach (var uid in uids)
             {
