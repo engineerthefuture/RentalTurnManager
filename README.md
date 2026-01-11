@@ -42,7 +42,130 @@ Rental Turn Manager automates the process of scheduling property cleanings when 
 - **CloudWatch Logs**: Centralized logging and monitoring
 - **AWS CloudFormation**: Infrastructure as code deployment
 
-## Project Structure
+### Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph "Scheduled Trigger"
+        EB[EventBridge Rule<br/>15 min interval]
+    end
+    
+    subgraph "Email Processing"
+        ML[Main Lambda<br/>Email Scanner]
+        IMAP[IMAP Email Server<br/>Gmail/iCloud]
+        SM[Secrets Manager<br/>Email Credentials]
+        S3[S3 Bucket<br/>Booking State]
+    end
+    
+    subgraph "Workflow Orchestration"
+        SF[Step Functions<br/>Cleaner Workflow]
+        CL[Calendar Lambda<br/>ICS Generator]
+        CBL[Callback Lambda<br/>Response Handler]
+    end
+    
+    subgraph "External Communication"
+        SES[Amazon SES<br/>Email Delivery]
+        APIGW[API Gateway<br/>HTTP Callback]
+        Cleaner[Cleaner Email<br/>Confirm/Deny Links]
+        Owner[Property Owner<br/>Notifications]
+    end
+    
+    EB -->|Invoke| ML
+    ML -->|Get Credentials| SM
+    ML -->|Scan Emails| IMAP
+    ML -->|Check/Update State| S3
+    ML -->|Start Execution| SF
+    
+    SF -->|Contact Cleaner| SES
+    SF -->|Wait for Response| APIGW
+    SF -->|Generate Calendar| CL
+    
+    CL -->|Update State| S3
+    CL -->|Send Invite| SES
+    
+    SES -->|Email| Cleaner
+    SES -->|Email| Owner
+    Cleaner -->|Click Link| APIGW
+    APIGW -->|Invoke| CBL
+    CBL -->|Send Token| SF
+    
+    style ML fill:#ff9900
+    style CL fill:#ff9900
+    style CBL fill:#ff9900
+    style SF fill:#e7157b
+    style S3 fill:#569a31
+    style SES fill:#dd344c
+```
+
+### Workflow Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant EB as EventBridge
+    participant ML as Main Lambda
+    participant IMAP as Email Server
+    participant S3 as S3 Bucket
+    participant SF as Step Functions
+    participant SES as Amazon SES
+    participant Cleaner as Cleaner
+    participant APIGW as API Gateway
+    participant CBL as Callback Lambda
+    participant CL as Calendar Lambda
+    participant Owner as Property Owner
+    
+    EB->>ML: Trigger (every 15 min)
+    ML->>IMAP: Scan for booking emails
+    IMAP-->>ML: Return booking emails
+    
+    ML->>ML: Parse booking details
+    Note over ML: Extract confirmation code,<br/>dates, guests, property
+    
+    ML->>S3: Check existing booking state
+    S3-->>ML: Return previous state (if exists)
+    
+    alt Booking changed or new
+        ML->>S3: Save updated booking state
+        ML->>SF: Start cleaner workflow
+        
+        loop For each cleaner (by rank)
+            SF->>SES: Send confirmation request
+            SES->>Cleaner: Email with confirm/deny links
+            
+            alt Cleaner confirms
+                Cleaner->>APIGW: Click confirm link
+                APIGW->>CBL: HTTP request
+                CBL->>SF: Send success token
+                
+                SF->>CL: Generate calendar invites
+                CL->>S3: Update booking with cleaner details
+                
+                par Send to cleaner
+                    CL->>SES: Send calendar invite
+                    SES->>Cleaner: ICS attachment
+                and Send to owner
+                    CL->>SES: Send calendar invite
+                    SES->>Owner: ICS attachment with cleaner info
+                end
+                
+                Note over SF: Workflow complete
+            else Cleaner declines
+                Cleaner->>APIGW: Click decline link
+                APIGW->>CBL: HTTP request
+                CBL->>SF: Send failure token
+                Note over SF: Try next cleaner
+            else Timeout (9 hours)
+                Note over SF: Try next cleaner
+            end
+        end
+        
+        alt All cleaners declined/timeout
+            SF->>SES: Send escalation email
+            SES->>Owner: Manual coordination needed
+        end
+    else Booking unchanged
+        Note over ML: Skip - no workflow needed
+    end
+
 
 ```
 RentalTurnManager/
@@ -101,7 +224,8 @@ Add the following **variables**:
 - `OIDC_ROLE_NAME`: `GitHubActionsOIDCRole` (IAM role for GitHub Actions)
 - `OWNER_EMAIL`: Property owner email address
 - `IMAP_HOST`: IMAP server hostname (e.g., `imap.gmail.com`, `imap.mail.me.com`)
-- `PROPERTIES_CONFIG`: JSON string with property configurations (see below)
+- `PROPERTIES_CONFIG_DEV`: JSON string with property configurations for dev environment (see below)
+- `PROPERTIES_CONFIG`: JSON string with property configurations for prod environment (see below)
 
 **Optional (with defaults):**
 - `NAMESPACE_PREFIX`: Resource name prefix (default: `bf`)
@@ -113,7 +237,12 @@ Add the following **variables**:
 
 #### 3. Properties Configuration
 
-Create a GitHub variable called `PROPERTIES_CONFIG` with your rental property configuration as a JSON string:
+Create two GitHub variables for your rental property configurations:
+
+**`PROPERTIES_CONFIG_DEV`**: Development environment configuration (used when deploying to dev branch)
+**`PROPERTIES_CONFIG`**: Production environment configuration (used when deploying to main branch)
+
+Both should contain JSON in this format:
 
 ```json
 {
@@ -157,7 +286,7 @@ Create a GitHub variable called `PROPERTIES_CONFIG` with your rental property co
 }
 ```
 
-**Note**: Store this as a single-line JSON string in the GitHub variable. The deployment workflow will write it to `config/properties.json`.
+**Note**: Store these as single-line JSON strings in the GitHub variables. The deployment workflow will automatically select the appropriate configuration based on the environment (dev or prod) and write it to `config/properties.json`.
 
 #### 4. Email Provider Setup
 

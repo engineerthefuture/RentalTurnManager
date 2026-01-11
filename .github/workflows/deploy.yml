@@ -114,11 +114,20 @@ jobs:
         run: dotnet tool install -g Amazon.Lambda.Tools
 
       - name: Prepare properties configuration
-        if: vars.PROPERTIES_CONFIG != ''
         run: |
-          cat > config/properties.json << 'EOF'
+          if [[ "${{ env.ENVIRONMENT }}" == "dev" ]]; then
+            if [[ -n "${{ vars.PROPERTIES_CONFIG_DEV }}" ]]; then
+              cat > config/properties.json << 'EOF'
+          ${{ vars.PROPERTIES_CONFIG_DEV }}
+          EOF
+            fi
+          else
+            if [[ -n "${{ vars.PROPERTIES_CONFIG }}" ]]; then
+              cat > config/properties.json << 'EOF'
           ${{ vars.PROPERTIES_CONFIG }}
           EOF
+            fi
+          fi
 
       - name: Build Lambda package
         run: |
@@ -171,7 +180,7 @@ jobs:
           
           # Prepare JSON parameters (minify to single line and create override parameters file)
           cat > /tmp/properties.json << 'PROPERTIES_EOF'
-          ${{ vars.PROPERTIES_CONFIG || '{}' }}
+          ${{ env.ENVIRONMENT == 'dev' && vars.PROPERTIES_CONFIG_DEV || vars.PROPERTIES_CONFIG || '{}' }}
           PROPERTIES_EOF
           cat > /tmp/templates.json << 'TEMPLATES_EOF'
           ${{ vars.MESSAGE_TEMPLATES || '{}' }}
