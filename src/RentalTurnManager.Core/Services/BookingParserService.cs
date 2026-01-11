@@ -117,19 +117,31 @@ public class BookingParserService : IBookingParserService
         }
 
         // Extract property name - look for it in various formats in the email
-        // Format 1: All caps title near the top (e.g., "WATERFRONT LAKE ANNA - KAYAKS, FIREPIT, FAMILY FUN")
-        var propertyNameMatch = Regex.Match(content, @"^([A-Z][A-Z\s\-,&']+(?:[A-Z][a-z]+\s*)*[A-Z\s\-,&']+)\s*$", RegexOptions.Multiline);
+        // Format: Title case or all caps (e.g., "Waterfront Lake Anna - Kayaks, Firepit, Family Fun" or "WATERFRONT LAKE ANNA...")
+        // Look for lines that start with capital letter and contain typical property name patterns
+        var propertyNameMatch = Regex.Match(content, @"^([A-Z][A-Za-z\s\-,&']+[A-Za-z])\s*$", RegexOptions.Multiline);
         if (propertyNameMatch.Success)
         {
             var potentialName = propertyNameMatch.Groups[1].Value.Trim();
+            _logger.LogInformation($"Found potential property name: '{potentialName}' (length: {potentialName.Length})");
             // Should be at least 10 characters and contain meaningful words (not just "CHECK IN" etc)
             if (potentialName.Length >= 10 && 
-                !potentialName.Contains("CHECK") && 
-                !potentialName.Contains("RESERVATION") &&
-                !potentialName.Contains("CONFIRMED"))
+                !potentialName.Contains("CHECK", StringComparison.OrdinalIgnoreCase) && 
+                !potentialName.Contains("RESERVATION", StringComparison.OrdinalIgnoreCase) &&
+                !potentialName.Contains("CONFIRMED", StringComparison.OrdinalIgnoreCase) &&
+                !potentialName.Contains("INSTANT BOOK", StringComparison.OrdinalIgnoreCase))
             {
                 booking.PropertyId = potentialName;
+                _logger.LogInformation($"Using property name as PropertyId: '{booking.PropertyId}'");
             }
+            else
+            {
+                _logger.LogInformation($"Rejected property name (too short or contains excluded words)");
+            }
+        }
+        else
+        {
+            _logger.LogInformation("No property name found in email");
         }
 
         // If property name not found, try extracting from listing URL or listing number
@@ -139,6 +151,11 @@ public class BookingParserService : IBookingParserService
             if (listingMatch.Success)
             {
                 booking.PropertyId = listingMatch.Groups[1].Value;
+                _logger.LogInformation($"Using numeric listing ID as PropertyId: '{booking.PropertyId}'");
+            }
+            else
+            {
+                _logger.LogWarning("Could not extract property identifier from email");
             }
         }
 
@@ -244,7 +261,15 @@ public class BookingParserService : IBookingParserService
         {
             booking.NumberOfGuests = guests;
         }
+        // Log all parsed booking attributes
+        _logger.LogInformation($\"Parsed Airbnb booking - PropertyId: '{booking.PropertyId}', Reference: '{booking.BookingReference}', CheckIn: {booking.CheckInDate:yyyy-MM-dd}, CheckOut: {booking.CheckOutDate:yyyy-MM-dd}, Guest: '{booking.GuestName}', Guests: {booking.NumberOfGuests}\");
 
+        // Validate we have minimum required data
+        if (string.IsNullOrEmpty(booking.PropertyId) || booking.CheckInDate == default)
+        {
+            _logger.LogWarning($\"Incomplete Airbnb booking data - PropertyId: '{booking.PropertyId}', CheckInDate: {booking.CheckInDate}\");
+            return null;
+        }
         return booking;
     }
 
