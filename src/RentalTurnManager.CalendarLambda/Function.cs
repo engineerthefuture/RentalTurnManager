@@ -31,6 +31,8 @@ public class Function
             request.CleanerName,
             request.CleanerEmail,
             request.CleanerPhone,
+            request.OwnerName,
+            request.OwnerEmail,
             request.PropertyName,
             request.PropertyAddress,
             request.CleaningDate,
@@ -61,7 +63,7 @@ public class Function
         return new { Success = true };
     }
 
-    private string GenerateIcsContent(string cleanerName, string cleanerEmail, string cleanerPhone, string propertyName, string propertyAddress, string cleaningDate, string duration)
+    private string GenerateIcsContent(string cleanerName, string cleanerEmail, string cleanerPhone, string ownerName, string ownerEmail, string propertyName, string propertyAddress, string cleaningDate, string duration)
     {
         // Parse date and treat it as Eastern Time, then set to 12:00 PM ET
         var startDate = DateTime.Parse(cleaningDate);
@@ -111,6 +113,12 @@ public class Function
         if (!string.IsNullOrEmpty(cleanerEmail))
         {
             icsBuilder.AppendLine($"ATTENDEE;CN={cleanerName};ROLE=REQ-PARTICIPANT:mailto:{cleanerEmail}");
+        }
+        
+        // Add owner as optional attendee
+        if (!string.IsNullOrEmpty(ownerEmail))
+        {
+            icsBuilder.AppendLine($"ATTENDEE;CN={ownerName};ROLE=OPT-PARTICIPANT:mailto:{ownerEmail}");
         }
         
         icsBuilder.AppendLine("STATUS:CONFIRMED");
@@ -196,6 +204,8 @@ public class CalendarEmailRequest
     public string CleanerName { get; set; } = string.Empty;
     public string CleanerEmail { get; set; } = string.Empty;
     public string CleanerPhone { get; set; } = string.Empty;
+    public string OwnerName { get; set; } = string.Empty;
+    public string OwnerEmail { get; set; } = string.Empty;
     public string PropertyName { get; set; } = string.Empty;
     public string PropertyAddress { get; set; } = string.Empty;
     public string CleaningDate { get; set; } = string.Empty;
