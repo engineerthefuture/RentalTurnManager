@@ -25,6 +25,13 @@ public class Booking
     public string GuestName { get; set; } = string.Empty;
     public int NumberOfGuests { get; set; }
     
+    // Cleaner assignment tracking
+    public string? AssignedCleanerName { get; set; }
+    public string? AssignedCleanerEmail { get; set; }
+    public string? AssignedCleanerPhone { get; set; }
+    public DateTime? CleanerConfirmedAt { get; set; }
+    public DateTime? ScheduledCleaningTime { get; set; }
+    
     /// <summary>
     /// Number of days in the booking (CheckOut - CheckIn)
     /// </summary>

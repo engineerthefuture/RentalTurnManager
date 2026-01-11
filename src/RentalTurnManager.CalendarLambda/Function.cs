@@ -13,6 +13,8 @@
 using Amazon.Lambda.Core;
 using Amazon.SimpleEmail;
 using Amazon.SimpleEmail.Model;
+using Amazon.S3;
+using Amazon.S3.Model;
 using System.Text;
 using System.Text.Json;
 
@@ -23,15 +25,24 @@ namespace RentalTurnManager.CalendarLambda;
 public class Function
 {
     private readonly IAmazonSimpleEmailService _sesClient;
+    private readonly IAmazonS3 _s3Client;
 
     public Function()
     {
         _sesClient = new AmazonSimpleEmailServiceClient();
+        _s3Client = new AmazonS3Client();
     }
 
+    public Function(IAmazonSimpleEmailService sesClient, IAmazonS3 s3Client)
+    {
+        _sesClient = sesClient;
+        _s3Client = s3Client;
+    }
+    
     public Function(IAmazonSimpleEmailService sesClient)
     {
         _sesClient = sesClient;
+        _s3Client = new AmazonS3Client();
     }
 
     public async Task<object> FunctionHandler(CalendarEmailRequest request, ILambdaContext context)
@@ -72,7 +83,93 @@ public class Function
         });
 
         context.Logger.LogInformation("Calendar invite email sent successfully");
+        
+        // Update booking state with cleaner assignment if booking details provided
+        if (!string.IsNullOrEmpty(request.Platform) && 
+            !string.IsNullOrEmpty(request.BookingReference) && 
+            !string.IsNullOrEmpty(request.BookingStateBucket))
+        {
+            await UpdateBookingWithCleanerAssignment(
+                request.Platform,
+                request.BookingReference,
+                request.BookingStateBucket,
+                request.CleanerName,
+                request.CleanerEmail,
+                request.CleanerPhone,
+                request.CleaningDate,
+                context
+            );
+        }
+        
         return new { Success = true };
+    }
+    
+    private async Task UpdateBookingWithCleanerAssignment(
+        string platform,
+        string bookingReference,
+        string bucketName,
+        string cleanerName,
+        string cleanerEmail,
+        string cleanerPhone,
+        string cleaningDate,
+        ILambdaContext context)
+    {
+        try
+        {
+            var key = $"bookings/{platform}/{bookingReference}.json";
+            
+            // Retrieve existing booking
+            var getRequest = new GetObjectRequest
+            {
+                BucketName = bucketName,
+                Key = key
+            };
+            
+            var response = await _s3Client.GetObjectAsync(getRequest);
+            string bookingJson;
+            using (var reader = new StreamReader(response.ResponseStream))
+            {
+                bookingJson = await reader.ReadToEndAsync();
+            }
+            
+            // Parse and update booking
+            var booking = JsonSerializer.Deserialize<BookingState>(bookingJson);
+            if (booking != null)
+            {
+                booking.AssignedCleanerName = cleanerName;
+                booking.AssignedCleanerEmail = cleanerEmail;
+                booking.AssignedCleanerPhone = cleanerPhone;
+                booking.CleanerConfirmedAt = DateTime.UtcNow;
+                
+                // Parse cleaning date and time (format: MM-DD-YYYY)
+                if (DateTime.TryParse(cleaningDate, out var cleaningDateTime))
+                {
+                    booking.ScheduledCleaningTime = cleaningDateTime;
+                }
+                
+                // Save updated booking
+                var updatedJson = JsonSerializer.Serialize(booking, new JsonSerializerOptions 
+                { 
+                    WriteIndented = true 
+                });
+                
+                var putRequest = new PutObjectRequest
+                {
+                    BucketName = bucketName,
+                    Key = key,
+                    ContentBody = updatedJson,
+                    ContentType = "application/json"
+                };
+                
+                await _s3Client.PutObjectAsync(putRequest);
+                context.Logger.LogInformation($"Updated booking state with cleaner assignment: {platform}/{bookingReference}");
+            }
+        }
+        catch (Exception ex)
+        {
+            context.Logger.LogError($"Error updating booking state: {ex.Message}");
+            // Don't fail the calendar invite if state update fails
+        }
     }
 
     private string GenerateIcsContent(string cleanerName, string cleanerEmail, string cleanerPhone, string ownerName, string ownerEmail, string propertyName, string propertyAddress, string cleaningDate, string duration)
@@ -222,4 +319,25 @@ public class CalendarEmailRequest
     public string PropertyAddress { get; set; } = string.Empty;
     public string CleaningDate { get; set; } = string.Empty;
     public string CleaningDuration { get; set; } = string.Empty;
+    
+    // Booking details for state update
+    public string? Platform { get; set; }
+    public string? BookingReference { get; set; }
+    public string? BookingStateBucket { get; set; }
+}
+
+public class BookingState
+{
+    public string Platform { get; set; } = string.Empty;
+    public string BookingReference { get; set; } = string.Empty;
+    public string PropertyId { get; set; } = string.Empty;
+    public DateTime CheckInDate { get; set; }
+    public DateTime CheckOutDate { get; set; }
+    public string GuestName { get; set; } = string.Empty;
+    public int NumberOfGuests { get; set; }
+    public string? AssignedCleanerName { get; set; }
+    public string? AssignedCleanerEmail { get; set; }
+    public string? AssignedCleanerPhone { get; set; }
+    public DateTime? CleanerConfirmedAt { get; set; }
+    public DateTime? ScheduledCleaningTime { get; set; }
 }

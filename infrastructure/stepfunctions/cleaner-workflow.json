@@ -161,7 +161,10 @@
                   "PropertyName.$": "$.state.propertyName",
                   "PropertyAddress.$": "$.state.propertyAddress",
                   "CleaningDate.$": "$.state.cleaningDate",
-                  "CleaningDuration.$": "$.state.cleaningDuration"
+                  "CleaningDuration.$": "$.state.cleaningDuration",
+                  "Platform.$": "$.state.input.booking.platform",
+                  "BookingReference.$": "$.state.input.booking.bookingReference",
+                  "BookingStateBucket": "${BookingStateBucket}"
                 }
               },
               "End": true
@@ -190,7 +193,10 @@
                   "PropertyName.$": "$.state.propertyName",
                   "PropertyAddress.$": "$.state.propertyAddress",
                   "CleaningDate.$": "$.state.cleaningDate",
-                  "CleaningDuration.$": "$.state.cleaningDuration"
+                  "CleaningDuration.$": "$.state.cleaningDuration",
+                  "Platform.$": "$.state.input.booking.platform",
+                  "BookingReference.$": "$.state.input.booking.bookingReference",
+                  "BookingStateBucket": "${BookingStateBucket}"
                 }
               },
               "End": true
