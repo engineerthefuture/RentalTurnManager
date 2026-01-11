@@ -229,6 +229,12 @@ public class Function
                         callbackApiUrl = "";
                     }
 
+                    // Ensure ownerName has a default value if missing
+                    if (string.IsNullOrEmpty(property.Metadata.OwnerName))
+                    {
+                        property.Metadata.OwnerName = "Property Management";
+                    }
+
                     // Start Step Functions workflow
                     var workflowInput = new CleanerWorkflowInput
                     {

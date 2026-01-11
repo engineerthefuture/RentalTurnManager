@@ -182,7 +182,7 @@ Resources:
           OWNER_EMAIL: !Ref OwnerEmail
           PROPERTIES_CONFIG: !Ref PropertiesConfig
           MESSAGE_TEMPLATES: !Ref MessageTemplates
-          CALLBACK_API_URL: !Sub 'https://${CallbackApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
+          CALLBACK_API_URL: !Sub 'https://${CallbackApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         S3Key: !Sub '${AppName}/lambda/lambda-deployment.zip'
@@ -402,7 +402,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
       ApiId: !Ref CallbackApi
-      StageName: 'prod'
+      StageName: !Ref Environment
       AutoDeploy: true
       Tags:
         OwnerName: !Ref OwnerName

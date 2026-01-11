@@ -34,6 +34,7 @@ public class PropertyMetadata
     public string CleaningDuration { get; set; } = string.Empty;
     public string AccessInstructions { get; set; } = string.Empty;
     public string SpecialInstructions { get; set; } = string.Empty;
+    public string OwnerName { get; set; } = string.Empty;
 }
 
 /// <summary>
