@@ -299,6 +299,8 @@ Resources:
       DefinitionS3Location:
         Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         Key: !Sub '${AppName}/stepfunctions/${Environment}/cleaner-workflow.json'
+      DefinitionSubstitutions:
+        CalendarLambdaArn: !GetAtt CalendarLambda.Arn
       Tags:
         - Key: OwnerName
           Value: !Ref OwnerName
@@ -363,6 +365,28 @@ Resources:
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         S3Key: !Sub '${AppName}/lambda/callback-lambda-deployment.zip'
+      Tags:
+        - Key: OwnerName
+          Value: !Ref OwnerName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+
+  # Calendar Lambda for sending emails with calendar invites
+  CalendarLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${NamespacePrefix}-${Environment}-lambda-${AppName}-Calendar'
+      Description: Sends confirmation emails with calendar invites
+      Runtime: dotnet10
+      Handler: RentalTurnManager.CalendarLambda::RentalTurnManager.CalendarLambda.Function::FunctionHandler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Code:
+        S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
+        S3Key: !Sub '${AppName}/lambda/calendar-lambda-deployment.zip'
       Tags:
         - Key: OwnerName
           Value: !Ref OwnerName
@@ -441,3 +465,9 @@ Outputs:
     Value: !GetAtt CallbackApi.ApiEndpoint
     Export:
       Name: !Sub '${AWS::StackName}-CallbackApiUrl'
+
+  CalendarLambdaArn:
+    Description: ARN of the calendar Lambda function
+    Value: !GetAtt CalendarLambda.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-CalendarLambdaArn'

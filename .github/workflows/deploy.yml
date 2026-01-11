@@ -130,6 +130,11 @@ jobs:
           cd src/RentalTurnManager.CallbackLambda
           dotnet lambda package --configuration Release --framework net10.0 --output-package ../../callback-lambda-deployment.zip
 
+      - name: Build Calendar Lambda package
+        run: |
+          cd src/RentalTurnManager.CalendarLambda
+          dotnet lambda package --configuration Release --framework net10.0 --output-package ../../calendar-lambda-deployment.zip
+
       - name: Create/Update S3 deployment bucket
         run: |
           BUCKET_NAME="${{ vars.NAMESPACE_PREFIX || 'bf' }}-${{ env.ENVIRONMENT }}-s3-deployments"
@@ -140,6 +145,7 @@ jobs:
         run: |
           aws s3 cp lambda-deployment.zip s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/lambda/lambda-deployment.zip
           aws s3 cp callback-lambda-deployment.zip s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/lambda/callback-lambda-deployment.zip
+          aws s3 cp calendar-lambda-deployment.zip s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/lambda/calendar-lambda-deployment.zip
 
       - name: Upload Step Functions definition to S3
         run: |
@@ -224,7 +230,7 @@ jobs:
       - name: Update Lambda function code
         run: |
           FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}"
-          CALLBACK_FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}-Callback"
+          CALENDAR_FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}-Calendar"
           
           # Update main Lambda
           aws lambda update-function-code \
@@ -240,12 +246,24 @@ jobs:
             --s3-key ${{ env.APP_NAME }}/lambda/callback-lambda-deployment.zip \
             --region ${{ env.AWS_REGION }}
           
-          # Wait for both updates to complete
+          # Update Calendar Lambda
+          aws lambda update-function-code \
+            --function-name ${CALENDAR_FUNCTION_NAME} \
+            --s3-bucket ${{ env.BUCKET_NAME }} \
+            --s3-key ${{ env.APP_NAME }}/lambda/calendar-lambda-deployment.zip \
+            --region ${{ env.AWS_REGION }}
+          
+          # Wait for all updates to complete
           aws lambda wait function-updated \
             --function-name ${FUNCTION_NAME} \
             --region ${{ env.AWS_REGION }}
           
           aws lambda wait function-updated \
+            --function-name ${CALLBACK_FUNCTION_NAME} \
+            --region ${{ env.AWS_REGION }}
+          
+          aws lambda wait function-updated \
+            --function-name ${CALENDARated \
             --function-name ${CALLBACK_FUNCTION_NAME} \
             --region ${{ env.AWS_REGION }}
 
