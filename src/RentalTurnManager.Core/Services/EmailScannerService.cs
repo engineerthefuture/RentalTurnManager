@@ -20,7 +20,7 @@ public class EmailScannerService : IEmailScannerService
         _logger = logger;
     }
 
-    public async Task<List<EmailMessage>> ScanForBookingEmailsAsync(EmailCredentials credentials)
+    public async Task<List<EmailMessage>> ScanForBookingEmailsAsync(EmailCredentials credentials, bool forceRescan = false)
     {
         var emails = new List<EmailMessage>();
 
@@ -54,19 +54,40 @@ public class EmailScannerService : IEmailScannerService
 
             _logger.LogInformation($"Inbox has {inbox.Count} messages");
 
-            // Search for unread emails from booking platforms
-            var searchQuery = SearchQuery.NotSeen.And(
+            // Debug: Log all messages to see what we have
+            if (inbox.Count > 0)
+            {
+                _logger.LogInformation("Analyzing all messages in inbox:");
+                var allUids = await inbox.SearchAsync(SearchQuery.All);
+                foreach (var uid in allUids.Take(5)) // Log first 5 messages
+                {
+                    try
+                    {
+                        var msg = await inbox.GetMessageAsync(uid);
+                        var flags = await inbox.GetFlagsAsync(uid);
+                        _logger.LogInformation($"  UID {uid}: From='{msg.From}', Subject='{msg.Subject}', Flags={flags}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning($"  UID {uid}: Error reading message - {ex.Message}");
+                    }
+                }
+            }
+
+            // Search for emails from booking platforms
+            var platformQuery = SearchQuery.Or(
                 SearchQuery.Or(
-                    SearchQuery.Or(
-                        SearchQuery.FromContains("airbnb.com"),
-                        SearchQuery.FromContains("vrbo.com")
-                    ),
-                    SearchQuery.FromContains("booking.com")
-                )
+                    SearchQuery.FromContains("airbnb.com"),
+                    SearchQuery.FromContains("vrbo.com")
+                ),
+                SearchQuery.FromContains("booking.com")
             );
 
+            // If not force rescanning, only get unread emails
+            var searchQuery = forceRescan ? platformQuery : SearchQuery.NotSeen.And(platformQuery);
+
             var uids = await inbox.SearchAsync(searchQuery);
-            _logger.LogInformation($"Found {uids.Count} unread booking emails");
+            _logger.LogInformation($"Found {uids.Count} {(forceRescan ? "" : "unread ")}booking emails");
 
             foreach (var uid in uids)
             {

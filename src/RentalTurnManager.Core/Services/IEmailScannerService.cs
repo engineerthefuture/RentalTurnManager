@@ -7,6 +7,6 @@ namespace RentalTurnManager.Core.Services;
 /// </summary>
 public interface IEmailScannerService
 {
-    Task<List<EmailMessage>> ScanForBookingEmailsAsync(EmailCredentials credentials);
+    Task<List<EmailMessage>> ScanForBookingEmailsAsync(EmailCredentials credentials, bool forceRescan = false);
     Task MarkEmailAsProcessedAsync(EmailCredentials credentials, EmailMessage email);
 }

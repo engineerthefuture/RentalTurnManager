@@ -116,8 +116,8 @@ public class Function
             var emailCredentials = await secretsService.GetEmailCredentialsAsync();
             
             // Scan emails for new bookings
-            _logger.LogInformation("Scanning emails for new bookings");
-            var emails = await emailScanner.ScanForBookingEmailsAsync(emailCredentials);
+            _logger.LogInformation($"Scanning emails for new bookings (ForceRescan: {input.ForceRescan})");
+            var emails = await emailScanner.ScanForBookingEmailsAsync(emailCredentials, input.ForceRescan);
             _logger.LogInformation($"Found {emails.Count} potential booking emails");
 
             foreach (var email in emails)
