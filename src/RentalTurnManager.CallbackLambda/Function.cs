@@ -60,33 +60,34 @@ public class Function
                 };
             }
 
-            context.Logger.LogInformation($"Processing {response} response for task token");
-
-            // Decode base64 token
-            string decodedToken;
-            try
-            {
-                var tokenBytes = Convert.FromBase64String(taskToken);
-                decodedToken = System.Text.Encoding.UTF8.GetString(tokenBytes);
-            }
-            catch (Exception ex)
-            {
-                context.Logger.LogError($"Failed to decode base64 token: {ex.Message}");
-                return new APIGatewayProxyResponse
-                {
-                    StatusCode = 400,
-                    Body = $"Invalid token format: {ex.Message}",
-                    Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
-                };
-            }
+            context.Logger.LogInformation($"Processing {response} response for task token. Token length: {taskToken.Length}");
 
             // Send response to Step Functions
             var taskResponse = new { response = response };
-            await _stepFunctionsClient.SendTaskSuccessAsync(new SendTaskSuccessRequest
+            try
             {
-                TaskToken = decodedToken,
-                Output = JsonSerializer.Serialize(taskResponse)
-            });
+                await _stepFunctionsClient.SendTaskSuccessAsync(new SendTaskSuccessRequest
+                {
+                    TaskToken = taskToken,
+                    Output = JsonSerializer.Serialize(taskResponse)
+                });
+                context.Logger.LogInformation($"Successfully sent task success for {response} response");
+            }
+            catch (Amazon.StepFunctions.Model.InvalidTokenException ex)
+            {
+                context.Logger.LogError($"Invalid token error: {ex.Message}. This usually means the task has already completed, timed out, or the token is incorrect.");
+                return new APIGatewayProxyResponse
+                {
+                    StatusCode = 400,
+                    Body = "This response link has already been used or has expired. Please contact support if you need assistance.",
+                    Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+                };
+            }
+            catch (Exception ex)
+            {
+                context.Logger.LogError($"Error sending task success: {ex.GetType().Name} - {ex.Message}");
+                throw;
+            }
 
             // Return HTML response
             var htmlResponse = $@"

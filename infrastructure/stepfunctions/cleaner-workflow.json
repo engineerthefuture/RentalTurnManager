@@ -62,10 +62,29 @@
         "propertyName.$": "$.state.input.property.metadata.propertyName",
         "propertyAddress.$": "$.state.input.property.address",
         "cleaningDate.$": "States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0)",
+        "numberOfGuests.$": "$.state.input.booking.numberOfGuests",
         "ownerName.$": "$.state.input.property.metadata.ownerName",
         "cleanerConfirmed.$": "$.state.cleanerConfirmed",
         "allCleanersExhausted.$": "$.state.allCleanersExhausted",
         "checkData.$": "$.state.checkData"
+      },
+      "ResultPath": "$.state",
+      "Next": "FormatCleaningDate"
+    },
+    "FormatCleaningDate": {
+      "Type": "Pass",
+      "Comment": "Reformat date from YYYY-MM-DD to MM-DD-YYYY",
+      "Parameters": {
+        "input.$": "$.state.input",
+        "currentCleaner.$": "$.state.currentCleaner",
+        "propertyName.$": "$.state.propertyName",
+        "propertyAddress.$": "$.state.propertyAddress",
+        "numberOfGuests.$": "$.state.numberOfGuests",
+        "ownerName.$": "$.state.ownerName",
+        "cleanerConfirmed.$": "$.state.cleanerConfirmed",
+        "allCleanersExhausted.$": "$.state.allCleanersExhausted",
+        "checkData.$": "$.state.checkData",
+        "cleaningDate.$": "States.Format('{}-{}-{}', States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 1), States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 2), States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 0))"
       },
       "ResultPath": "$.state",
       "Next": "SendCleanerRequest"
@@ -85,7 +104,7 @@
           },
           "Body": {
             "Html": {
-              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Are you available on {} at 12:00 PM to do a cleaning and laundry turnover at {}?</p><p style=\"margin: 30px 0;\"><a href=\"{}/respond?token={}&response=yes\" style=\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\">YES - I am available</a><a href=\"{}/respond?token={}&response=no\" style=\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\">NO - Not available</a></p><p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress, $.state.cleaningDate, $.state.propertyAddress, $.state.input.callbackApiUrl, States.Base64Encode($$.Task.Token), $.state.input.callbackApiUrl, States.Base64Encode($$.Task.Token), $.state.ownerName)"
+              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li><li>Guests: {}</li></ul><p>Are you available on {} at 12:00 PM to do a cleaning and laundry turnover at {}?</p><p style=\"margin: 30px 0;\"><a href=\"{}/respond?token={}&response=yes\" style=\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\">YES - I am available</a><a href=\"{}/respond?token={}&response=no\" style=\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\">NO - Not available</a></p><p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress, $.state.numberOfGuests, $.state.cleaningDate, $.state.propertyAddress, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.ownerName)"
             }
           }
         }
