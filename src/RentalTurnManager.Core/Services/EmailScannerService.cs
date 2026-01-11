@@ -64,7 +64,7 @@ public class EmailScannerService : IEmailScannerService
                     try
                     {
                         var msg = await inbox.GetMessageAsync(uid);
-                        var flags = await inbox.GetFlagsAsync(uid);
+                        var flags = inbox.GetFlags(uid);
                         _logger.LogInformation($"  UID {uid}: From='{msg.From}', Subject='{msg.Subject}', Flags={flags}");
                     }
                     catch (Exception ex)
