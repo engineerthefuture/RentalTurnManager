@@ -93,10 +93,12 @@
       "Type": "Task",
       "Comment": "Send email to cleaner requesting availability with callback links",
       "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail.waitForTaskToken",
+      "TimeoutSeconds": 32400,
       "Parameters": {
         "Source.$": "$.state.input.ownerEmail",
         "Destination": {
-          "ToAddresses.$": "States.Array($.state.currentCleaner.email)"
+          "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
+          "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
         },
         "Message": {
           "Subject": {

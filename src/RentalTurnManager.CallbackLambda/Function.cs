@@ -39,6 +39,8 @@ public class Function
                 };
             }
 
+            context.Logger.LogInformation($"Received token (length: {taskToken.Length}): {taskToken.Substring(0, Math.Min(50, taskToken.Length))}...");
+
             if (!request.QueryStringParameters.TryGetValue("response", out var response))
             {
                 return new APIGatewayProxyResponse
