@@ -116,11 +116,30 @@ public class BookingParserService : IBookingParserService
             booking.BookingReference = refMatch.Groups[1].Value;
         }
 
-        // Extract property ID from listing/room number - can be very long numbers or short ones
-        var listingMatch = Regex.Match(content, @"(?:listing|rooms?)[/:\s#]+(\d+)", RegexOptions.IgnoreCase);
-        if (listingMatch.Success)
+        // Extract property name - look for it in various formats in the email
+        // Format 1: All caps title near the top (e.g., "WATERFRONT LAKE ANNA - KAYAKS, FIREPIT, FAMILY FUN")
+        var propertyNameMatch = Regex.Match(content, @"^([A-Z][A-Z\s\-,&']+(?:[A-Z][a-z]+\s*)*[A-Z\s\-,&']+)\s*$", RegexOptions.Multiline);
+        if (propertyNameMatch.Success)
         {
-            booking.PropertyId = listingMatch.Groups[1].Value;
+            var potentialName = propertyNameMatch.Groups[1].Value.Trim();
+            // Should be at least 10 characters and contain meaningful words (not just "CHECK IN" etc)
+            if (potentialName.Length >= 10 && 
+                !potentialName.Contains("CHECK") && 
+                !potentialName.Contains("RESERVATION") &&
+                !potentialName.Contains("CONFIRMED"))
+            {
+                booking.PropertyId = potentialName;
+            }
+        }
+
+        // If property name not found, try extracting from listing URL or listing number
+        if (string.IsNullOrEmpty(booking.PropertyId))
+        {
+            var listingMatch = Regex.Match(content, @"(?:listing|rooms?)[/:\s#]+(\d+)", RegexOptions.IgnoreCase);
+            if (listingMatch.Success)
+            {
+                booking.PropertyId = listingMatch.Groups[1].Value;
+            }
         }
 
         // Extract dates - Airbnb uses multiple formats:
