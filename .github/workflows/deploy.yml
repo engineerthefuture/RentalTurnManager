@@ -125,6 +125,11 @@ jobs:
           cd src/RentalTurnManager.Lambda
           dotnet lambda package --configuration Release --framework net10.0 --output-package ../../lambda-deployment.zip
 
+      - name: Build Callback Lambda package
+        run: |
+          cd src/RentalTurnManager.CallbackLambda
+          dotnet lambda package --configuration Release --framework net10.0 --output-package ../../callback-lambda-deployment.zip
+
       - name: Create/Update S3 deployment bucket
         run: |
           BUCKET_NAME="${{ vars.NAMESPACE_PREFIX || 'bf' }}-${{ env.ENVIRONMENT }}-s3-deployments"
@@ -134,6 +139,7 @@ jobs:
       - name: Upload Lambda package to S3
         run: |
           aws s3 cp lambda-deployment.zip s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/lambda/lambda-deployment.zip
+          aws s3 cp callback-lambda-deployment.zip s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/lambda/callback-lambda-deployment.zip
 
       - name: Upload Step Functions definition to S3
         run: |

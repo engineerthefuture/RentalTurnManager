@@ -182,6 +182,7 @@ Resources:
           OWNER_EMAIL: !Ref OwnerEmail
           PROPERTIES_CONFIG: !Ref PropertiesConfig
           MESSAGE_TEMPLATES: !Ref MessageTemplates
+          CALLBACK_API_URL: !Sub 'https://${CallbackApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         S3Key: !Sub '${AppName}/lambda/lambda-deployment.zip'
@@ -324,6 +325,98 @@ Resources:
         - Key: Description
           Value: Step Functions execution logs
 
+  # Callback Lambda Function for Cleaner Responses
+  CallbackLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${NamespacePrefix}-${Environment}-role-${AppName}-CallbackLambda'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: StepFunctionsCallbackPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - states:SendTaskSuccess
+                  - states:SendTaskFailure
+                Resource: !Ref CleanerWorkflowStateMachine
+
+  CallbackLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${NamespacePrefix}-${Environment}-lambda-${AppName}-Callback'
+      Description: Handles cleaner response callbacks from email links
+      Runtime: dotnet10
+      Handler: RentalTurnManager.CallbackLambda::RentalTurnManager.CallbackLambda.Function::FunctionHandler
+      Role: !GetAtt CallbackLambdaRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Code:
+        S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
+        S3Key: !Sub '${AppName}/lambda/callback-lambda-deployment.zip'
+      Tags:
+        - Key: OwnerName
+          Value: !Ref OwnerName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+
+  # API Gateway for Callback
+  CallbackApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${NamespacePrefix}-${Environment}-api-${AppName}-Callback'
+      Description: API for cleaner response callbacks
+      ProtocolType: HTTP
+      Tags:
+        OwnerName: !Ref OwnerName
+        Environment: !Ref Environment
+        AppName: !Ref AppName
+
+  CallbackApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref CallbackApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt CallbackLambda.Arn
+      PayloadFormatVersion: '2.0'
+
+  CallbackApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref CallbackApi
+      RouteKey: 'GET /respond'
+      Target: !Sub 'integrations/${CallbackApiIntegration}'
+
+  CallbackApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref CallbackApi
+      StageName: '$default'
+      AutoDeploy: true
+      Tags:
+        OwnerName: !Ref OwnerName
+        Environment: !Ref Environment
+        AppName: !Ref AppName
+
+  CallbackLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CallbackLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${CallbackApi}/*'
+
 Outputs:
   LambdaFunctionArn:
     Description: ARN of the email scanner Lambda function
@@ -342,3 +435,9 @@ Outputs:
     Value: !Ref EmailCredentialsSecret
     Export:
       Name: !Sub '${AWS::StackName}-EmailSecretArn'
+
+  CallbackApiUrl:
+    Description: URL of the callback API
+    Value: !GetAtt CallbackApi.ApiEndpoint
+    Export:
+      Name: !Sub '${AWS::StackName}-CallbackApiUrl'

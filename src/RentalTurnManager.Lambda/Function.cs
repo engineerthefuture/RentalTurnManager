@@ -221,6 +221,14 @@ public class Function
                     }
                     _logger.LogInformation($"Using owner email: {ownerEmail}");
 
+                    // Get callback API URL from environment variable
+                    var callbackApiUrl = Environment.GetEnvironmentVariable("CALLBACK_API_URL");
+                    if (string.IsNullOrEmpty(callbackApiUrl))
+                    {
+                        _logger.LogWarning("CALLBACK_API_URL environment variable not set");
+                        callbackApiUrl = "";
+                    }
+
                     // Start Step Functions workflow
                     var workflowInput = new CleanerWorkflowInput
                     {
@@ -229,7 +237,8 @@ public class Function
                         CleaningDateTime = cleaningDate.Add(cleaningTime),
                         CurrentCleanerIndex = 0,
                         AttemptCount = 0,
-                        OwnerEmail = ownerEmail
+                        OwnerEmail = ownerEmail,
+                        CallbackApiUrl = callbackApiUrl
                     };
 
                     var executionArn = await stepFunctionService.StartCleanerWorkflowAsync(workflowInput);
