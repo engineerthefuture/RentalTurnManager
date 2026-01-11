@@ -7,10 +7,8 @@
       "Comment": "Initialize workflow state",
       "Parameters": {
         "input.$": "$",
-        "currentCleaner": null,
         "cleanerConfirmed": false,
-        "allCleanersExhausted": false,
-        "contactedCleaners": []
+        "allCleanersExhausted": false
       },
       "ResultPath": "$.state",
       "Next": "CheckCleanerList"
@@ -20,7 +18,7 @@
       "Comment": "Get cleaner count for comparison",
       "Parameters": {
         "input.$": "$.state.input",
-        "cleanersCount.$": "States.ArrayLength($.state.input.property.cleaners)"
+        "cleanersCount.$": "States.ArrayLength($.state.input.Property.Cleaners)"
       },
       "ResultPath": "$.state.checkData",
       "Next": "CompareCleanerIndex"
@@ -30,38 +28,29 @@
       "Comment": "Check if current index is beyond cleaner list",
       "Choices": [
         {
-          "Variable": "$.state.input.currentCleanerIndex",
+          "Variable": "$.state.input.CurrentCleanerIndex",
           "NumericLessThanPath": "$.state.checkData.cleanersCount",
-          "Next": "GetCurrentCleaner"
+          "Next": "SendCleanerRequest"
         }
       ],
       "Default": "AllCleanersExhausted"
-    },
-    "GetCurrentCleaner": {
-      "Type": "Pass",
-      "Comment": "Get the current cleaner from the list",
-      "Parameters": {
-        "cleaner.$": "States.ArrayGetItem($.state.input.property.cleaners, $.state.input.currentCleanerIndex)"
-      },
-      "ResultPath": "$.state.currentCleaner",
-      "Next": "SendCleanerRequest"
     },
     "SendCleanerRequest": {
       "Type": "Task",
       "Comment": "Send email to cleaner requesting availability with callback links",
       "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail.waitForTaskToken",
       "Parameters": {
-        "Source.$": "$.state.input.ownerEmail",
+        "Source.$": "$.state.input.OwnerEmail",
         "Destination": {
-          "ToAddresses.$": "States.Array($.state.currentCleaner.cleaner.email)"
+          "ToAddresses.$": "States.Array(States.ArrayGetItem($.state.input.Property.Cleaners, $.state.input.CurrentCleanerIndex).Email)"
         },
         "Message": {
           "Subject": {
-            "Data.$": "States.Format('Cleaning Request for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
+            "Data.$": "States.Format('Cleaning Request for {} on {}', $.state.input.Property.Name, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0))"
           },
           "Body": {
             "Html": {
-              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li><li>Estimated Duration: {}</li></ul><p>Are you available on {} at 12:00 PM to do a cleaning and laundry turnover at {}?</p><p style=\"margin: 30px 0;\"><a href=\"{}/respond?token={}&response=yes\" style=\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\">YES - I am available</a><a href=\"{}/respond?token={}&response=no\" style=\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\">NO - Not available</a></p><p>Thank you,<br>RentalTurnManager</p></body></html>', $.state.currentCleaner.cleaner.name, $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.property.metadata.cleaningDuration, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.CallbackApiUrl, $$.Task.Token, $.state.input.CallbackApiUrl, $$.Task.Token)"
+              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Are you available on {} at 12:00 PM to do a cleaning and laundry turnover at {}?</p><p style=\"margin: 30px 0;\"><a href=\"{}/respond?token={}&response=yes\" style=\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\">YES - I am available</a><a href=\"{}/respond?token={}&response=no\" style=\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\">NO - Not available</a></p><p>Thank you,<br>RentalTurnManager</p></body></html>', States.ArrayGetItem($.state.input.Property.Cleaners, $.state.input.CurrentCleanerIndex).Name, $.state.input.Property.Name, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0), $.state.input.Property.Address, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0), $.state.input.Property.Address, $.state.input.CallbackApiUrl, $$.Task.Token, $.state.input.CallbackApiUrl, $$.Task.Token)"
             }
           }
         }
@@ -99,17 +88,17 @@
               "Type": "Task",
               "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail",
               "Parameters": {
-                "Source.$": "$.state.input.ownerEmail",
+                "Source.$": "$.state.input.OwnerEmail",
                 "Destination": {
-                  "ToAddresses.$": "States.Array($.state.currentCleaner.cleaner.email)"
+                  "ToAddresses.$": "States.Array(States.ArrayGetItem($.state.input.Property.Cleaners, $.state.input.CurrentCleanerIndex).Email)"
                 },
                 "Message": {
                   "Subject": {
-                    "Data.$": "States.Format('Cleaning Confirmed for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
+                    "Data.$": "States.Format('Cleaning Confirmed for {} on {}', $.state.input.Property.Name, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0))"
                   },
                   "Body": {
                     "Text": {
-                      "Data.$": "States.Format('Hello {},\\n\\nThank you for confirming your availability!\\n\\nYour cleaning appointment has been scheduled:\\n- Property: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n- Duration: {}\\n\\nAccess Instructions:\\n{}\\n\\nSpecial Instructions:\\n{}\\n\\nA calendar invite has been sent to you separately.\\n\\nThank you,\\nRentalTurnManager', $.state.currentCleaner.cleaner.name, $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.property.metadata.cleaningDuration, $.state.input.property.metadata.accessInstructions, $.state.input.property.metadata.specialInstructions)"
+                      "Data.$": "States.Format('Hello {},\\n\\nThank you for confirming your availability!\\n\\nYour cleaning appointment has been scheduled:\\n- Property: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n\\nThank you,\\nRentalTurnManager', States.ArrayGetItem($.state.input.Property.Cleaners, $.state.input.CurrentCleanerIndex).Name, $.state.input.Property.Name, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0), $.state.input.Property.Address)"
                     }
                   }
                 }
@@ -125,17 +114,17 @@
               "Type": "Task",
               "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail",
               "Parameters": {
-                "Source.$": "$.state.input.ownerEmail",
+                "Source.$": "$.state.input.OwnerEmail",
                 "Destination": {
-                  "ToAddresses.$": "States.Array($.state.input.ownerEmail)"
+                  "ToAddresses.$": "States.Array($.state.input.OwnerEmail)"
                 },
                 "Message": {
                   "Subject": {
-                    "Data.$": "States.Format('Cleaning Scheduled for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
+                    "Data.$": "States.Format('Cleaning Scheduled for {} on {}', $.state.input.Property.Name, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0))"
                   },
                   "Body": {
                     "Text": {
-                      "Data.$": "States.Format('Hello,\\n\\nA cleaning has been scheduled for {}:\\n\\n- Cleaner: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n\\nYou have been copied on the calendar invite.\\n\\nThank you,\\nRentalTurnManager', $.state.input.property.metadata.propertyName, $.state.currentCleaner.cleaner.name, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address)"
+                      "Data.$": "States.Format('Hello,\\n\\nA cleaning has been scheduled for {}:\\n\\n- Cleaner: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n\\nThank you,\\nRentalTurnManager', $.state.input.Property.Name, States.ArrayGetItem($.state.input.Property.Cleaners, $.state.input.CurrentCleanerIndex).Name, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0), $.state.input.Property.Address)"
                     }
                   }
                 }
@@ -152,17 +141,16 @@
       "Comment": "Move to next cleaner in list",
       "Parameters": {
         "input": {
-          "booking.$": "$.state.input.booking",
-          "property.$": "$.state.input.property",
-          "cleaningDateTime.$": "$.state.input.cleaningDateTime",
-          "currentCleanerIndex.$": "States.MathAdd($.state.input.currentCleanerIndex, 1)",
-          "attemptCount.$": "States.MathAdd($.state.input.attemptCount, 1)",
-          "ownerEmail.$": "$.state.input.ownerEmail"
+          "Booking.$": "$.state.input.Booking",
+          "Property.$": "$.state.input.Property",
+          "CleaningDateTime.$": "$.state.input.CleaningDateTime",
+          "CurrentCleanerIndex.$": "States.MathAdd($.state.input.CurrentCleanerIndex, 1)",
+          "AttemptCount.$": "States.MathAdd($.state.input.AttemptCount, 1)",
+          "OwnerEmail.$": "$.state.input.OwnerEmail",
+          "CallbackApiUrl.$": "$.state.input.CallbackApiUrl"
         },
-        "currentCleaner": null,
         "cleanerConfirmed": false,
-        "allCleanersExhausted": false,
-        "contactedCleaners": "States.ArrayAppend($.state.contactedCleaners, $.state.currentCleaner.cleaner.name)"
+        "allCleanersExhausted": false
       },
       "ResultPath": "$.state",
       "Next": "CheckCleanerList"
@@ -172,17 +160,17 @@
       "Comment": "Send escalation email to owner",
       "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail",
       "Parameters": {
-        "Source.$": "$.state.input.ownerEmail",
+        "Source.$": "$.state.input.OwnerEmail",
         "Destination": {
-          "ToAddresses.$": "States.Array($.state.input.ownerEmail)"
+          "ToAddresses.$": "States.Array($.state.input.OwnerEmail)"
         },
         "Message": {
           "Subject": {
-            "Data.$": "States.Format('URGENT: Unable to Schedule Cleaning for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
+            "Data.$": "States.Format('URGENT: Unable to Schedule Cleaning for {} on {}', $.state.input.Property.Name, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0))"
           },
           "Body": {
             "Text": {
-              "Data.$": "States.Format('Hello,\\n\\nWe were unable to secure a cleaner for the following booking:\\n\\n- Property: {}\\n- Check-in Date: {}\\n- Checkout Date: {}\\n- Cleaning Needed: {}\\n- Address: {}\\n\\nAll preferred cleaners were contacted and either declined or did not respond.\\n\\nPlease arrange for cleaning services manually.\\n\\nBooking Details:\\n- Platform: {}\\n- Booking Reference: {}\\n- Guest Name: {}\\n\\nThank you,\\nRentalTurnManager', $.state.input.property.metadata.propertyName, $.state.input.booking.checkInDate, $.state.input.booking.checkOutDate, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.booking.platform, $.state.input.booking.bookingReference, $.state.input.booking.guestName)"
+              "Data.$": "States.Format('Hello,\\n\\nWe were unable to secure a cleaner for the following booking:\\n\\n- Property: {}\\n- Check-in Date: {}\\n- Checkout Date: {}\\n- Cleaning Needed: {}\\n- Address: {}\\n\\nAll preferred cleaners were contacted and either declined or did not respond.\\n\\nPlease arrange for cleaning services manually.\\n\\nBooking Details:\\n- Platform: {}\\n- Booking Reference: {}\\n- Guest Name: {}\\n\\nThank you,\\nRentalTurnManager', $.state.input.Property.Name, $.state.input.Booking.CheckInDate, $.state.input.Booking.CheckOutDate, States.ArrayGetItem(States.StringSplit($.state.input.CleaningDateTime, 'T'), 0), $.state.input.Property.Address, $.state.input.Booking.Platform, $.state.input.Booking.BookingReference, $.state.input.Booking.GuestName)"
             }
           }
         }
