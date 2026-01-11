@@ -115,18 +115,14 @@ jobs:
 
       - name: Prepare properties configuration
         run: |
-          if [[ "${{ env.ENVIRONMENT }}" == "dev" ]]; then
-            if [[ -n "${{ vars.PROPERTIES_CONFIG_DEV }}" ]]; then
-              cat > config/properties.json << 'EOF'
-          ${{ vars.PROPERTIES_CONFIG_DEV }}
-          EOF
-            fi
+          if [ "${{ env.ENVIRONMENT }}" = "dev" ]; then
+            CONFIG_VAR="${{ vars.PROPERTIES_CONFIG_DEV }}"
           else
-            if [[ -n "${{ vars.PROPERTIES_CONFIG }}" ]]; then
-              cat > config/properties.json << 'EOF'
-          ${{ vars.PROPERTIES_CONFIG }}
-          EOF
-            fi
+            CONFIG_VAR="${{ vars.PROPERTIES_CONFIG }}"
+          fi
+          
+          if [ -n "$CONFIG_VAR" ]; then
+            echo "$CONFIG_VAR" > config/properties.json
           fi
 
       - name: Build Lambda package

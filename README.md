@@ -165,7 +165,9 @@ sequenceDiagram
     else Booking unchanged
         Note over ML: Skip - no workflow needed
     end
+```
 
+## Project Structure
 
 ```
 RentalTurnManager/

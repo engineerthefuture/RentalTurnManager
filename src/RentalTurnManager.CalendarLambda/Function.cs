@@ -59,6 +59,7 @@ public class Function
             request.PropertyName,
             request.PropertyAddress,
             request.CleaningDate,
+            request.CleaningDateTime,
             request.CleaningDuration
         );
 
@@ -96,7 +97,7 @@ public class Function
                 request.CleanerName,
                 request.CleanerEmail,
                 request.CleanerPhone,
-                request.CleaningDate,
+                request.CleaningDateTime ?? request.CleaningDate,
                 context
             );
         }
@@ -141,10 +142,14 @@ public class Function
                 booking.AssignedCleanerPhone = cleanerPhone;
                 booking.CleanerConfirmedAt = DateTime.UtcNow;
                 
-                // Parse cleaning date and time (format: MM-DD-YYYY)
+                // Parse the full cleaning DateTime (already in UTC from workflow)
                 if (DateTime.TryParse(cleaningDate, out var cleaningDateTime))
                 {
-                    booking.ScheduledCleaningTime = cleaningDateTime;
+                    // If the parsed DateTime has time info, use it directly
+                    // Otherwise default to the parsed date (preserving any time that was included)
+                    booking.ScheduledCleaningTime = cleaningDateTime.Kind == DateTimeKind.Utc 
+                        ? cleaningDateTime 
+                        : DateTime.SpecifyKind(cleaningDateTime, DateTimeKind.Utc);
                 }
                 
                 // Save updated booking
@@ -172,15 +177,26 @@ public class Function
         }
     }
 
-    private string GenerateIcsContent(string cleanerName, string cleanerEmail, string cleanerPhone, string ownerName, string ownerEmail, string propertyName, string propertyAddress, string cleaningDate, string duration)
+    private string GenerateIcsContent(string cleanerName, string cleanerEmail, string cleanerPhone, string ownerName, string ownerEmail, string propertyName, string propertyAddress, string cleaningDate, string? cleaningDateTime, string duration)
     {
-        // Parse date and treat it as Eastern Time, then set to 12:00 PM ET
-        var startDate = DateTime.Parse(cleaningDate);
-        var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+        DateTime startDateTime;
         
-        // Create a DateTime at 12:00 PM on the specified date in Eastern Time
-        var startDateTimeUnspecified = new DateTime(startDate.Year, startDate.Month, startDate.Day, 12, 0, 0, DateTimeKind.Unspecified);
-        var startDateTime = TimeZoneInfo.ConvertTimeToUtc(startDateTimeUnspecified, easternZone);
+        // If CleaningDateTime is provided (ISO format with time), use it
+        if (!string.IsNullOrEmpty(cleaningDateTime) && DateTime.TryParse(cleaningDateTime, out var parsedDateTime))
+        {
+            // Assume the DateTime from workflow is already in UTC
+            startDateTime = parsedDateTime.Kind == DateTimeKind.Utc 
+                ? parsedDateTime 
+                : DateTime.SpecifyKind(parsedDateTime, DateTimeKind.Utc);
+        }
+        else
+        {
+            // Fallback: Parse date and default to 12:00 PM Eastern Time
+            var startDate = DateTime.Parse(cleaningDate);
+            var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+            var startDateTimeUnspecified = new DateTime(startDate.Year, startDate.Month, startDate.Day, 12, 0, 0, DateTimeKind.Unspecified);
+            startDateTime = TimeZoneInfo.ConvertTimeToUtc(startDateTimeUnspecified, easternZone);
+        }
         
         // Parse duration (e.g., "2-3 hours" -> use 2.5 hours)
         var durationHours = ParseDuration(duration);
@@ -318,6 +334,7 @@ public class CalendarEmailRequest
     public string PropertyName { get; set; } = string.Empty;
     public string PropertyAddress { get; set; } = string.Empty;
     public string CleaningDate { get; set; } = string.Empty;
+    public string? CleaningDateTime { get; set; }
     public string CleaningDuration { get; set; } = string.Empty;
     
     // Booking details for state update
