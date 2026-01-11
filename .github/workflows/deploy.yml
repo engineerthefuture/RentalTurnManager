@@ -157,7 +157,7 @@ jobs:
             WAIT_CONDITION="stack-create-complete"
           fi
           
-          # Prepare JSON parameters (minify to single line)
+          # Prepare JSON parameters (minify to single line and create override parameters file)
           cat > /tmp/properties.json << 'PROPERTIES_EOF'
           ${{ vars.PROPERTIES_CONFIG || '{}' }}
           PROPERTIES_EOF
@@ -167,23 +167,29 @@ jobs:
           PROPERTIES_CONFIG=$(jq -c . /tmp/properties.json)
           MESSAGE_TEMPLATES=$(jq -c . /tmp/templates.json)
           
+          # Create override parameters file
+          cat > /tmp/override-params.json << EOF
+          [
+            {"ParameterKey": "EmailUsername", "ParameterValue": "${{ secrets.EMAIL_USERNAME }}"},
+            {"ParameterKey": "EmailPassword", "ParameterValue": "${{ secrets.EMAIL_PASSWORD }}"},
+            {"ParameterKey": "OwnerEmail", "ParameterValue": "${{ vars.OWNER_EMAIL }}"},
+            {"ParameterKey": "ImapHost", "ParameterValue": "${{ vars.IMAP_HOST }}"},
+            {"ParameterKey": "ImapPort", "ParameterValue": "${{ vars.IMAP_PORT || '993' }}"},
+            {"ParameterKey": "ScheduleInterval", "ParameterValue": "${{ vars.SCHEDULE_INTERVAL || 'rate(15 minutes)' }}"},
+            {"ParameterKey": "OwnerName", "ParameterValue": "${{ vars.OWNER_NAME || 'Property Owner' }}"},
+            {"ParameterKey": "NamespacePrefix", "ParameterValue": "${{ env.NAMESPACE_PREFIX }}"},
+            {"ParameterKey": "AppName", "ParameterValue": "${{ env.APP_NAME }}"},
+            {"ParameterKey": "PropertiesConfig", "ParameterValue": ${PROPERTIES_CONFIG}},
+            {"ParameterKey": "MessageTemplates", "ParameterValue": ${MESSAGE_TEMPLATES}}
+          ]
+          EOF
+          
           # Deploy stack
           aws cloudformation ${ACTION} \
             --stack-name ${STACK_NAME} \
             --template-body file://infrastructure/cloudformation/main.yaml \
             --parameters file://infrastructure/cloudformation/parameters/${{ env.ENVIRONMENT }}.json \
-            --parameters \
-              ParameterKey=EmailUsername,ParameterValue="${{ secrets.EMAIL_USERNAME }}" \
-              ParameterKey=EmailPassword,ParameterValue="${{ secrets.EMAIL_PASSWORD }}" \
-              ParameterKey=OwnerEmail,ParameterValue="${{ vars.OWNER_EMAIL }}" \
-              ParameterKey=ImapHost,ParameterValue="${{ vars.IMAP_HOST }}" \
-              ParameterKey=ImapPort,ParameterValue="${{ vars.IMAP_PORT || '993' }}" \
-              ParameterKey=ScheduleInterval,ParameterValue='${{ vars.SCHEDULE_INTERVAL || 'rate(15 minutes)' }}' \
-              ParameterKey=OwnerName,ParameterValue="${{ vars.OWNER_NAME || 'Property Owner' }}" \
-              ParameterKey=NamespacePrefix,ParameterValue="${{ env.NAMESPACE_PREFIX }}" \
-              ParameterKey=AppName,ParameterValue="${{ env.APP_NAME }}" \
-              ParameterKey=PropertiesConfig,ParameterValue="${PROPERTIES_CONFIG}" \
-              ParameterKey=MessageTemplates,ParameterValue="${MESSAGE_TEMPLATES}" \
+            --parameters file:///tmp/override-params.json \
             --capabilities CAPABILITY_NAMED_IAM \
             --region ${{ env.AWS_REGION }} \
             --tags \
