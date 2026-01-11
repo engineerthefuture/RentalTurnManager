@@ -42,4 +42,18 @@ public class PropertyMetadata
 public class PropertiesConfiguration
 {
     public List<PropertyConfiguration> Properties { get; set; } = new();
+    public EmailFilterConfiguration? EmailFilters { get; set; }
+}
+
+/// <summary>
+/// Email filter configuration for booking platforms
+/// </summary>
+public class EmailFilterConfiguration
+{
+    public List<string> BookingPlatformFromAddresses { get; set; } = new()
+    {
+        "airbnb.com",
+        "vrbo.com",
+        "booking.com"
+    };
 }

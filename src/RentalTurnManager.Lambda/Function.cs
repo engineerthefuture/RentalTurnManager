@@ -115,9 +115,13 @@ public class Function
             // Retrieve email credentials from Secrets Manager
             var emailCredentials = await secretsService.GetEmailCredentialsAsync();
             
+            // Get configured from addresses for booking platforms
+            var fromAddresses = propertyConfig.GetBookingPlatformFromAddresses();
+            _logger.LogInformation($"Using from addresses: {string.Join(", ", fromAddresses)}");
+            
             // Scan emails for new bookings
             _logger.LogInformation($"Scanning emails for new bookings (ForceRescan: {input.ForceRescan})");
-            var emails = await emailScanner.ScanForBookingEmailsAsync(emailCredentials, input.ForceRescan);
+            var emails = await emailScanner.ScanForBookingEmailsAsync(emailCredentials, input.ForceRescan, fromAddresses);
             _logger.LogInformation($"Found {emails.Count} potential booking emails");
 
             foreach (var email in emails)

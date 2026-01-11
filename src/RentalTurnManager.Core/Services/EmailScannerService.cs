@@ -20,9 +20,12 @@ public class EmailScannerService : IEmailScannerService
         _logger = logger;
     }
 
-    public async Task<List<EmailMessage>> ScanForBookingEmailsAsync(EmailCredentials credentials, bool forceRescan = false)
+    public async Task<List<EmailMessage>> ScanForBookingEmailsAsync(EmailCredentials credentials, bool forceRescan = false, List<string>? platformFromAddresses = null)
     {
         var emails = new List<EmailMessage>();
+        
+        // Use provided addresses or fall back to defaults
+        var fromAddresses = platformFromAddresses ?? new List<string> { "airbnb.com", "vrbo.com", "booking.com" };
 
         try
         {
@@ -74,16 +77,30 @@ public class EmailScannerService : IEmailScannerService
             }
 
             // Search for emails from booking platforms
-            var platformQuery = SearchQuery.Or(
-                SearchQuery.Or(
-                    SearchQuery.FromContains("airbnb.com"),
-                    SearchQuery.FromContains("vrbo.com")
-                ),
-                SearchQuery.FromContains("booking.com")
-            );
+            SearchQuery baseQuery;
+            
+            // Check if wildcard (*) is used to match all emails
+            if (fromAddresses.Contains("*"))
+            {
+                _logger.LogInformation("Using wildcard (*) - scanning all emails");
+                baseQuery = SearchQuery.All;
+            }
+            else if (fromAddresses.Count == 1)
+            {
+                baseQuery = SearchQuery.FromContains(fromAddresses[0]);
+            }
+            else
+            {
+                baseQuery = fromAddresses
+                    .Skip(1)
+                    .Aggregate(
+                        SearchQuery.FromContains(fromAddresses[0]),
+                        (query, address) => query.Or(SearchQuery.FromContains(address))
+                    );
+            }
 
             // If not force rescanning, only get unread emails
-            var searchQuery = forceRescan ? platformQuery : SearchQuery.NotSeen.And(platformQuery);
+            var searchQuery = forceRescan ? baseQuery : SearchQuery.NotSeen.And(baseQuery);
 
             var uids = await inbox.SearchAsync(searchQuery);
             _logger.LogInformation($"Found {uids.Count} {(forceRescan ? "" : "unread ")}booking emails");

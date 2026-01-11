@@ -1,4 +1,9 @@
 {
+  "emailFilters": {
+    "bookingPlatformFromAddresses": [
+      "*"
+    ]
+  },
   "properties": [
     {
       "propertyId": "property-1",
