@@ -117,7 +117,7 @@ public class Function
             {
                 StatusCode = 200,
                 Body = htmlResponse,
-                Headers = new Dictionary<string, string> { { "Content-Type", "text/html" } }
+                Headers = new Dictionary<string, string> { { "Content-Type", "text/html; charset=utf-8" } }
             };
         }
         catch (Exception ex)

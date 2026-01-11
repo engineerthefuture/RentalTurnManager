@@ -126,7 +126,7 @@
       "Comment": "Check if cleaner confirmed availability",
       "Choices": [
         {
-          "Variable": "$.response",
+          "Variable": "$.emailResult.response",
           "StringEquals": "yes",
           "Next": "CleanerConfirmed"
         }

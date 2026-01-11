@@ -254,27 +254,43 @@ public class BookingParserService : IBookingParserService
             }
         }
 
-        // Extract number of guests - look for "6 adults, 2 children" or "3 guests"
-        var adultsMatch = Regex.Match(content, @"\b(\d+)\s+adults?\b", RegexOptions.IgnoreCase);
-        var childrenMatch = Regex.Match(content, @"\b(\d+)\s+children?\b", RegexOptions.IgnoreCase);
-        var guestsMatch = Regex.Match(content, @"\b(\d+)\s+guests?\b", RegexOptions.IgnoreCase);
+        // Extract number of guests - look for "Guests\n6 adults, 2 children" or fallback to individual matches
+        var guestBreakdownMatch = Regex.Match(content, @"Guests\s+(\d+)\s+adults?,\s*(\d+)\s+children?", RegexOptions.IgnoreCase);
         
         int totalGuests = 0;
-        if (adultsMatch.Success && int.TryParse(adultsMatch.Groups[1].Value, out var adults))
+        if (guestBreakdownMatch.Success)
         {
-            _logger.LogInformation($"Found adults: {adults}");
-            totalGuests += adults;
+            // Found the specific "Guests X adults, Y children" pattern
+            if (int.TryParse(guestBreakdownMatch.Groups[1].Value, out var adults) &&
+                int.TryParse(guestBreakdownMatch.Groups[2].Value, out var children))
+            {
+                _logger.LogInformation($"Found guest breakdown: {adults} adults, {children} children");
+                totalGuests = adults + children;
+            }
         }
-        if (childrenMatch.Success && int.TryParse(childrenMatch.Groups[1].Value, out var children))
+        else
         {
-            _logger.LogInformation($"Found children: {children}");
-            totalGuests += children;
-        }
-        // If no adults/children breakdown, use general "guests" count
-        if (totalGuests == 0 && guestsMatch.Success && int.TryParse(guestsMatch.Groups[1].Value, out var guests))
-        {
-            _logger.LogInformation($"Found general guests: {guests}");
-            totalGuests = guests;
+            // Fallback to individual patterns
+            var adultsMatch = Regex.Match(content, @"\b(\d+)\s+adults?\b", RegexOptions.IgnoreCase);
+            var childrenMatch = Regex.Match(content, @"\b(\d+)\s+children?\b", RegexOptions.IgnoreCase);
+            var guestsMatch = Regex.Match(content, @"\b(\d+)\s+guests?\b", RegexOptions.IgnoreCase);
+            
+            if (adultsMatch.Success && int.TryParse(adultsMatch.Groups[1].Value, out var adults))
+            {
+                _logger.LogInformation($"Found adults: {adults}");
+                totalGuests += adults;
+            }
+            if (childrenMatch.Success && int.TryParse(childrenMatch.Groups[1].Value, out var children))
+            {
+                _logger.LogInformation($"Found children: {children}");
+                totalGuests += children;
+            }
+            // If no adults/children breakdown, use general "guests" count
+            if (totalGuests == 0 && guestsMatch.Success && int.TryParse(guestsMatch.Groups[1].Value, out var guests))
+            {
+                _logger.LogInformation($"Found general guests: {guests}");
+                totalGuests = guests;
+            }
         }
         
         if (totalGuests > 0)
@@ -283,7 +299,7 @@ public class BookingParserService : IBookingParserService
         }
         
         // Log all parsed booking attributes
-        _logger.LogInformation($"Parsed Airbnb booking - PropertyId: '{booking.PropertyId}', Reference: '{booking.BookingReference}', CheckIn: {booking.CheckInDate:yyyy-MM-dd}, CheckOut: {booking.CheckOutDate:yyyy-MM-dd}, Guest: '{booking.GuestName}', Guests: {booking.NumberOfGuests} (parsed: adults={adultsMatch.Groups[1].Value}, children={childrenMatch.Groups[1].Value})");
+        _logger.LogInformation($"Parsed Airbnb booking - PropertyId: '{booking.PropertyId}', Reference: '{booking.BookingReference}', CheckIn: {booking.CheckInDate:yyyy-MM-dd}, CheckOut: {booking.CheckOutDate:yyyy-MM-dd}, Guest: '{booking.GuestName}', Guests: {booking.NumberOfGuests}");
 
         // Validate we have minimum required data
         if (string.IsNullOrEmpty(booking.PropertyId) || booking.CheckInDate == default)
