@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * SecretsService.cs
+ * 
+ * Service that retrieves sensitive credentials from AWS Secrets Manager.
+ * Manages email account credentials and other secrets needed for IMAP
+ * connection and application operations.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using Microsoft.Extensions.Logging;
@@ -37,18 +49,15 @@ public class SecretsService : ISecretsService
             var response = await _secretsManager.GetSecretValueAsync(request);
             var secretJson = response.SecretString;
 
-            var credentials = JsonSerializer.Deserialize<EmailCredentials>(secretJson);
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+            var credentials = JsonSerializer.Deserialize<EmailCredentials>(secretJson, options);
             
             if (credentials == null)
             {
                 throw new InvalidOperationException("Failed to deserialize email credentials");
-            }
-
-            // Override with environment variables if provided
-            credentials.Host = Environment.GetEnvironmentVariable("IMAP_HOST") ?? credentials.Host;
-            if (int.TryParse(Environment.GetEnvironmentVariable("IMAP_PORT"), out int port))
-            {
-                credentials.Port = port;
             }
 
             _logger.LogInformation($"Successfully retrieved credentials for {credentials.Host}:{credentials.Port}");

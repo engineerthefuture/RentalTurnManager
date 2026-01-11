@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * StepFunctionServiceTests.cs
+ * 
+ * Unit tests for StepFunctionService. Tests workflow execution startup,
+ * parameter passing to state machines, and error handling for Step
+ * Functions operations.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Xunit;
 using Moq;
 using FluentAssertions;

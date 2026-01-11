@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * PropertyModels.cs
+ * 
+ * Data models for property configuration and management. Defines structures
+ * for property records, platform ID mappings, cleaner assignments, and email
+ * filtering rules used for multi-property rental management.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 namespace RentalTurnManager.Models;
 
 /// <summary>
@@ -30,10 +42,11 @@ public class PropertyMetadata
 {
     public string PropertyName { get; set; } = string.Empty;
     public int Bedrooms { get; set; }
-    public int Bathrooms { get; set; }
+    public double Bathrooms { get; set; }
     public string CleaningDuration { get; set; } = string.Empty;
     public string AccessInstructions { get; set; } = string.Empty;
     public string SpecialInstructions { get; set; } = string.Empty;
+    public string OwnerName { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -42,4 +55,25 @@ public class PropertyMetadata
 public class PropertiesConfiguration
 {
     public List<PropertyConfiguration> Properties { get; set; } = new();
+    public EmailFilterConfiguration? EmailFilters { get; set; }
+}
+
+/// <summary>
+/// Email filter configuration for booking platforms
+/// </summary>
+public class EmailFilterConfiguration
+{
+    public List<string> BookingPlatformFromAddresses { get; set; } = new()
+    {
+        "airbnb.com",
+        "vrbo.com",
+        "booking.com"
+    };
+    
+    public List<string> SubjectPatterns { get; set; } = new()
+    {
+        "Reservation confirmed",
+        "Instant Booking from",
+        "booking confirmation"
+    };
 }

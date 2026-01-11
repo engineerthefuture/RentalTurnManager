@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * EmailScannerService.cs
+ * 
+ * Service that connects to email inbox via IMAP using MailKit and scans
+ * for booking confirmation emails from rental platforms. Filters by sender
+ * address and subject patterns, retrieves email content for parsing.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
@@ -20,17 +32,36 @@ public class EmailScannerService : IEmailScannerService
         _logger = logger;
     }
 
-    public async Task<List<EmailMessage>> ScanForBookingEmailsAsync(EmailCredentials credentials)
+    public async Task<List<EmailMessage>> ScanForBookingEmailsAsync(EmailCredentials credentials, bool forceRescan = false, List<string>? platformFromAddresses = null, List<string>? subjectPatterns = null)
     {
         var emails = new List<EmailMessage>();
+        
+        // Use provided addresses or fall back to defaults
+        var fromAddresses = platformFromAddresses ?? new List<string> { "airbnb.com", "vrbo.com", "booking.com" };
+        var subjectFilters = subjectPatterns ?? new List<string> { "Reservation confirmed", "Instant Booking from", "booking confirmation" };
 
         try
         {
             using var client = new ImapClient();
             
-            _logger.LogInformation($"Connecting to IMAP server {credentials.Host}:{credentials.Port}");
+            _logger.LogInformation($"Connecting to IMAP server {credentials.Host}:{credentials.Port} (SSL: {credentials.UseSsl})");
             await client.ConnectAsync(credentials.Host, credentials.Port, credentials.UseSsl);
-            await client.AuthenticateAsync(credentials.Username, credentials.Password);
+            
+            _logger.LogInformation($"Authenticating as user: {credentials.Username}");
+            try
+            {
+                await client.AuthenticateAsync(credentials.Username, credentials.Password);
+            }
+            catch (MailKit.Security.AuthenticationException authEx)
+            {
+                _logger.LogError(authEx, $"Authentication failed for {credentials.Username} at {credentials.Host}. " +
+                    "Common fixes: " +
+                    "1) Gmail: Use app-specific password (https://myaccount.google.com/apppasswords), " +
+                    "2) iCloud: Generate app-specific password at appleid.apple.com (Account Security > App-Specific Passwords), " +
+                    "3) Outlook: Verify IMAP is enabled, " +
+                    "4) Check username format (often requires full email address)");
+                throw;
+            }
 
             _logger.LogInformation("Successfully connected to IMAP server");
 
@@ -39,19 +70,77 @@ public class EmailScannerService : IEmailScannerService
 
             _logger.LogInformation($"Inbox has {inbox.Count} messages");
 
-            // Search for unread emails from booking platforms
-            var searchQuery = SearchQuery.NotSeen.And(
-                SearchQuery.Or(
-                    SearchQuery.Or(
-                        SearchQuery.FromContains("airbnb.com"),
-                        SearchQuery.FromContains("vrbo.com")
-                    ),
-                    SearchQuery.FromContains("booking.com")
-                )
-            );
+            // Debug: Log all messages to see what we have
+            if (inbox.Count > 0)
+            {
+                _logger.LogInformation("Analyzing all messages in inbox:");
+                var allUids = await inbox.SearchAsync(SearchQuery.All);
+                foreach (var uid in allUids.Take(5)) // Log first 5 messages
+                {
+                    try
+                    {
+                        var msg = await inbox.GetMessageAsync(uid);
+                        _logger.LogInformation($"  UID {uid}: From='{msg.From}', Subject='{msg.Subject}'");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning($"  UID {uid}: Error reading message - {ex.Message}");
+                    }
+                }
+            }
+
+            // Search for emails from booking platforms
+            SearchQuery baseQuery;
+            
+            // Check if wildcard (*) is used to match all emails
+            if (fromAddresses.Contains("*"))
+            {
+                _logger.LogInformation("Using wildcard (*) - scanning all emails");
+                baseQuery = SearchQuery.All;
+            }
+            else
+            {
+                // Build From address query
+                SearchQuery fromQuery;
+                if (fromAddresses.Count == 1)
+                {
+                    fromQuery = SearchQuery.FromContains(fromAddresses[0]);
+                }
+                else
+                {
+                    fromQuery = fromAddresses
+                        .Skip(1)
+                        .Aggregate<string, SearchQuery>(
+                            SearchQuery.FromContains(fromAddresses[0]),
+                            (query, address) => query.Or(SearchQuery.FromContains(address))
+                        );
+                }
+                
+                // Build subject pattern query
+                SearchQuery subjectQuery;
+                if (subjectFilters.Count == 1)
+                {
+                    subjectQuery = SearchQuery.SubjectContains(subjectFilters[0]);
+                }
+                else
+                {
+                    subjectQuery = subjectFilters
+                        .Skip(1)
+                        .Aggregate<string, SearchQuery>(
+                            SearchQuery.SubjectContains(subjectFilters[0]),
+                            (query, pattern) => query.Or(SearchQuery.SubjectContains(pattern))
+                        );
+                }
+                
+                // Combine: match if From OR Subject matches
+                baseQuery = fromQuery.Or(subjectQuery);
+            }
+
+            // Always scan all emails - booking state tracking will handle duplicates
+            var searchQuery = baseQuery;
 
             var uids = await inbox.SearchAsync(searchQuery);
-            _logger.LogInformation($"Found {uids.Count} unread booking emails");
+            _logger.LogInformation($"Found {uids.Count} booking emails");
 
             foreach (var uid in uids)
             {

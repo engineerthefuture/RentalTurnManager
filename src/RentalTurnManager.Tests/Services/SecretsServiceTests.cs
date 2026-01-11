@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * SecretsServiceTests.cs
+ * 
+ * Unit tests for SecretsService. Tests retrieval of credentials from
+ * AWS Secrets Manager including email credentials and error handling
+ * for missing or invalid secrets.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Xunit;
 using Moq;
 using FluentAssertions;

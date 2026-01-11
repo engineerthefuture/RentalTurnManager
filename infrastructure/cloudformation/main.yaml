@@ -17,12 +17,12 @@ Parameters:
 
   ImapHost:
     Type: String
-    Description: IMAP server hostname
+    Description: IMAP server hostname (stored in Secrets Manager)
     Default: imap.gmail.com
 
   ImapPort:
     Type: Number
-    Description: IMAP server port
+    Description: IMAP server port (stored in Secrets Manager)
     Default: 993
 
   ScheduleInterval:
@@ -40,10 +40,10 @@ Parameters:
     Description: Email account password
     NoEcho: true
 
-  Owner:
+  OwnerName:
     Type: String
-    Description: Owner tag value
-    Default: RentalPropertyOwner
+    Description: Owner name for tagging
+    Default: Property Owner
 
   NamespacePrefix:
     Type: String
@@ -55,6 +55,21 @@ Parameters:
     Description: Application name for AWS resource names
     Default: RentalTurnManager
 
+  AppNameLowercase:
+    Type: String
+    Description: Application name in lowercase for S3 bucket naming
+    Default: rentalturnmanager
+
+  PropertiesConfig:
+    Type: String
+    Description: JSON configuration for properties (from GitHub variable)
+    Default: '{}'
+
+  MessageTemplates:
+    Type: String
+    Description: JSON configuration for message templates (from GitHub variable)
+    Default: '{}'
+
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -62,7 +77,11 @@ Metadata:
           default: Environment Configuration
         Parameters:
           - Environment
-          - Owner
+          - NamespacePrefix
+          - AppName
+          - OwnerName
+          - PropertiesConfig
+          - MessageTemplates
       - Label:
           default: Email Configuration
         Parameters:
@@ -92,14 +111,41 @@ Resources:
           "useSsl": true
         }
       Tags:
-        - Key: Owner
-          Value: !Ref Owner
+        - Key: OwnerName
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
           Value: !Ref AppName
         - Key: Description
           Value: Email credentials for booking notifications
+
+  # S3 Bucket for Booking State
+  BookingStateBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings'
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 90
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: OwnerName
+          Value: !Ref OwnerName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Storage for booking state tracking
 
   # IAM Role for Lambda Function
   LambdaExecutionRole:
@@ -127,7 +173,17 @@ Resources:
               - Effect: Allow
                 Action:
                   - states:StartExecution
-                Resource: !Ref CleanerWorkflowStateMachine
+                Resource: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings'
               - Effect: Allow
                 Action:
                   - ses:SendEmail
@@ -141,7 +197,7 @@ Resources:
                 Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
       Tags:
         - Key: Owner
-          Value: !Ref Owner
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -155,30 +211,29 @@ Resources:
     Properties:
       FunctionName: !Sub '${NamespacePrefix}-${Environment}-lambda-${AppName}'
       Description: Scans IMAP inbox for booking emails and triggers cleaner workflows
-      Runtime: dotnet8
+      Runtime: dotnet10
       Handler: RentalTurnManager.Lambda::RentalTurnManager.Lambda.Function::FunctionHandler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 300
+      Timeout: 180
       MemorySize: 512
       Environment:
         Variables:
           ENVIRONMENT: !Ref Environment
           EMAIL_SECRET_NAME: !Ref EmailCredentialsSecret
-          CLEANER_WORKFLOW_STATE_MACHINE_ARN: !Ref CleanerWorkflowStateMachine
+          CLEANER_WORKFLOW_STATE_MACHINE_ARN: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
           OWNER_EMAIL: !Ref OwnerEmail
-          IMAP_HOST: !Ref ImapHost
-          IMAP_PORT: !Ref ImapPort
+          PROPERTIES_CONFIG: !Ref PropertiesConfig
+          MESSAGE_TEMPLATES: !Ref MessageTemplates
+          CALLBACK_API_URL: !Sub 'https://${CallbackApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+          BOOKING_STATE_BUCKET: !Ref BookingStateBucket
+          NAMESPACE_PREFIX: !Ref NamespacePrefix
+          APP_NAME: !Ref AppName
       Code:
-        ZipFile: |
-          // Placeholder - will be replaced during deployment
-          public class Function {
-              public string FunctionHandler(object input) {
-                  return "Placeholder";
-              }
-          }
+        S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
+        S3Key: !Sub '${AppName}/lambda/lambda-deployment.zip'
       Tags:
-        - Key: Owner
-          Value: !Ref Owner
+        - Key: OwnerName
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -193,8 +248,8 @@ Resources:
       LogGroupName: !Sub '/aws/lambda/${EmailScannerLambda}'
       RetentionInDays: 30
       Tags:
-        - Key: Owner
-          Value: !Ref Owner
+        - Key: OwnerName
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -214,8 +269,8 @@ Resources:
         - Arn: !GetAtt EmailScannerLambda.Arn
           Id: EmailScannerLambdaTarget
       Tags:
-        - Key: Owner
-          Value: !Ref Owner
+        - Key: OwnerName
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -270,8 +325,8 @@ Resources:
                   - logs:DescribeLogGroups
                 Resource: '*'
       Tags:
-        - Key: Owner
-          Value: !Ref Owner
+        - Key: OwnerName
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -289,9 +344,11 @@ Resources:
       DefinitionS3Location:
         Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         Key: !Sub '${AppName}/stepfunctions/${Environment}/cleaner-workflow.json'
+      DefinitionSubstitutions:
+        CalendarLambdaArn: !GetAtt CalendarLambda.Arn
       Tags:
-        - Key: Owner
-          Value: !Ref Owner
+        - Key: OwnerName
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
@@ -303,17 +360,131 @@ Resources:
   StepFunctionsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub '/aws/stepfunctions/${CleanerWorkflowStateMachine}'
+      LogGroupName: !Sub '/aws/stepfunctions/${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
       RetentionInDays: 30
       Tags:
-        - Key: Owner
-          Value: !Ref Owner
+        - Key: OwnerName
+          Value: !Ref OwnerName
         - Key: Environment
           Value: !Ref Environment
         - Key: AppName
           Value: !Ref AppName
         - Key: Description
           Value: Step Functions execution logs
+
+  # Callback Lambda Function for Cleaner Responses
+  CallbackLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${NamespacePrefix}-${Environment}-role-${AppName}-CallbackLambda'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: StepFunctionsCallbackPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - states:SendTaskSuccess
+                  - states:SendTaskFailure
+                Resource: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
+
+  CallbackLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${NamespacePrefix}-${Environment}-lambda-${AppName}-Callback'
+      Description: Handles cleaner response callbacks from email links
+      Runtime: dotnet10
+      Handler: RentalTurnManager.CallbackLambda::RentalTurnManager.CallbackLambda.Function::FunctionHandler
+      Role: !GetAtt CallbackLambdaRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Code:
+        S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
+        S3Key: !Sub '${AppName}/lambda/callback-lambda-deployment.zip'
+      Tags:
+        - Key: OwnerName
+          Value: !Ref OwnerName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+
+  # Calendar Lambda for sending emails with calendar invites
+  CalendarLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${NamespacePrefix}-${Environment}-lambda-${AppName}-Calendar'
+      Description: Sends confirmation emails with calendar invites
+      Runtime: dotnet10
+      Handler: RentalTurnManager.CalendarLambda::RentalTurnManager.CalendarLambda.Function::FunctionHandler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Code:
+        S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
+        S3Key: !Sub '${AppName}/lambda/calendar-lambda-deployment.zip'
+      Tags:
+        - Key: OwnerName
+          Value: !Ref OwnerName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+
+  # API Gateway for Callback
+  CallbackApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${NamespacePrefix}-${Environment}-api-${AppName}-Callback'
+      Description: API for cleaner response callbacks
+      ProtocolType: HTTP
+      Tags:
+        OwnerName: !Ref OwnerName
+        Environment: !Ref Environment
+        AppName: !Ref AppName
+
+  CallbackApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref CallbackApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt CallbackLambda.Arn
+      PayloadFormatVersion: '2.0'
+
+  CallbackApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref CallbackApi
+      RouteKey: 'GET /respond'
+      Target: !Sub 'integrations/${CallbackApiIntegration}'
+
+  CallbackApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref CallbackApi
+      StageName: !Ref Environment
+      AutoDeploy: true
+      Tags:
+        OwnerName: !Ref OwnerName
+        Environment: !Ref Environment
+        AppName: !Ref AppName
+
+  CallbackLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CallbackLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${CallbackApi}/*'
 
 Outputs:
   LambdaFunctionArn:
@@ -333,3 +504,21 @@ Outputs:
     Value: !Ref EmailCredentialsSecret
     Export:
       Name: !Sub '${AWS::StackName}-EmailSecretArn'
+
+  CallbackApiUrl:
+    Description: URL of the callback API
+    Value: !GetAtt CallbackApi.ApiEndpoint
+    Export:
+      Name: !Sub '${AWS::StackName}-CallbackApiUrl'
+
+  CalendarLambdaArn:
+    Description: ARN of the calendar Lambda function
+    Value: !GetAtt CalendarLambda.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-CalendarLambdaArn'
+
+  BookingStateBucket:
+    Description: S3 bucket for booking state storage
+    Value: !Ref BookingStateBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-BookingStateBucket'

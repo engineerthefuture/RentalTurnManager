@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * LambdaModels.cs
+ * 
+ * Data models for AWS Lambda function input and output. Defines request
+ * and response structures for Lambda invocations, including email scanning
+ * triggers and processing results.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 namespace RentalTurnManager.Models;
 
 /// <summary>

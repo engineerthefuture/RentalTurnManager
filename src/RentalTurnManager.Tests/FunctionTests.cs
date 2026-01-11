@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * FunctionTests.cs
+ * 
+ * Unit tests for main Lambda function handler. Tests email scanning,
+ * booking parsing, workflow triggering, and error handling scenarios
+ * using xUnit and mocked AWS services.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Xunit;
 using Moq;
 using FluentAssertions;
@@ -6,6 +18,7 @@ using Amazon.Lambda.TestUtilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using RentalTurnManager.Lambda;
 using RentalTurnManager.Core.Services;
 using RentalTurnManager.Models;
 
@@ -16,35 +29,68 @@ public class FunctionTests
     private readonly Mock<ISecretsService> _mockSecretsService;
     private readonly Mock<IEmailScannerService> _mockEmailScanner;
     private readonly Mock<IBookingParserService> _mockBookingParser;
-    private readonly Mock<IPropertyConfigService> _mockPropertyConfig;
     private readonly Mock<IStepFunctionService> _mockStepFunction;
+    private readonly Mock<IBookingStateService> _mockBookingStateService;
     private readonly IServiceProvider _serviceProvider;
     private readonly Function _function;
+    private readonly PropertiesConfiguration _propertiesConfig;
 
     public FunctionTests()
     {
         _mockSecretsService = new Mock<ISecretsService>();
         _mockEmailScanner = new Mock<IEmailScannerService>();
         _mockBookingParser = new Mock<IBookingParserService>();
-        _mockPropertyConfig = new Mock<IPropertyConfigService>();
         _mockStepFunction = new Mock<IStepFunctionService>();
+        _mockBookingStateService = new Mock<IBookingStateService>();
+
+        // Setup properties configuration
+        _propertiesConfig = new PropertiesConfiguration
+        {
+            EmailFilters = new EmailFilterConfiguration
+            {
+                BookingPlatformFromAddresses = new List<string> { "airbnb.com", "vrbo.com", "booking.com" },
+                SubjectPatterns = new List<string> { "Reservation confirmed", "Instant Booking from", "booking confirmation" }
+            },
+            Properties = new List<PropertyConfiguration>
+            {
+                new PropertyConfiguration
+                {
+                    PropertyId = "test-property-1",
+                    PlatformIds = new Dictionary<string, string>
+                    {
+                        { "airbnb", "AIRBNB_001" },
+                        { "vrbo", "VRBO_001" },
+                        { "bookingcom", "BOOKING_001" }
+                    },
+                    Address = "123 Test St",
+                    Cleaners = new List<CleanerContact>
+                    {
+                        new CleanerContact { Name = "Test Cleaner", Email = "test@example.com", Phone = "+1-555-0100", Rank = 1 }
+                    }
+                }
+            }
+        };
 
         var services = new ServiceCollection();
         services.AddLogging(builder => builder.AddConsole());
         services.AddSingleton(_mockSecretsService.Object);
         services.AddSingleton(_mockEmailScanner.Object);
         services.AddSingleton(_mockBookingParser.Object);
-        services.AddSingleton(_mockPropertyConfig.Object);
         services.AddSingleton(_mockStepFunction.Object);
+        services.AddSingleton(_mockBookingStateService.Object);
 
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string>())
+            .AddInMemoryCollection(new Dictionary<string, string?>())
             .Build();
 
         services.AddSingleton<IConfiguration>(configuration);
 
         _serviceProvider = services.BuildServiceProvider();
-        _function = new Function(_serviceProvider, configuration);
+        _function = new Function(_serviceProvider, configuration, _propertiesConfig);
+        
+        // Setup default behavior for booking state service
+        _mockBookingStateService.Setup(x => x.HasBookingChangedAsync(It.IsAny<Booking>()))
+            .ReturnsAsync(true); // By default, treat all bookings as new/changed
     }
 
     [Fact]
@@ -57,12 +103,16 @@ public class FunctionTests
             .ReturnsAsync(credentials);
 
         _mockEmailScanner
-            .Setup(x => x.ScanForBookingEmailsAsync(It.IsAny<EmailCredentials>()))
+            .Setup(x => x.ScanForBookingEmailsAsync(
+                It.IsAny<EmailCredentials>(), 
+                It.IsAny<bool>(), 
+                It.IsAny<List<string>?>(),
+                It.IsAny<List<string>?>()))
             .ReturnsAsync(new List<EmailMessage>());
 
         var context = new TestLambdaContext
         {
-            RequestId = "test-request-id"
+            AwsRequestId = "test-request-id"
         };
 
         var request = new LambdaRequest();
@@ -109,16 +159,16 @@ public class FunctionTests
             .ReturnsAsync(credentials);
 
         _mockEmailScanner
-            .Setup(x => x.ScanForBookingEmailsAsync(It.IsAny<EmailCredentials>()))
+            .Setup(x => x.ScanForBookingEmailsAsync(
+                It.IsAny<EmailCredentials>(), 
+                It.IsAny<bool>(), 
+                It.IsAny<List<string>?>(),
+                It.IsAny<List<string>?>()))
             .ReturnsAsync(new List<EmailMessage> { email });
 
         _mockBookingParser
             .Setup(x => x.ParseBooking(It.IsAny<EmailMessage>()))
             .Returns(booking);
-
-        _mockPropertyConfig
-            .Setup(x => x.FindPropertyByPlatformId("airbnb", "AIRBNB_001"))
-            .Returns(property);
 
         _mockStepFunction
             .Setup(x => x.StartCleanerWorkflowAsync(It.IsAny<CleanerWorkflowInput>()))
@@ -139,7 +189,7 @@ public class FunctionTests
         _mockStepFunction.Verify(x => x.StartCleanerWorkflowAsync(
             It.Is<CleanerWorkflowInput>(w => 
                 w.Booking.BookingReference == "TEST123" &&
-                w.Property.PropertyId == "property-001")),
+                w.Property.PropertyId == "test-property-1")),
             Times.Once);
     }
 
@@ -165,16 +215,16 @@ public class FunctionTests
             .ReturnsAsync(credentials);
 
         _mockEmailScanner
-            .Setup(x => x.ScanForBookingEmailsAsync(It.IsAny<EmailCredentials>()))
+            .Setup(x => x.ScanForBookingEmailsAsync(
+                It.IsAny<EmailCredentials>(), 
+                It.IsAny<bool>(), 
+                It.IsAny<List<string>?>(),
+                It.IsAny<List<string>?>()))
             .ReturnsAsync(new List<EmailMessage> { email });
 
         _mockBookingParser
             .Setup(x => x.ParseBooking(It.IsAny<EmailMessage>()))
             .Returns(booking);
-
-        _mockPropertyConfig
-            .Setup(x => x.FindPropertyByPlatformId("airbnb", "UNKNOWN_PROPERTY"))
-            .Returns((PropertyConfiguration?)null);
 
         var context = new TestLambdaContext();
         var request = new LambdaRequest();

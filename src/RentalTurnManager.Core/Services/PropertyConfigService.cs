@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * PropertyConfigService.cs
+ * 
+ * Service that manages property configuration mappings between platform-specific
+ * IDs (Airbnb, VRBO, Booking.com) and internal property records. Resolves
+ * property details needed for cleaner assignments and notifications.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using RentalTurnManager.Models;
@@ -12,6 +24,8 @@ public class PropertyConfigService : IPropertyConfigService
 {
     private readonly ILogger<PropertyConfigService> _logger;
     private readonly PropertiesConfiguration _configuration;
+    private readonly List<string> _defaultFromAddresses = new() { "airbnb.com", "vrbo.com", "booking.com" };
+    private readonly List<string> _defaultSubjectPatterns = new() { "Reservation confirmed", "Instant Booking from", "booking confirmation" };
 
     public PropertyConfigService(IConfiguration configuration, ILogger<PropertyConfigService> logger)
     {
@@ -19,9 +33,12 @@ public class PropertyConfigService : IPropertyConfigService
         
         // Load properties configuration
         var propertiesSection = configuration.GetSection("properties");
+        var emailFiltersSection = configuration.GetSection("emailFilters");
+        
         _configuration = new PropertiesConfiguration
         {
-            Properties = propertiesSection.Get<List<PropertyConfiguration>>() ?? new List<PropertyConfiguration>()
+            Properties = propertiesSection.Get<List<PropertyConfiguration>>() ?? new List<PropertyConfiguration>(),
+            EmailFilters = emailFiltersSection.Get<EmailFilterConfiguration>()
         };
 
         _logger.LogInformation($"Loaded {_configuration.Properties.Count} property configurations");
@@ -57,5 +74,27 @@ public class PropertyConfigService : IPropertyConfigService
     public List<PropertyConfiguration> GetAllProperties()
     {
         return _configuration.Properties;
+    }
+
+    public List<string> GetBookingPlatformFromAddresses()
+    {
+        if (_configuration?.EmailFilters?.BookingPlatformFromAddresses != null && 
+            _configuration.EmailFilters.BookingPlatformFromAddresses.Any())
+        {
+            return _configuration.EmailFilters.BookingPlatformFromAddresses;
+        }
+        
+        return _defaultFromAddresses;
+    }
+
+    public List<string> GetSubjectPatterns()
+    {
+        if (_configuration?.EmailFilters?.SubjectPatterns != null && 
+            _configuration.EmailFilters.SubjectPatterns.Any())
+        {
+            return _configuration.EmailFilters.SubjectPatterns;
+        }
+        
+        return _defaultSubjectPatterns;
     }
 }

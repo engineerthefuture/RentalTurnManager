@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * WorkflowModels.cs
+ * 
+ * Data models for AWS Step Functions workflow state. Defines structures
+ * for workflow input, cleaner coordination state, and calendar invitation
+ * parameters passed between workflow steps.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 namespace RentalTurnManager.Models;
 
 /// <summary>
@@ -11,6 +23,9 @@ public class CleanerWorkflowInput
     public int CurrentCleanerIndex { get; set; }
     public int AttemptCount { get; set; }
     public string? LastResponse { get; set; }
+    public string OwnerEmail { get; set; } = string.Empty;
+    public string CallbackApiUrl { get; set; } = string.Empty;
+    public string BookingStateBucket { get; set; } = string.Empty;
 }
 
 /// <summary>

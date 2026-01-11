@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * EmailModels.cs
+ * 
+ * Data models for email and booking information. Defines structures for
+ * parsed bookings, email messages, and email credentials used throughout
+ * the application for email scanning and booking processing.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 namespace RentalTurnManager.Models;
 
 /// <summary>
@@ -12,7 +24,18 @@ public class Booking
     public DateTime CheckOutDate { get; set; }
     public string GuestName { get; set; } = string.Empty;
     public int NumberOfGuests { get; set; }
-    public string RawEmailContent { get; set; } = string.Empty;
+    
+    // Cleaner assignment tracking
+    public string? AssignedCleanerName { get; set; }
+    public string? AssignedCleanerEmail { get; set; }
+    public string? AssignedCleanerPhone { get; set; }
+    public DateTime? CleanerConfirmedAt { get; set; }
+    public DateTime? ScheduledCleaningTime { get; set; }
+    
+    /// <summary>
+    /// Number of days in the booking (CheckOut - CheckIn)
+    /// </summary>
+    public int NumberOfDays => (CheckOutDate - CheckInDate).Days;
 }
 
 /// <summary>

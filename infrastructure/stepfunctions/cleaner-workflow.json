@@ -1,5 +1,5 @@
 {
-  "Comment": "Cleaner coordination workflow - contacts cleaners in rank order until one confirms",
+  "Comment": "Cleaner coordination workflow - contacts cleaners in rank order until one confirms or all are exhausted",
   "StartAt": "InitializeState",
   "States": {
     "InitializeState": {
@@ -7,51 +7,110 @@
       "Comment": "Initialize workflow state",
       "Parameters": {
         "input.$": "$",
-        "currentCleaner": null,
         "cleanerConfirmed": false,
-        "allCleanersExhausted": false,
-        "contactedCleaners": []
+        "allCleanersExhausted": false
       },
       "ResultPath": "$.state",
       "Next": "CheckCleanerList"
     },
     "CheckCleanerList": {
+      "Type": "Pass",
+      "Comment": "Get cleaner count for comparison",
+      "Parameters": {
+        "input.$": "$.state.input",
+        "cleanersCount.$": "States.ArrayLength($.state.input.property.cleaners)"
+      },
+      "ResultPath": "$.state.checkData",
+      "Next": "CompareCleanerIndex"
+    },
+    "CompareCleanerIndex": {
       "Type": "Choice",
-      "Comment": "Check if there are more cleaners to contact",
+      "Comment": "Check if current index is beyond cleaner list",
       "Choices": [
         {
           "Variable": "$.state.input.currentCleanerIndex",
-          "NumericGreaterThanEqualsPath": "$.state.input.property.cleaners.length",
-          "Next": "AllCleanersExhausted"
+          "NumericLessThanPath": "$.state.checkData.cleanersCount",
+          "Next": "GetCurrentCleaner"
         }
       ],
-      "Default": "GetCurrentCleaner"
+      "Default": "PrepareEscalation"
+    },
+    "PrepareEscalation": {
+      "Type": "Pass",
+      "Comment": "Extract values needed for escalation email",
+      "Parameters": {
+        "input.$": "$.state.input",
+        "propertyName.$": "$.state.input.property.metadata.propertyName",
+        "propertyAddress.$": "$.state.input.property.address",
+        "checkInDate.$": "$.state.input.booking.checkInDate",
+        "checkOutDate.$": "$.state.input.booking.checkOutDate",
+        "cleaningDate.$": "States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0)",
+        "platform.$": "$.state.input.booking.platform",
+        "bookingRef.$": "$.state.input.booking.bookingReference",
+        "guestName.$": "$.state.input.booking.guestName",
+        "ownerName.$": "$.state.input.property.metadata.ownerName"
+      },
+      "ResultPath": "$.state",
+      "Next": "AllCleanersExhausted"
     },
     "GetCurrentCleaner": {
       "Type": "Pass",
-      "Comment": "Get the current cleaner from the list",
+      "Comment": "Extract current cleaner object from array",
       "Parameters": {
-        "cleaner.$": "States.ArrayGetItem($.state.input.property.cleaners, $.state.input.currentCleanerIndex)"
+        "input.$": "$.state.input",
+        "currentCleaner.$": "States.ArrayGetItem($.state.input.property.cleaners, $.state.input.currentCleanerIndex)",
+        "propertyName.$": "$.state.input.property.metadata.propertyName",
+        "propertyAddress.$": "$.state.input.property.address",
+        "cleaningDateTime.$": "$.state.input.cleaningDateTime",
+        "cleaningDate.$": "States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0)",
+        "numberOfGuests.$": "$.state.input.booking.numberOfGuests",
+        "cleaningDuration.$": "$.state.input.property.metadata.cleaningDuration",
+        "ownerName.$": "$.state.input.property.metadata.ownerName",
+        "cleanerConfirmed.$": "$.state.cleanerConfirmed",
+        "allCleanersExhausted.$": "$.state.allCleanersExhausted",
+        "checkData.$": "$.state.checkData"
       },
-      "ResultPath": "$.state.currentCleaner",
+      "ResultPath": "$.state",
+      "Next": "FormatCleaningDate"
+    },
+    "FormatCleaningDate": {
+      "Type": "Pass",
+      "Comment": "Reformat date from YYYY-MM-DD to MM-DD-YYYY",
+      "Parameters": {
+        "input.$": "$.state.input",
+        "currentCleaner.$": "$.state.currentCleaner",
+        "propertyName.$": "$.state.propertyName",
+        "propertyAddress.$": "$.state.propertyAddress",
+        "cleaningDateTime.$": "$.state.cleaningDateTime",
+        "numberOfGuests.$": "$.state.numberOfGuests",
+        "cleaningDuration.$": "$.state.cleaningDuration",
+        "ownerName.$": "$.state.ownerName",
+        "cleanerConfirmed.$": "$.state.cleanerConfirmed",
+        "allCleanersExhausted.$": "$.state.allCleanersExhausted",
+        "checkData.$": "$.state.checkData",
+        "cleaningDate.$": "States.Format('{}-{}-{}', States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 1), States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 2), States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 0))"
+      },
+      "ResultPath": "$.state",
       "Next": "SendCleanerRequest"
     },
     "SendCleanerRequest": {
       "Type": "Task",
-      "Comment": "Send email to cleaner requesting availability",
-      "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail",
+      "Comment": "Send email to cleaner requesting availability with callback links",
+      "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail.waitForTaskToken",
+      "TimeoutSeconds": 32400,
       "Parameters": {
         "Source.$": "$.state.input.ownerEmail",
         "Destination": {
-          "ToAddresses.$": "States.Array($.state.currentCleaner.cleaner.email)"
+          "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
+          "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
         },
         "Message": {
           "Subject": {
-            "Data.$": "States.Format('Cleaning Request for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
+            "Data.$": "States.Format('Cleaning Request for {} on {}', $.state.propertyName, $.state.cleaningDate)"
           },
           "Body": {
-            "Text": {
-              "Data.$": "States.Format('Hello {},\\n\\nWe have a new booking for {} and need a cleaning and laundry turnover.\\n\\nDetails:\\n- Date: {}\\n- Time: 2:00 PM\\n- Address: {}\\n- Estimated Duration: {}\\n\\nAre you available on {} at 2:00 PM to do a cleaning and laundry turnover at {}?\\n\\nPlease reply with \"yes\" or \"no\".\\n\\nThank you,\\nRentalTurnManager', $.state.currentCleaner.cleaner.name, $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.property.metadata.cleaningDuration, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address)"
+            "Html": {
+              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li><li>Guests: {}</li></ul><p>Are you available on {} at 12:00 PM to do a cleaning and laundry turnover at {}?</p><p style=\"margin: 30px 0;\"><a href=\"{}/respond?token={}&response=yes\" style=\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\">YES - I am available</a><a href=\"{}/respond?token={}&response=no\" style=\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\">NO - Not available</a></p><p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress, $.state.numberOfGuests, $.state.cleaningDate, $.state.propertyAddress, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.ownerName)"
             }
           }
         }
@@ -64,22 +123,6 @@
           "Next": "IncrementCleanerIndex"
         }
       ],
-      "Next": "WaitForResponse"
-    },
-    "WaitForResponse": {
-      "Type": "Wait",
-      "Comment": "Wait for cleaner response (in production, this would be replaced with a callback pattern)",
-      "Seconds": 3600,
-      "Next": "CheckResponsePlaceholder"
-    },
-    "CheckResponsePlaceholder": {
-      "Type": "Pass",
-      "Comment": "Placeholder for checking cleaner response - in production this would check email replies",
-      "Parameters": {
-        "responseReceived": false,
-        "response": "no"
-      },
-      "ResultPath": "$.responseCheck",
       "Next": "EvaluateResponse"
     },
     "EvaluateResponse": {
@@ -87,7 +130,7 @@
       "Comment": "Check if cleaner confirmed availability",
       "Choices": [
         {
-          "Variable": "$.responseCheck.response",
+          "Variable": "$.emailResult.response",
           "StringEquals": "yes",
           "Next": "CleanerConfirmed"
         }
@@ -103,21 +146,28 @@
           "States": {
             "SendCleanerConfirmation": {
               "Type": "Task",
-              "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail",
+              "Resource": "arn:aws:states:::lambda:invoke",
               "Parameters": {
-                "Source.$": "$.state.input.ownerEmail",
-                "Destination": {
-                  "ToAddresses.$": "States.Array($.state.currentCleaner.cleaner.email)"
-                },
-                "Message": {
-                  "Subject": {
-                    "Data.$": "States.Format('Cleaning Confirmed for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
-                  },
-                  "Body": {
-                    "Text": {
-                      "Data.$": "States.Format('Hello {},\\n\\nThank you for confirming your availability!\\n\\nYour cleaning appointment has been scheduled:\\n- Property: {}\\n- Date: {}\\n- Time: 2:00 PM\\n- Address: {}\\n- Duration: {}\\n\\nAccess Instructions:\\n{}\\n\\nSpecial Instructions:\\n{}\\n\\nA calendar invite has been sent to you separately.\\n\\nThank you,\\nRentalTurnManager', $.state.currentCleaner.cleaner.name, $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.property.metadata.cleaningDuration, $.state.input.property.metadata.accessInstructions, $.state.input.property.metadata.specialInstructions)"
-                    }
-                  }
+                "FunctionName": "${CalendarLambdaArn}",
+                "Payload": {
+                  "FromEmail.$": "$.state.input.ownerEmail",
+                  "ToEmail.$": "$.state.currentCleaner.email",
+                  "CcEmail.$": "$.state.input.ownerEmail",
+                  "Subject.$": "States.Format('Cleaning Confirmed for {} on {}', $.state.propertyName, $.state.cleaningDate)",
+                  "HtmlBody.$": "States.Format('<html><body><p>Hello {},</p><p>Thank you for confirming your availability!</p><p>Your cleaning appointment has been scheduled:</p><ul><li>Property: {}</li><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Please see the attached calendar invite.</p><p>Thank you,<br/>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress, $.state.ownerName)",
+                  "CleanerName.$": "$.state.currentCleaner.name",
+                  "CleanerEmail.$": "$.state.currentCleaner.email",
+                  "CleanerPhone.$": "$.state.currentCleaner.phone",
+                  "OwnerName.$": "$.state.ownerName",
+                  "OwnerEmail.$": "$.state.input.ownerEmail",
+                  "PropertyName.$": "$.state.propertyName",
+                  "PropertyAddress.$": "$.state.propertyAddress",
+                  "CleaningDate.$": "$.state.cleaningDate",
+                  "CleaningDateTime.$": "$.state.cleaningDateTime",
+                  "CleaningDuration.$": "$.state.cleaningDuration",
+                  "Platform.$": "$.state.input.booking.platform",
+                  "BookingReference.$": "$.state.input.booking.bookingReference",
+                  "BookingStateBucket.$": "$.state.input.bookingStateBucket"
                 }
               },
               "End": true
@@ -129,21 +179,28 @@
           "States": {
             "SendOwnerNotification": {
               "Type": "Task",
-              "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail",
+              "Resource": "arn:aws:states:::lambda:invoke",
               "Parameters": {
-                "Source.$": "$.state.input.ownerEmail",
-                "Destination": {
-                  "ToAddresses.$": "States.Array($.state.input.ownerEmail)"
-                },
-                "Message": {
-                  "Subject": {
-                    "Data.$": "States.Format('Cleaning Scheduled for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
-                  },
-                  "Body": {
-                    "Text": {
-                      "Data.$": "States.Format('Hello,\\n\\nA cleaning has been scheduled for {}:\\n\\n- Cleaner: {}\\n- Date: {}\\n- Time: 2:00 PM\\n- Address: {}\\n\\nYou have been copied on the calendar invite.\\n\\nThank you,\\nRentalTurnManager', $.state.input.property.metadata.propertyName, $.state.currentCleaner.cleaner.name, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address)"
-                    }
-                  }
+                "FunctionName": "${CalendarLambdaArn}",
+                "Payload": {
+                  "FromEmail.$": "$.state.input.ownerEmail",
+                  "ToEmail.$": "$.state.input.ownerEmail",
+                  "CcEmail": "",
+                  "Subject.$": "States.Format('Cleaning Scheduled for {} on {}', $.state.propertyName, $.state.cleaningDate)",
+                  "HtmlBody.$": "States.Format('<html><body><p>Hello {},</p><p>A cleaning has been scheduled for {}:</p><ul><li>Cleaner: {}</li><li>Email: {}</li><li>Phone: {}</li><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Please see the attached calendar invite with cleaner contact information.</p><p>Thank you,<br/>{}</p></body></html>', $.state.ownerName, $.state.propertyName, $.state.currentCleaner.name, $.state.currentCleaner.email, $.state.currentCleaner.phone, $.state.cleaningDate, $.state.propertyAddress, $.state.ownerName)",
+                  "CleanerName.$": "$.state.currentCleaner.name",
+                  "CleanerEmail.$": "$.state.currentCleaner.email",
+                  "CleanerPhone.$": "$.state.currentCleaner.phone",
+                  "OwnerName.$": "$.state.ownerName",
+                  "OwnerEmail.$": "$.state.input.ownerEmail",
+                  "PropertyName.$": "$.state.propertyName",
+                  "PropertyAddress.$": "$.state.propertyAddress",
+                  "CleaningDate.$": "$.state.cleaningDate",
+                  "CleaningDateTime.$": "$.state.cleaningDateTime",
+                  "CleaningDuration.$": "$.state.cleaningDuration",
+                  "Platform.$": "$.state.input.booking.platform",
+                  "BookingReference.$": "$.state.input.booking.bookingReference",
+                  "BookingStateBucket.$": "$.state.input.bookingStateBucket"
                 }
               },
               "End": true
@@ -163,12 +220,11 @@
           "cleaningDateTime.$": "$.state.input.cleaningDateTime",
           "currentCleanerIndex.$": "States.MathAdd($.state.input.currentCleanerIndex, 1)",
           "attemptCount.$": "States.MathAdd($.state.input.attemptCount, 1)",
-          "ownerEmail.$": "$.state.input.ownerEmail"
+          "ownerEmail.$": "$.state.input.ownerEmail",
+          "callbackApiUrl.$": "$.state.input.callbackApiUrl"
         },
-        "currentCleaner": null,
         "cleanerConfirmed": false,
-        "allCleanersExhausted": false,
-        "contactedCleaners.$": "States.ArrayAppend($.state.contactedCleaners, $.state.currentCleaner.cleaner.name)"
+        "allCleanersExhausted": false
       },
       "ResultPath": "$.state",
       "Next": "CheckCleanerList"
@@ -184,11 +240,11 @@
         },
         "Message": {
           "Subject": {
-            "Data.$": "States.Format('URGENT: Unable to Schedule Cleaning for {} on {}', $.state.input.property.metadata.propertyName, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
+            "Data.$": "States.Format('URGENT: Unable to Schedule Cleaning for {} on {}', $.state.propertyName, $.state.cleaningDate)"
           },
           "Body": {
-            "Text": {
-              "Data.$": "States.Format('Hello,\\n\\nWe were unable to secure a cleaner for the following booking:\\n\\n- Property: {}\\n- Check-in Date: {}\\n- Checkout Date: {}\\n- Cleaning Needed: {}\\n- Address: {}\\n\\nAll preferred cleaners were contacted and either declined or did not respond.\\n\\nPlease arrange for cleaning services manually.\\n\\nBooking Details:\\n- Platform: {}\\n- Booking Reference: {}\\n- Guest Name: {}\\n\\nThank you,\\nRentalTurnManager', $.state.input.property.metadata.propertyName, $.state.input.booking.checkInDate, $.state.input.booking.checkOutDate, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0), $.state.input.property.address, $.state.input.booking.platform, $.state.input.booking.bookingReference, $.state.input.booking.guestName)"
+            "Html": {
+              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We were unable to secure a cleaner for the following booking:</p><ul><li>Property: {}</li><li>Check-in Date: {}</li><li>Checkout Date: {}</li><li>Cleaning Date: {}</li><li>Address: {}</li></ul><p>All preferred cleaners were contacted and either declined or did not respond.</p><p><strong>Please arrange for cleaning services manually.</strong></p><h3>Booking Details:</h3><ul><li>Platform: {}</li><li>Booking Reference: {}</li><li>Guest Name: {}</li></ul><p>Thank you,<br/>{}</p></body></html>', $.state.ownerName, $.state.propertyName, $.state.checkInDate, $.state.checkOutDate, $.state.cleaningDate, $.state.propertyAddress, $.state.platform, $.state.bookingRef, $.state.guestName, $.state.ownerName)"
             }
           }
         }
