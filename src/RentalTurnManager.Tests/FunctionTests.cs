@@ -18,6 +18,7 @@ public class FunctionTests
     private readonly Mock<IEmailScannerService> _mockEmailScanner;
     private readonly Mock<IBookingParserService> _mockBookingParser;
     private readonly Mock<IStepFunctionService> _mockStepFunction;
+    private readonly Mock<IBookingStateService> _mockBookingStateService;
     private readonly IServiceProvider _serviceProvider;
     private readonly Function _function;
     private readonly PropertiesConfiguration _propertiesConfig;
@@ -28,6 +29,7 @@ public class FunctionTests
         _mockEmailScanner = new Mock<IEmailScannerService>();
         _mockBookingParser = new Mock<IBookingParserService>();
         _mockStepFunction = new Mock<IStepFunctionService>();
+        _mockBookingStateService = new Mock<IBookingStateService>();
 
         // Setup properties configuration
         _propertiesConfig = new PropertiesConfiguration
@@ -63,6 +65,7 @@ public class FunctionTests
         services.AddSingleton(_mockEmailScanner.Object);
         services.AddSingleton(_mockBookingParser.Object);
         services.AddSingleton(_mockStepFunction.Object);
+        services.AddSingleton(_mockBookingStateService.Object);
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>())
@@ -72,6 +75,10 @@ public class FunctionTests
 
         _serviceProvider = services.BuildServiceProvider();
         _function = new Function(_serviceProvider, configuration, _propertiesConfig);
+        
+        // Setup default behavior for booking state service
+        _mockBookingStateService.Setup(x => x.HasBookingChangedAsync(It.IsAny<Booking>()))
+            .ReturnsAsync(true); // By default, treat all bookings as new/changed
     }
 
     [Fact]

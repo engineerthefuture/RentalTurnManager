@@ -205,7 +205,7 @@ public class Function
                         continue;
                     }
                     
-                    _logger.LogInformation($"Processing {'new or updated'} booking: {booking.Platform} - {booking.BookingReference}");
+                    _logger.LogInformation($"Processing new or updated booking: {booking.Platform} - {booking.BookingReference}");
 
                     // Find matching property configuration
                     var normalizedPlatform = booking.Platform.ToLower() switch
