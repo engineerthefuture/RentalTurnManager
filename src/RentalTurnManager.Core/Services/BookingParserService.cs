@@ -370,27 +370,28 @@ public class BookingParserService : IBookingParserService
             booking.BookingReference = refMatch.Groups[1].Value;
         }
 
-        // Extract Unit/Property ID (format: unit_5480548 or Property: 87654321)
-        var unitMatch = Regex.Match(content, @"Unit[:\s>]+(unit_\d+)", RegexOptions.IgnoreCase);
-        if (unitMatch.Success)
+        // Extract Property ID (prioritize Property ID over Unit ID)
+        // Try Property: format first (format: Property #4906384 or Property: 4906384)
+        var propertyMatch = Regex.Match(content, @"Property[:\s#>]+(\d+)", RegexOptions.IgnoreCase);
+        if (propertyMatch.Success)
         {
-            booking.PropertyId = unitMatch.Groups[1].Value;
+            booking.PropertyId = propertyMatch.Groups[1].Value;
         }
         else
         {
-            // Try Property: format from test data
-            var propertyMatch = Regex.Match(content, @"Property[:\s>]+(\d+)", RegexOptions.IgnoreCase);
-            if (propertyMatch.Success)
+            // Try extracting from subject line "Vrbo #4906384"
+            var subjectPropertyMatch = Regex.Match(subject, @"Vrbo\s+#(\d+)", RegexOptions.IgnoreCase);
+            if (subjectPropertyMatch.Success)
             {
-                booking.PropertyId = propertyMatch.Groups[1].Value;
+                booking.PropertyId = subjectPropertyMatch.Groups[1].Value;
             }
             else
             {
-                // Try extracting from subject line "Vrbo #4906384"
-                var subjectPropertyMatch = Regex.Match(subject, @"Vrbo\s+#(\d+)", RegexOptions.IgnoreCase);
-                if (subjectPropertyMatch.Success)
+                // Fallback: Try Unit ID only if Property ID not found (format: unit_5480548)
+                var unitMatch = Regex.Match(content, @"Unit[:\s>]+(unit_\d+)", RegexOptions.IgnoreCase);
+                if (unitMatch.Success)
                 {
-                    booking.PropertyId = subjectPropertyMatch.Groups[1].Value;
+                    booking.PropertyId = unitMatch.Groups[1].Value;
                 }
             }
         }
