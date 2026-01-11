@@ -93,7 +93,7 @@ public class EmailScannerService : IEmailScannerService
             {
                 baseQuery = fromAddresses
                     .Skip(1)
-                    .Aggregate(
+                    .Aggregate<string, SearchQuery>(
                         SearchQuery.FromContains(fromAddresses[0]),
                         (query, address) => query.Or(SearchQuery.FromContains(address))
                     );
