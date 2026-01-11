@@ -208,8 +208,8 @@ public class Function
                         continue;
                     }
 
-                    // Calculate cleaning time (day before check-in)
-                    var cleaningDate = booking.CheckInDate.AddDays(-1);
+                    // Calculate cleaning time (on checkout date)
+                    var cleaningDate = booking.CheckOutDate;
                     var cleaningTime = new TimeSpan(14, 0, 0); // 2 PM default
 
                     // Start Step Functions workflow

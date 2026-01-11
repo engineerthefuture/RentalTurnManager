@@ -16,47 +16,26 @@
       "Next": "CheckCleanerList"
     },
     "CheckCleanerList": {
+      "Type": "Pass",
+      "Comment": "Get cleaner count for comparison",
+      "Parameters": {
+        "input.$": "$.state.input",
+        "cleanersCount.$": "States.ArrayLength($.state.input.property.cleaners)"
+      },
+      "ResultPath": "$.state.checkData",
+      "Next": "CompareCleanerIndex"
+    },
+    "CompareCleanerIndex": {
       "Type": "Choice",
-      "Comment": "Check if there are more cleaners to contact",
+      "Comment": "Check if current index is beyond cleaner list",
       "Choices": [
         {
-          "And": [
-            {
-              "Variable": "$.state.input.currentCleanerIndex",
-              "IsPresent": true
-            },
-            {
-              "Variable": "$.state.input.currentCleanerIndex",
-              "NumericGreaterThanEquals": 0
-            }
-          ],
-          "Next": "CompareCleanerIndex"
+          "Variable": "$.state.input.currentCleanerIndex",
+          "NumericLessThanPath": "$.state.checkData.cleanersCount",
+          "Next": "GetCurrentCleaner"
         }
       ],
       "Default": "AllCleanersExhausted"
-    },
-    "CompareCleanerIndex": {
-      "Type": "Pass",
-      "Comment": "Calculate if we've exhausted the cleaner list",
-      "Parameters": {
-        "cleanersCount.$": "States.ArrayLength($.state.input.property.cleaners)",
-        "currentIndex.$": "$.state.input.currentCleanerIndex",
-        "exhausted.$": "States.MathGreaterThanEquals($.state.input.currentCleanerIndex, States.ArrayLength($.state.input.property.cleaners))"
-      },
-      "ResultPath": "$.state.comparison",
-      "Next": "CheckIfExhausted"
-    },
-    "CheckIfExhausted": {
-      "Type": "Choice",
-      "Comment": "Branch based on whether cleaners are exhausted",
-      "Choices": [
-        {
-          "Variable": "$.state.comparison.exhausted",
-          "BooleanEquals": true,
-          "Next": "AllCleanersExhausted"
-        }
-      ],
-      "Default": "GetCurrentCleaner"
     },
     "GetCurrentCleaner": {
       "Type": "Pass",

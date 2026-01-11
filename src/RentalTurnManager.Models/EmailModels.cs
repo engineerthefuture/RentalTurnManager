@@ -12,7 +12,11 @@ public class Booking
     public DateTime CheckOutDate { get; set; }
     public string GuestName { get; set; } = string.Empty;
     public int NumberOfGuests { get; set; }
-    public string RawEmailContent { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Number of days in the booking (CheckOut - CheckIn)
+    /// </summary>
+    public int NumberOfDays => (CheckOutDate - CheckInDate).Days;
 }
 
 /// <summary>
