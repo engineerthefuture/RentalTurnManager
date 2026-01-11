@@ -79,37 +79,6 @@ Metadata:
           - ScheduleInterval
 
 Resources:
-  # S3 Bucket for deployments with lifecycle policy for cost optimization
-  DeploymentBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
-      LifecycleConfiguration:
-        Rules:
-          - Id: TransitionToInfrequentAccess
-            Status: Enabled
-            Transitions:
-              - TransitionInDays: 30
-                StorageClass: STANDARD_IA
-          - Id: DeleteOldDeployments
-            Status: Enabled
-            ExpirationInDays: 90
-            NoncurrentVersionExpirationInDays: 30
-      VersioningConfiguration:
-        Status: Enabled
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      Tags:
-        - Key: OwnerName
-          Value: !Ref OwnerName
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: AppName
-          Value: !Ref AppName
-
   # Secrets Manager Secret for Email Credentials
   EmailCredentialsSecret:
     Type: AWS::SecretsManager::Secret
