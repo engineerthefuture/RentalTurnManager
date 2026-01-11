@@ -157,6 +157,10 @@ jobs:
             WAIT_CONDITION="stack-create-complete"
           fi
           
+          # Prepare JSON parameters (minify to single line)
+          PROPERTIES_CONFIG=$(echo '${{ vars.PROPERTIES_CONFIG || '{}' }}' | jq -c .)
+          MESSAGE_TEMPLATES=$(echo '${{ vars.MESSAGE_TEMPLATES || '{}' }}' | jq -c .)
+          
           # Deploy stack
           aws cloudformation ${ACTION} \
             --stack-name ${STACK_NAME} \
@@ -172,8 +176,8 @@ jobs:
               ParameterKey=OwnerName,ParameterValue="${{ vars.OWNER_NAME || 'Property Owner' }}" \
               ParameterKey=NamespacePrefix,ParameterValue="${{ env.NAMESPACE_PREFIX }}" \
               ParameterKey=AppName,ParameterValue="${{ env.APP_NAME }}" \
-              ParameterKey=PropertiesConfig,ParameterValue='${{ vars.PROPERTIES_CONFIG || '{}' }}' \
-              ParameterKey=MessageTemplates,ParameterValue='${{ vars.MESSAGE_TEMPLATES || '{}' }}' \
+              ParameterKey=PropertiesConfig,ParameterValue="${PROPERTIES_CONFIG}" \
+              ParameterKey=MessageTemplates,ParameterValue="${MESSAGE_TEMPLATES}" \
             --capabilities CAPABILITY_NAMED_IAM \
             --region ${{ env.AWS_REGION }} \
             --tags \
