@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * BookingStateService.cs
+ * 
+ * Service that manages booking state persistence in Amazon S3. Tracks
+ * booking history to detect changes and prevent duplicate workflow triggers.
+ * Stores bookings as JSON files organized by platform and confirmation code.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Logging;

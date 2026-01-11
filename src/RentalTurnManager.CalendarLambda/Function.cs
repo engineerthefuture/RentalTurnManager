@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * Function.cs (Calendar Lambda)
+ * 
+ * AWS Lambda function that generates and sends calendar invites for
+ * cleaning appointments. Creates ICS calendar files with proper timezone
+ * handling and sends them via Amazon SES to cleaners and property owners.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Amazon.Lambda.Core;
 using Amazon.SimpleEmail;
 using Amazon.SimpleEmail.Model;

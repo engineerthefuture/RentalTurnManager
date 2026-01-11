@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * BookingParserServiceTests.cs
+ * 
+ * Unit tests for BookingParserService. Tests parsing of booking information
+ * from Airbnb, VRBO, and Booking.com emails including confirmation codes,
+ * dates, guest counts, and property IDs.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Xunit;
 using Moq;
 using FluentAssertions;

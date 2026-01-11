@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * FunctionTests.cs
+ * 
+ * Unit tests for main Lambda function handler. Tests email scanning,
+ * booking parsing, workflow triggering, and error handling scenarios
+ * using xUnit and mocked AWS services.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Xunit;
 using Moq;
 using FluentAssertions;

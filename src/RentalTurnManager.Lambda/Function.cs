@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * Function.cs
+ * 
+ * Main AWS Lambda handler that scans emails for new rental bookings
+ * from Airbnb, VRBO, and Booking.com. Parses booking details, tracks
+ * state in S3, and triggers Step Functions workflows for cleaner coordination.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Amazon.Lambda.Core;
 using Amazon.SecretsManager;
 using Amazon.SimpleEmail;
@@ -191,6 +203,13 @@ public class Function
                     if (booking == null)
                     {
                         _logger.LogWarning($"Could not parse booking from email: {email.Subject}");
+                        continue;
+                    }
+                    
+                    // Validate booking has required fields
+                    if (string.IsNullOrEmpty(booking.BookingReference))
+                    {
+                        _logger.LogWarning($"Booking missing reference ID from email: {email.Subject}");
                         continue;
                     }
 

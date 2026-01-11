@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * PropertyModels.cs
+ * 
+ * Data models for property configuration and management. Defines structures
+ * for property records, platform ID mappings, cleaner assignments, and email
+ * filtering rules used for multi-property rental management.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 namespace RentalTurnManager.Models;
 
 /// <summary>

@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * Function.cs (Callback Lambda)
+ * 
+ * AWS Lambda function that handles HTTP callbacks from cleaners via
+ * API Gateway. Processes cleaner responses (confirm/deny) and sends
+ * task success/failure signals back to Step Functions workflows.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Amazon.Lambda.Core;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.StepFunctions;

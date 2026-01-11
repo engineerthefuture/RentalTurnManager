@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * EmailModels.cs
+ * 
+ * Data models for email and booking information. Defines structures for
+ * parsed bookings, email messages, and email credentials used throughout
+ * the application for email scanning and booking processing.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 namespace RentalTurnManager.Models;
 
 /// <summary>

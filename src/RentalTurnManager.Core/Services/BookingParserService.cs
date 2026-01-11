@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * BookingParserService.cs
+ * 
+ * Service that parses booking information from platform-specific emails
+ * (Airbnb, VRBO, Booking.com). Extracts confirmation codes, dates, guest
+ * counts, property IDs, and other booking details using regex patterns.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Microsoft.Extensions.Logging;
 using RentalTurnManager.Models;
 using System.Text.RegularExpressions;
@@ -108,11 +120,32 @@ public class BookingParserService : IBookingParserService
             Platform = "airbnb"
         };
 
-        // Extract booking reference - Airbnb uses codes like HMXX8RX9P5 or HM123456789
-        var refMatch = Regex.Match(content, @"(?:confirmation|reservation)\s*(?:code|number)?[:\s>]+([A-Z0-9]{8,12})\b", RegexOptions.IgnoreCase);
+        // Extract booking reference - Airbnb uses codes like HMFMAQS9MB, HMXX8RX9P5 or HM123456789
+        // Try multiple patterns to increase reliability
+        var refMatch = Regex.Match(content, @"(?:confirmation|reservation)\s*(?:code|number)[:\s>]+([A-Z0-9]{8,12})\b", RegexOptions.IgnoreCase);
+        if (!refMatch.Success)
+        {
+            // Try alternative pattern without the word "code" or "number" but with colon
+            refMatch = Regex.Match(content, @"(?:confirmation|reservation)\s*code[:\s>]+([A-Z0-9]{8,12})\b", RegexOptions.IgnoreCase);
+        }
+        if (!refMatch.Success)
+        {
+            // Try looking for just the Airbnb-style confirmation code pattern (HM followed by 8-10 alphanumeric)
+            refMatch = Regex.Match(content, @"\b(HM[A-Z0-9]{8,10})\b", RegexOptions.IgnoreCase);
+        }
+        if (!refMatch.Success)
+        {
+            // Try subject line pattern - but look for code after dashes/spaces, not the word "confirmed" itself
+            refMatch = Regex.Match(subject, @"(?:confirmed|confirmation)\s*[-–—]\s*([A-Z0-9]{8,12})\b", RegexOptions.IgnoreCase);
+        }
         if (refMatch.Success)
         {
-            booking.BookingReference = refMatch.Groups[1].Value;
+            booking.BookingReference = refMatch.Groups[1].Value.ToUpper();
+            _logger.LogInformation($"Extracted booking reference: {booking.BookingReference}");
+        }
+        else
+        {
+            _logger.LogWarning("Could not extract booking reference from email");
         }
 
         // Extract property name - look for it in various formats in the email

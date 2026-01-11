@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * StepFunctionService.cs
+ * 
+ * Service that starts AWS Step Functions workflow executions for cleaner
+ * coordination. Passes booking details and property configuration to the
+ * workflow state machine for automated cleaner notification and tracking.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Amazon.StepFunctions;
 using Amazon.StepFunctions.Model;
 using Microsoft.Extensions.Logging;

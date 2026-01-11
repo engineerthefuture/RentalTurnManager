@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * PropertyConfigServiceTests.cs
+ * 
+ * Unit tests for PropertyConfigService. Tests property ID resolution,
+ * platform mapping lookups (Airbnb/VRBO/Booking.com), and configuration
+ * management for multiple properties.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Xunit;
 using Moq;
 using FluentAssertions;

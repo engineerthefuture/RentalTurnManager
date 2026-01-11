@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * IBookingStateService.cs
+ * 
+ * Interface for booking state management service that tracks booking history
+ * in Amazon S3. Defines contract for storing, retrieving, and comparing
+ * bookings to detect changes and prevent duplicate processing.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using RentalTurnManager.Models;
 
 namespace RentalTurnManager.Core.Services;

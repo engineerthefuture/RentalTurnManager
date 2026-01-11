@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * EmailScannerService.cs
+ * 
+ * Service that connects to email inbox via IMAP using MailKit and scans
+ * for booking confirmation emails from rental platforms. Filters by sender
+ * address and subject patterns, retrieves email content for parsing.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;

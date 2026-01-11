@@ -1,3 +1,15 @@
+/************************
+ * Rental Turn Manager
+ * PropertyConfigService.cs
+ * 
+ * Service that manages property configuration mappings between platform-specific
+ * IDs (Airbnb, VRBO, Booking.com) and internal property records. Resolves
+ * property details needed for cleaner assignments and notifications.
+ * 
+ * Author: Brent Foster
+ * Created: 01-11-2026
+ ***********************/
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using RentalTurnManager.Models;
