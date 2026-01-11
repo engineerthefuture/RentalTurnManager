@@ -130,8 +130,8 @@
                     "Data.$": "States.Format('Cleaning Confirmed for {} on {}', $.state.propertyName, $.state.cleaningDate)"
                   },
                   "Body": {
-                    "Text": {
-                      "Data.$": "States.Format('Hello {},\\n\\nThank you for confirming your availability!\\n\\nYour cleaning appointment has been scheduled:\\n- Property: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n\\nThank you,\\nRentalTurnManager', $.state.currentCleaner.Name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress)"
+                    "Html": {
+                      "Data.$": "States.Format('<html><body><p>Hello {},</p><p>Thank you for confirming your availability!</p><p>Your cleaning appointment has been scheduled:</p><ul><li>Property: {}</li><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Thank you,<br/>RentalTurnManager</p></body></html>', $.state.currentCleaner.Name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress)"
                     }
                   }
                 }
@@ -156,8 +156,8 @@
                     "Data.$": "States.Format('Cleaning Scheduled for {} on {}', $.state.propertyName, $.state.cleaningDate)"
                   },
                   "Body": {
-                    "Text": {
-                      "Data.$": "States.Format('Hello,\\n\\nA cleaning has been scheduled for {}:\\n\\n- Cleaner: {}\\n- Date: {}\\n- Time: 12:00 PM\\n- Address: {}\\n\\nThank you,\\nRentalTurnManager', $.state.propertyName, $.state.currentCleaner.Name, $.state.cleaningDate, $.state.propertyAddress)"
+                    "Html": {
+                      "Data.$": "States.Format('<html><body><p>Hello,</p><p>A cleaning has been scheduled for {}:</p><ul><li>Cleaner: {}</li><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Thank you,<br/>RentalTurnManager</p></body></html>', $.state.propertyName, $.state.currentCleaner.Name, $.state.cleaningDate, $.state.propertyAddress)"
                     }
                   }
                 }
@@ -202,8 +202,8 @@
             "Data.$": "States.Format('URGENT: Unable to Schedule Cleaning for {} on {}', $.state.propertyName, $.state.cleaningDate)"
           },
           "Body": {
-            "Text": {
-              "Data.$": "States.Format('Hello,\\n\\nWe were unable to secure a cleaner for the following booking:\\n\\n- Property: {}\\n- Check-in Date: {}\\n- Checkout Date: {}\\n- Cleaning Date: {}\\n- Address: {}\\n\\nAll preferred cleaners were contacted and either declined or did not respond.\\n\\nPlease arrange for cleaning services manually.\\n\\nBooking Details:\\n- Platform: {}\\n- Booking Reference: {}\\n- Guest Name: {}\\n\\nThank you,\\nRentalTurnManager', $.state.propertyName, $.state.checkInDate, $.state.checkOutDate, $.state.cleaningDate, $.state.propertyAddress, $.state.platform, $.state.bookingRef, $.state.guestName)"
+            "Html": {
+              "Data.$": "States.Format('<html><body><p>Hello,</p><p>We were unable to secure a cleaner for the following booking:</p><ul><li>Property: {}</li><li>Check-in Date: {}</li><li>Checkout Date: {}</li><li>Cleaning Date: {}</li><li>Address: {}</li></ul><p>All preferred cleaners were contacted and either declined or did not respond.</p><p><strong>Please arrange for cleaning services manually.</strong></p><h3>Booking Details:</h3><ul><li>Platform: {}</li><li>Booking Reference: {}</li><li>Guest Name: {}</li></ul><p>Thank you,<br/>RentalTurnManager</p></body></html>', $.state.propertyName, $.state.checkInDate, $.state.checkOutDate, $.state.cleaningDate, $.state.propertyAddress, $.state.platform, $.state.bookingRef, $.state.guestName)"
             }
           }
         }
