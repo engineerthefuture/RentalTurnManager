@@ -78,10 +78,11 @@ public class Function
     /// <summary>
     /// Test constructor for dependency injection
     /// </summary>
-    public Function(IServiceProvider serviceProvider, IConfiguration configuration)
+    public Function(IServiceProvider serviceProvider, IConfiguration configuration, PropertiesConfiguration? propertiesConfig = null)
     {
         _serviceProvider = serviceProvider;
         _configuration = configuration;
+        _propertiesConfig = propertiesConfig;
         _logger = _serviceProvider.GetRequiredService<ILogger<Function>>();
     }
 
