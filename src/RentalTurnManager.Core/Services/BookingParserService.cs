@@ -254,12 +254,31 @@ public class BookingParserService : IBookingParserService
             }
         }
 
-        // Extract number of guests - look for "2 adults", "3 guests", etc.
-        var guestsMatch = Regex.Match(content, @"\b(\d+)\s+(adults?|guests?)\b", RegexOptions.IgnoreCase);
-        if (guestsMatch.Success && int.TryParse(guestsMatch.Groups[1].Value, out var guests))
+        // Extract number of guests - look for "6 adults, 2 children" or "3 guests"
+        var adultsMatch = Regex.Match(content, @"\b(\d+)\s+adults?\b", RegexOptions.IgnoreCase);
+        var childrenMatch = Regex.Match(content, @"\b(\d+)\s+children?\b", RegexOptions.IgnoreCase);
+        var guestsMatch = Regex.Match(content, @"\b(\d+)\s+guests?\b", RegexOptions.IgnoreCase);
+        
+        int totalGuests = 0;
+        if (adultsMatch.Success && int.TryParse(adultsMatch.Groups[1].Value, out var adults))
         {
-            booking.NumberOfGuests = guests;
+            totalGuests += adults;
         }
+        if (childrenMatch.Success && int.TryParse(childrenMatch.Groups[1].Value, out var children))
+        {
+            totalGuests += children;
+        }
+        // If no adults/children breakdown, use general "guests" count
+        if (totalGuests == 0 && guestsMatch.Success && int.TryParse(guestsMatch.Groups[1].Value, out var guests))
+        {
+            totalGuests = guests;
+        }
+        
+        if (totalGuests > 0)
+        {
+            booking.NumberOfGuests = totalGuests;
+        }
+        
         // Log all parsed booking attributes
         _logger.LogInformation($"Parsed Airbnb booking - PropertyId: '{booking.PropertyId}', Reference: '{booking.BookingReference}', CheckIn: {booking.CheckInDate:yyyy-MM-dd}, CheckOut: {booking.CheckOutDate:yyyy-MM-dd}, Guest: '{booking.GuestName}', Guests: {booking.NumberOfGuests}");
 

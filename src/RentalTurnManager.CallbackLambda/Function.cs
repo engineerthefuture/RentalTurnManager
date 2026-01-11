@@ -41,6 +41,9 @@ public class Function
 
             context.Logger.LogInformation($"Received token (length: {taskToken.Length}): {taskToken.Substring(0, Math.Min(50, taskToken.Length))}...");
 
+            // URL decoding converts + to space, so we need to convert spaces back to +
+            taskToken = taskToken.Replace(" ", "+");
+
             if (!request.QueryStringParameters.TryGetValue("response", out var response))
             {
                 return new APIGatewayProxyResponse
