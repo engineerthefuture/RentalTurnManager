@@ -158,8 +158,14 @@ jobs:
           fi
           
           # Prepare JSON parameters (minify to single line)
-          PROPERTIES_CONFIG=$(echo '${{ vars.PROPERTIES_CONFIG || '{}' }}' | jq -c .)
-          MESSAGE_TEMPLATES=$(echo '${{ vars.MESSAGE_TEMPLATES || '{}' }}' | jq -c .)
+          cat > /tmp/properties.json << 'PROPERTIES_EOF'
+          ${{ vars.PROPERTIES_CONFIG || '{}' }}
+          PROPERTIES_EOF
+          cat > /tmp/templates.json << 'TEMPLATES_EOF'
+          ${{ vars.MESSAGE_TEMPLATES || '{}' }}
+          TEMPLATES_EOF
+          PROPERTIES_CONFIG=$(jq -c . /tmp/properties.json)
+          MESSAGE_TEMPLATES=$(jq -c . /tmp/templates.json)
           
           # Deploy stack
           aws cloudformation ${ACTION} \
