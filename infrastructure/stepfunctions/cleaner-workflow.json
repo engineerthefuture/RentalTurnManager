@@ -20,8 +20,39 @@
       "Comment": "Check if there are more cleaners to contact",
       "Choices": [
         {
-          "Variable": "$.state.input.currentCleanerIndex",
-          "NumericGreaterThanEqualsPath": "$.state.input.property.cleaners.length",
+          "And": [
+            {
+              "Variable": "$.state.input.currentCleanerIndex",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.state.input.currentCleanerIndex",
+              "NumericGreaterThanEquals": 0
+            }
+          ],
+          "Next": "CompareCleanerIndex"
+        }
+      ],
+      "Default": "AllCleanersExhausted"
+    },
+    "CompareCleanerIndex": {
+      "Type": "Pass",
+      "Comment": "Calculate if we've exhausted the cleaner list",
+      "Parameters": {
+        "cleanersCount.$": "States.ArrayLength($.state.input.property.cleaners)",
+        "currentIndex.$": "$.state.input.currentCleanerIndex",
+        "exhausted.$": "States.MathGreaterThanEquals($.state.input.currentCleanerIndex, States.ArrayLength($.state.input.property.cleaners))"
+      },
+      "ResultPath": "$.state.comparison",
+      "Next": "CheckIfExhausted"
+    },
+    "CheckIfExhausted": {
+      "Type": "Choice",
+      "Comment": "Branch based on whether cleaners are exhausted",
+      "Choices": [
+        {
+          "Variable": "$.state.comparison.exhausted",
+          "BooleanEquals": true,
           "Next": "AllCleanersExhausted"
         }
       ],
