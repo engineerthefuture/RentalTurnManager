@@ -150,9 +150,12 @@
                 "Payload": {
                   "FromEmail.$": "$.state.input.ownerEmail",
                   "ToEmail.$": "$.state.currentCleaner.email",
+                  "CcEmail.$": "$.state.input.ownerEmail",
                   "Subject.$": "States.Format('Cleaning Confirmed for {} on {}', $.state.propertyName, $.state.cleaningDate)",
                   "HtmlBody.$": "States.Format('<html><body><p>Hello {},</p><p>Thank you for confirming your availability!</p><p>Your cleaning appointment has been scheduled:</p><ul><li>Property: {}</li><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Please see the attached calendar invite.</p><p>Thank you,<br/>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress, $.state.ownerName)",
                   "CleanerName.$": "$.state.currentCleaner.name",
+                  "CleanerEmail.$": "$.state.currentCleaner.email",
+                  "CleanerPhone.$": "$.state.currentCleaner.phone",
                   "PropertyName.$": "$.state.propertyName",
                   "PropertyAddress.$": "$.state.propertyAddress",
                   "CleaningDate.$": "$.state.cleaningDate",
@@ -168,21 +171,22 @@
           "States": {
             "SendOwnerNotification": {
               "Type": "Task",
-              "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail",
+              "Resource": "arn:aws:states:::lambda:invoke",
               "Parameters": {
-                "Source.$": "$.state.input.ownerEmail",
-                "Destination": {
-                  "ToAddresses.$": "States.Array($.state.input.ownerEmail)"
-                },
-                "Message": {
-                  "Subject": {
-                    "Data.$": "States.Format('Cleaning Scheduled for {} on {}', $.state.propertyName, $.state.cleaningDate)"
-                  },
-                  "Body": {
-                    "Html": {
-                      "Data.$": "States.Format('<html><body><p>Hello {},</p><p>A cleaning has been scheduled for {}:</p><ul><li>Cleaner: {}</li><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Thank you,<br/>{}</p></body></html>', $.state.ownerName, $.state.propertyName, $.state.currentCleaner.name, $.state.cleaningDate, $.state.propertyAddress, $.state.ownerName)"
-                    }
-                  }
+                "FunctionName": "${CalendarLambdaArn}",
+                "Payload": {
+                  "FromEmail.$": "$.state.input.ownerEmail",
+                  "ToEmail.$": "$.state.input.ownerEmail",
+                  "CcEmail": "",
+                  "Subject.$": "States.Format('Cleaning Scheduled for {} on {}', $.state.propertyName, $.state.cleaningDate)",
+                  "HtmlBody.$": "States.Format('<html><body><p>Hello {},</p><p>A cleaning has been scheduled for {}:</p><ul><li>Cleaner: {}</li><li>Email: {}</li><li>Phone: {}</li><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Please see the attached calendar invite with cleaner contact information.</p><p>Thank you,<br/>{}</p></body></html>', $.state.ownerName, $.state.propertyName, $.state.currentCleaner.name, $.state.currentCleaner.email, $.state.currentCleaner.phone, $.state.cleaningDate, $.state.propertyAddress, $.state.ownerName)",
+                  "CleanerName.$": "$.state.currentCleaner.name",
+                  "CleanerEmail.$": "$.state.currentCleaner.email",
+                  "CleanerPhone.$": "$.state.currentCleaner.phone",
+                  "PropertyName.$": "$.state.propertyName",
+                  "PropertyAddress.$": "$.state.propertyAddress",
+                  "CleaningDate.$": "$.state.cleaningDate",
+                  "CleaningDuration.$": "$.state.cleaningDuration"
                 }
               },
               "End": true
