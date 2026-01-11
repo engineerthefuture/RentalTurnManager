@@ -255,7 +255,8 @@ public class BookingParserService : IBookingParserService
         }
 
         // Extract number of guests - look for "Guests\n6 adults, 2 children" or fallback to individual matches
-        var guestBreakdownMatch = Regex.Match(content, @"Guests\s+(\d+)\s+adults?,\s*(\d+)\s+children?", RegexOptions.IgnoreCase);
+        // Use more flexible pattern to handle HTML tags, newlines, and other whitespace
+        var guestBreakdownMatch = Regex.Match(content, @"Guests[:\s\r\n<>]*(\d+)\s+adults?[,\s]*(\d+)\s+(?:children?|kids?)", RegexOptions.IgnoreCase);
         
         int totalGuests = 0;
         if (guestBreakdownMatch.Success)
@@ -270,9 +271,9 @@ public class BookingParserService : IBookingParserService
         }
         else
         {
-            // Fallback to individual patterns
+            // Fallback to individual patterns - check for adults and children separately
             var adultsMatch = Regex.Match(content, @"\b(\d+)\s+adults?\b", RegexOptions.IgnoreCase);
-            var childrenMatch = Regex.Match(content, @"\b(\d+)\s+children?\b", RegexOptions.IgnoreCase);
+            var childrenMatch = Regex.Match(content, @"\b(\d+)\s+(?:children?|kids?)\b", RegexOptions.IgnoreCase);
             var guestsMatch = Regex.Match(content, @"\b(\d+)\s+guests?\b", RegexOptions.IgnoreCase);
             
             if (adultsMatch.Success && int.TryParse(adultsMatch.Groups[1].Value, out var adults))

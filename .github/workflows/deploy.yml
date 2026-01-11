@@ -230,6 +230,7 @@ jobs:
       - name: Update Lambda function code
         run: |
           FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}"
+          CALLBACK_FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}-Callback"
           CALENDAR_FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}-Calendar"
           
           # Update main Lambda
@@ -263,8 +264,7 @@ jobs:
             --region ${{ env.AWS_REGION }}
           
           aws lambda wait function-updated \
-            --function-name ${CALENDARated \
-            --function-name ${CALLBACK_FUNCTION_NAME} \
+            --function-name ${CALENDAR_FUNCTION_NAME} \
             --region ${{ env.AWS_REGION }}
 
       - name: Get stack outputs
