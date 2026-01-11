@@ -262,15 +262,18 @@ public class BookingParserService : IBookingParserService
         int totalGuests = 0;
         if (adultsMatch.Success && int.TryParse(adultsMatch.Groups[1].Value, out var adults))
         {
+            _logger.LogInformation($"Found adults: {adults}");
             totalGuests += adults;
         }
         if (childrenMatch.Success && int.TryParse(childrenMatch.Groups[1].Value, out var children))
         {
+            _logger.LogInformation($"Found children: {children}");
             totalGuests += children;
         }
         // If no adults/children breakdown, use general "guests" count
         if (totalGuests == 0 && guestsMatch.Success && int.TryParse(guestsMatch.Groups[1].Value, out var guests))
         {
+            _logger.LogInformation($"Found general guests: {guests}");
             totalGuests = guests;
         }
         
@@ -280,7 +283,7 @@ public class BookingParserService : IBookingParserService
         }
         
         // Log all parsed booking attributes
-        _logger.LogInformation($"Parsed Airbnb booking - PropertyId: '{booking.PropertyId}', Reference: '{booking.BookingReference}', CheckIn: {booking.CheckInDate:yyyy-MM-dd}, CheckOut: {booking.CheckOutDate:yyyy-MM-dd}, Guest: '{booking.GuestName}', Guests: {booking.NumberOfGuests}");
+        _logger.LogInformation($"Parsed Airbnb booking - PropertyId: '{booking.PropertyId}', Reference: '{booking.BookingReference}', CheckIn: {booking.CheckInDate:yyyy-MM-dd}, CheckOut: {booking.CheckOutDate:yyyy-MM-dd}, Guest: '{booking.GuestName}', Guests: {booking.NumberOfGuests} (parsed: adults={adultsMatch.Groups[1].Value}, children={childrenMatch.Groups[1].Value})");
 
         // Validate we have minimum required data
         if (string.IsNullOrEmpty(booking.PropertyId) || booking.CheckInDate == default)
