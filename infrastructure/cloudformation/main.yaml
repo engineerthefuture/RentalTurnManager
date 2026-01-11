@@ -141,7 +141,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - states:StartExecution
-                Resource: !Ref CleanerWorkflowStateMachine
+                Resource: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
               - Effect: Allow
                 Action:
                   - ses:SendEmail
@@ -178,11 +178,10 @@ Resources:
         Variables:
           ENVIRONMENT: !Ref Environment
           EMAIL_SECRET_NAME: !Ref EmailCredentialsSecret
-          CLEANER_WORKFLOW_STATE_MACHINE_ARN: !Ref CleanerWorkflowStateMachine
+          CLEANER_WORKFLOW_STATE_MACHINE_ARN: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
           OWNER_EMAIL: !Ref OwnerEmail
           PROPERTIES_CONFIG: !Ref PropertiesConfig
           MESSAGE_TEMPLATES: !Ref MessageTemplates
-          CALLBACK_API_URL: !Sub 'https://${CallbackApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         S3Key: !Sub '${AppName}/lambda/lambda-deployment.zip'
@@ -350,7 +349,7 @@ Resources:
                 Action:
                   - states:SendTaskSuccess
                   - states:SendTaskFailure
-                Resource: !Ref CleanerWorkflowStateMachine
+                Resource: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
 
   CallbackLambda:
     Type: AWS::Lambda::Function

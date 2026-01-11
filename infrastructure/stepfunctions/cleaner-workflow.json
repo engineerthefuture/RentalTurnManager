@@ -1,5 +1,5 @@
 {
-  "Comment": "Cleaner coordination workflow - contacts cleaners in rank order until one confirms",
+  "Comment": "Cleaner coordination workflow - contacts cleaners in rank order until one confirms or all are exhausted",
   "StartAt": "InitializeState",
   "States": {
     "InitializeState": {
@@ -226,7 +226,7 @@
           },
           "Body": {
             "Html": {
-              "Data.$": "States.Format('<html><body><p>Hello,</p><p>We were unable to secure a cleaner for the following booking:</p><ul><li>Property: {}</li><li>Check-in Date: {}</li><li>Checkout Date: {}</li><li>Cleaning Date: {}</li><li>Address: {}</li></ul><p>All preferred cleaners were contacted and either declined or did not respond.</p><p><strong>Please arrange for cleaning services manually.</strong></p><h3>Booking Details:</h3><ul><li>Platform: {}</li><li>Booking Reference: {}</li><li>Guest Name: {}</li></ul><p>Thank you,<br/>{}</p></body></html>', $.state.propertyName, $.state.checkInDate, $.state.checkOutDate, $.state.cleaningDate, $.state.propertyAddress, $.state.platform, $.state.bookingRef, $.state.guestName, $.state.ownerName)"
+              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We were unable to secure a cleaner for the following booking:</p><ul><li>Property: {}</li><li>Check-in Date: {}</li><li>Checkout Date: {}</li><li>Cleaning Date: {}</li><li>Address: {}</li></ul><p>All preferred cleaners were contacted and either declined or did not respond.</p><p><strong>Please arrange for cleaning services manually.</strong></p><h3>Booking Details:</h3><ul><li>Platform: {}</li><li>Booking Reference: {}</li><li>Guest Name: {}</li></ul><p>Thank you,<br/>{}</p></body></html>', $.state.ownerName, $.state.propertyName, $.state.checkInDate, $.state.checkOutDate, $.state.cleaningDate, $.state.propertyAddress, $.state.platform, $.state.bookingRef, $.state.guestName, $.state.ownerName)"
             }
           }
         }
