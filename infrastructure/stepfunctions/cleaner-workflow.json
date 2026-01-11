@@ -79,7 +79,7 @@
         },
         "Message": {
           "Subject": {
-            "Data.$": "States.Format('Cleaning Request for {} on {}', $.state.input.property.propertyId, States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0))"
+            "Data.$": "States.Format('Cleaning Request for {} on {}', $.state.propertyName, $.state.cleaningDate)"
           },
           "Body": {
             "Html": {

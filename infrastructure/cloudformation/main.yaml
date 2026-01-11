@@ -402,7 +402,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
       ApiId: !Ref CallbackApi
-      StageName: '$default'
+      StageName: 'prod'
       AutoDeploy: true
       Tags:
         OwnerName: !Ref OwnerName
