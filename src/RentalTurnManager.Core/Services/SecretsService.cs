@@ -39,7 +39,7 @@ public class SecretsService : ISecretsService
     {
         try
         {
-            _logger.LogInformation($"Retrieving email credentials from Secrets Manager: {_emailSecretName}");
+            _logger.LogInformation("Retrieving email credentials from Secrets Manager.");
 
             var request = new GetSecretValueRequest
             {
