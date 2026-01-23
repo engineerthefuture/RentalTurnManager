@@ -238,12 +238,24 @@ public class BookingParserService : IBookingParserService
         
         if (booking.CheckOutDate == default)
         {
-            var checkOutMatch = Regex.Match(content, @"check[\s-]*out[:\s>]+(?:\w+,?\s+)?(\w+\s+\d{1,2}(?:,?\s+\d{4})?)", RegexOptions.IgnoreCase);
+            // Try multiple patterns for check-out date
+            // Pattern 1: "Check-out: March 1" or "Check-out: Saturday, March 1"
+            var checkOutMatch = Regex.Match(content, @"check[\s-]*out[:\s>]+(?:\w+,?\s+)?(\w+\s+\d{1,2})(?:,?\s+(\d{4}))?", RegexOptions.IgnoreCase);
+            
+            // If first pattern didn't work or captured a weekday, try without the weekday
+            if (!checkOutMatch.Success || checkOutMatch.Groups[1].Value.Length < 4)
+            {
+                checkOutMatch = Regex.Match(content, @"check[\s-]*out[:\s>]+\w+,?\s+(\w+\s+\d{1,2})(?:,?\s+(\d{4}))?", RegexOptions.IgnoreCase);
+            }
+            
             if (checkOutMatch.Success)
             {
                 var checkOutStr = checkOutMatch.Groups[1].Value;
+                var yearGroup = checkOutMatch.Groups[2].Value;
+                _logger.LogInformation($"Found check-out date string: '{checkOutStr}' with year: '{yearGroup}'");
+                
                 // If year is missing, infer from check-in date
-                if (!checkOutStr.Contains("20"))
+                if (string.IsNullOrEmpty(yearGroup))
                 {
                     var year = booking.CheckInDate != default ? booking.CheckInDate.Year : DateTime.Now.Year;
                     checkOutStr += $", {year}";
@@ -255,14 +267,28 @@ public class BookingParserService : IBookingParserService
                         if (tempCheckOut < booking.CheckInDate)
                         {
                             checkOutStr = $"{checkOutMatch.Groups[1].Value}, {year + 1}";
+                            _logger.LogInformation($"Check-out is before check-in, adjusting to next year: {checkOutStr}");
                         }
                     }
+                }
+                else
+                {
+                    checkOutStr += $", {yearGroup}";
                 }
                 
                 if (DateTime.TryParse(checkOutStr, out var checkOut))
                 {
                     booking.CheckOutDate = checkOut;
+                    _logger.LogInformation($"Parsed check-out date: {booking.CheckOutDate:yyyy-MM-dd}");
                 }
+                else
+                {
+                    _logger.LogWarning($"Failed to parse check-out date string: '{checkOutStr}'");
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Could not find check-out date pattern in email content");
             }
         }
 
