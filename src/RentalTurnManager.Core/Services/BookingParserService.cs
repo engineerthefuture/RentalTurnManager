@@ -149,52 +149,16 @@ public class BookingParserService : IBookingParserService
             _logger.LogWarning("Could not extract booking reference from email");
         }
 
-        // Extract property name - look for it in various formats in the email
-        // Format: Title case or all caps (e.g., "Waterfront Lake Anna - Kayaks, Firepit, Family Fun" or "WATERFRONT LAKE ANNA...")
-        // Look for lines that start with capital letter and contain typical property name patterns
-        var propertyNameMatch = Regex.Match(content, @"^([A-Z][A-Za-z\s\-,&']+[A-Za-z])\s*$", RegexOptions.Multiline);
-        if (propertyNameMatch.Success)
+        // Extract property ID from listing URL or listing number
+        var listingMatch = Regex.Match(content, @"(?:listing|rooms?)[/:\s#]+(\d+)", RegexOptions.IgnoreCase);
+        if (listingMatch.Success)
         {
-            var potentialName = propertyNameMatch.Groups[1].Value.Trim();
-            _logger.LogInformation($"Found potential property name: '{potentialName}' (length: {potentialName.Length})");
-            // Should be at least 10 characters and contain meaningful words (not just "CHECK IN" etc)
-            // Also exclude conversational phrases that indicate guest messages rather than property names
-            var conversationalStarts = new[] { "Hello", "Hi", "Hey", "I would", "I'd", "I am", "I'm", "We would", "We'd", "We are", "We're", "Thank you", "Thanks" };
-            var startsWithConversation = conversationalStarts.Any(phrase => potentialName.StartsWith(phrase, StringComparison.OrdinalIgnoreCase));
-            
-            if (potentialName.Length >= 10 && 
-                !startsWithConversation &&
-                !potentialName.Contains("CHECK", StringComparison.OrdinalIgnoreCase) && 
-                !potentialName.Contains("RESERVATION", StringComparison.OrdinalIgnoreCase) &&
-                !potentialName.Contains("CONFIRMED", StringComparison.OrdinalIgnoreCase) &&
-                !potentialName.Contains("INSTANT BOOK", StringComparison.OrdinalIgnoreCase))
-            {
-                booking.PropertyId = potentialName;
-                _logger.LogInformation($"Using property name as PropertyId: '{booking.PropertyId}'");
-            }
-            else
-            {
-                _logger.LogInformation($"Rejected property name (too short, contains excluded words, or starts with conversational phrase)");
-            }
+            booking.PropertyId = listingMatch.Groups[1].Value;
+            _logger.LogInformation($"Using listing ID as PropertyId: '{booking.PropertyId}'");
         }
         else
         {
-            _logger.LogInformation("No property name found in email");
-        }
-
-        // If property name not found, try extracting from listing URL or listing number
-        if (string.IsNullOrEmpty(booking.PropertyId))
-        {
-            var listingMatch = Regex.Match(content, @"(?:listing|rooms?)[/:\s#]+(\d+)", RegexOptions.IgnoreCase);
-            if (listingMatch.Success)
-            {
-                booking.PropertyId = listingMatch.Groups[1].Value;
-                _logger.LogInformation($"Using numeric listing ID as PropertyId: '{booking.PropertyId}'");
-            }
-            else
-            {
-                _logger.LogWarning("Could not extract property identifier from email");
-            }
+            _logger.LogWarning("Could not extract property identifier from email");
         }
 
         // Extract dates - Airbnb uses multiple formats:
