@@ -149,4 +149,47 @@ public class BookingParserServiceTests
         // Assert
         result.Should().BeNull();
     }
+
+    [Fact]
+    public void ParseBooking_AirbnbEmailWithSubjectDateAndGuestMessage_ExtractsCorrectly()
+    {
+        // Arrange - Tests that guest messages starting with "Hello" aren't extracted as property names
+        var email = new EmailMessage
+        {
+            From = "automated@airbnb.com",
+            Subject = "Reservation confirmed - John Dickman arrives Feb 26",
+            Body = @"
+                Reservation confirmed
+                
+                Cozy Lake House Waterfront Paradise
+                
+                Hello there
+                
+                I'd love to book your cozy home on the lake for a stay with my family
+                
+                Confirmation code: HMQDDDMPRY
+                
+                Listing: 12345678
+                Check-in: 02/26/2026
+                Check-out: 02/28/2026
+                
+                4 adults
+            "
+        };
+
+        // Act
+        var result = _service.ParseBooking(email);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Platform.Should().Be("airbnb");
+        result.BookingReference.Should().Be("HMQDDDMPRY");
+        result.GuestName.Should().Be("John Dickman");
+        result.CheckInDate.Should().Be(new DateTime(2026, 2, 26));
+        result.CheckOutDate.Should().Be(new DateTime(2026, 2, 28));
+        result.NumberOfGuests.Should().Be(4);
+        // Property name should be the actual property title or listing ID, not the guest message
+        result.PropertyId.Should().NotContain("Hello");
+        result.PropertyId.Should().NotContain("I'd love");
+    }
 }

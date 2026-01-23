@@ -12,6 +12,7 @@
 
 using Microsoft.Extensions.Logging;
 using RentalTurnManager.Models;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace RentalTurnManager.Core.Services;
@@ -157,7 +158,12 @@ public class BookingParserService : IBookingParserService
             var potentialName = propertyNameMatch.Groups[1].Value.Trim();
             _logger.LogInformation($"Found potential property name: '{potentialName}' (length: {potentialName.Length})");
             // Should be at least 10 characters and contain meaningful words (not just "CHECK IN" etc)
+            // Also exclude conversational phrases that indicate guest messages rather than property names
+            var conversationalStarts = new[] { "Hello", "Hi", "Hey", "I would", "I'd", "I am", "I'm", "We would", "We'd", "We are", "We're", "Thank you", "Thanks" };
+            var startsWithConversation = conversationalStarts.Any(phrase => potentialName.StartsWith(phrase, StringComparison.OrdinalIgnoreCase));
+            
             if (potentialName.Length >= 10 && 
+                !startsWithConversation &&
                 !potentialName.Contains("CHECK", StringComparison.OrdinalIgnoreCase) && 
                 !potentialName.Contains("RESERVATION", StringComparison.OrdinalIgnoreCase) &&
                 !potentialName.Contains("CONFIRMED", StringComparison.OrdinalIgnoreCase) &&
@@ -168,7 +174,7 @@ public class BookingParserService : IBookingParserService
             }
             else
             {
-                _logger.LogInformation($"Rejected property name (too short or contains excluded words)");
+                _logger.LogInformation($"Rejected property name (too short, contains excluded words, or starts with conversational phrase)");
             }
         }
         else
@@ -276,6 +282,31 @@ public class BookingParserService : IBookingParserService
         if (subjectGuestMatch.Success)
         {
             booking.GuestName = subjectGuestMatch.Groups[1].Value;
+        }
+        
+        // Extract check-in date from subject line format "arrives [Month] [Day]" if not already found
+        if (booking.CheckInDate == default)
+        {
+            var subjectDateMatch = Regex.Match(subject, @"arrives\s+(\w+\s+\d{1,2})", RegexOptions.IgnoreCase);
+            if (subjectDateMatch.Success)
+            {
+                var dateStr = subjectDateMatch.Groups[1].Value;
+                var currentYear = DateTime.Now.Year;
+                var dateWithYear = $"{dateStr}, {currentYear}";
+                
+                // Try parsing with current year
+                if (DateTime.TryParse(dateWithYear, out var tempCheckIn))
+                {
+                    // If the date is more than 30 days in the past, it's probably next year
+                    if (tempCheckIn < DateTime.Now.AddDays(-30))
+                    {
+                        dateWithYear = $"{dateStr}, {currentYear + 1}";
+                        DateTime.TryParse(dateWithYear, out tempCheckIn);
+                    }
+                    booking.CheckInDate = tempCheckIn;
+                    _logger.LogInformation($"Extracted check-in date from subject: {booking.CheckInDate:yyyy-MM-dd}");
+                }
+            }
         }
         else
         {
