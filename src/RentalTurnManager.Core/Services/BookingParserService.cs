@@ -238,22 +238,9 @@ public class BookingParserService : IBookingParserService
         
         if (booking.CheckOutDate == default)
         {
-            // Try multiple patterns for check-out date
-            // Pattern 1: "Check-out: March 1" or "Check-out: Saturday, March 1"
-            var checkOutMatch = Regex.Match(content, @"check[\s-]*out[:\s>]+(?:\w+,?\s+)?(\w+\s+\d{1,2})(?:,?\s+(\d{4}))?", RegexOptions.IgnoreCase);
-            
-            // Log what we're searching in for debugging
-            var checkOutSearchArea = Regex.Match(content, @"check[\s-]*out[:\s>]+.{0,100}", RegexOptions.IgnoreCase);
-            if (checkOutSearchArea.Success)
-            {
-                _logger.LogInformation($"Check-out search area: '{checkOutSearchArea.Value}'");
-            }
-            
-            // If first pattern didn't work or captured a weekday, try without the weekday
-            if (!checkOutMatch.Success || checkOutMatch.Groups[1].Value.Length < 4)
-            {
-                checkOutMatch = Regex.Match(content, @"check[\s-]*out[:\s>]+\w+,?\s+(\w+\s+\d{1,2})(?:,?\s+(\d{4}))?", RegexOptions.IgnoreCase);
-            }
+            // Handle format where "Checkout" is on one line and date is on the next line(s)
+            // Pattern: "Checkout ... Sun, Mar 1" with potential whitespace/newlines between
+            var checkOutMatch = Regex.Match(content, @"check[\s-]*out[\s\S]{0,100}?(?:\w+,\s+)?(\w+\s+\d{1,2})(?:,?\s+(\d{4}))?", RegexOptions.IgnoreCase);
             
             if (checkOutMatch.Success)
             {
