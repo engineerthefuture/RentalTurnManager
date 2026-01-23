@@ -12,6 +12,7 @@
 
 using Microsoft.Extensions.Logging;
 using RentalTurnManager.Models;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace RentalTurnManager.Core.Services;
@@ -148,47 +149,16 @@ public class BookingParserService : IBookingParserService
             _logger.LogWarning("Could not extract booking reference from email");
         }
 
-        // Extract property name - look for it in various formats in the email
-        // Format: Title case or all caps (e.g., "Waterfront Lake Anna - Kayaks, Firepit, Family Fun" or "WATERFRONT LAKE ANNA...")
-        // Look for lines that start with capital letter and contain typical property name patterns
-        var propertyNameMatch = Regex.Match(content, @"^([A-Z][A-Za-z\s\-,&']+[A-Za-z])\s*$", RegexOptions.Multiline);
-        if (propertyNameMatch.Success)
+        // Extract property ID from listing URL or listing number
+        var listingMatch = Regex.Match(content, @"(?:listing|rooms?)[/:\s#]+(\d+)", RegexOptions.IgnoreCase);
+        if (listingMatch.Success)
         {
-            var potentialName = propertyNameMatch.Groups[1].Value.Trim();
-            _logger.LogInformation($"Found potential property name: '{potentialName}' (length: {potentialName.Length})");
-            // Should be at least 10 characters and contain meaningful words (not just "CHECK IN" etc)
-            if (potentialName.Length >= 10 && 
-                !potentialName.Contains("CHECK", StringComparison.OrdinalIgnoreCase) && 
-                !potentialName.Contains("RESERVATION", StringComparison.OrdinalIgnoreCase) &&
-                !potentialName.Contains("CONFIRMED", StringComparison.OrdinalIgnoreCase) &&
-                !potentialName.Contains("INSTANT BOOK", StringComparison.OrdinalIgnoreCase))
-            {
-                booking.PropertyId = potentialName;
-                _logger.LogInformation($"Using property name as PropertyId: '{booking.PropertyId}'");
-            }
-            else
-            {
-                _logger.LogInformation($"Rejected property name (too short or contains excluded words)");
-            }
+            booking.PropertyId = listingMatch.Groups[1].Value;
+            _logger.LogInformation($"Using listing ID as PropertyId: '{booking.PropertyId}'");
         }
         else
         {
-            _logger.LogInformation("No property name found in email");
-        }
-
-        // If property name not found, try extracting from listing URL or listing number
-        if (string.IsNullOrEmpty(booking.PropertyId))
-        {
-            var listingMatch = Regex.Match(content, @"(?:listing|rooms?)[/:\s#]+(\d+)", RegexOptions.IgnoreCase);
-            if (listingMatch.Success)
-            {
-                booking.PropertyId = listingMatch.Groups[1].Value;
-                _logger.LogInformation($"Using numeric listing ID as PropertyId: '{booking.PropertyId}'");
-            }
-            else
-            {
-                _logger.LogWarning("Could not extract property identifier from email");
-            }
+            _logger.LogWarning("Could not extract property identifier from email");
         }
 
         // Extract dates - Airbnb uses multiple formats:
@@ -208,6 +178,31 @@ public class BookingParserService : IBookingParserService
         if (numericCheckOutMatch.Success && DateTime.TryParse(numericCheckOutMatch.Groups[1].Value, out var numericCheckOut))
         {
             booking.CheckOutDate = numericCheckOut;
+        }
+        
+        // Try extracting check-in date from subject line format "arrives [Month] [Day]" before trying text-based content extraction
+        if (booking.CheckInDate == default)
+        {
+            var subjectDateMatch = Regex.Match(subject, @"arrives\s+(\w+\s+\d{1,2})", RegexOptions.IgnoreCase);
+            if (subjectDateMatch.Success)
+            {
+                var dateStr = subjectDateMatch.Groups[1].Value;
+                var currentYear = DateTime.Now.Year;
+                var dateWithYear = $"{dateStr}, {currentYear}";
+                
+                // Try parsing with current year
+                if (DateTime.TryParse(dateWithYear, out var tempCheckIn))
+                {
+                    // If the date is more than 30 days in the past, it's probably next year
+                    if (tempCheckIn < DateTime.Now.AddDays(-30))
+                    {
+                        dateWithYear = $"{dateStr}, {currentYear + 1}";
+                        DateTime.TryParse(dateWithYear, out tempCheckIn);
+                    }
+                    booking.CheckInDate = tempCheckIn;
+                    _logger.LogInformation($"Extracted check-in date from subject: {booking.CheckInDate:yyyy-MM-dd}");
+                }
+            }
         }
         
         // If dates not found, try format: "Mon, Dec 3" or "Monday, December 3"
@@ -241,33 +236,14 @@ public class BookingParserService : IBookingParserService
             }
         }
         
-        if (booking.CheckOutDate == default)
+        // Calculate check-out date from number of nights if check-in date is available
+        if (booking.CheckOutDate == default && booking.CheckInDate != default)
         {
-            var checkOutMatch = Regex.Match(content, @"check[\s-]*out[:\s>]+(?:\w+,?\s+)?(\w+\s+\d{1,2}(?:,?\s+\d{4})?)", RegexOptions.IgnoreCase);
-            if (checkOutMatch.Success)
+            var nightsMatch = Regex.Match(content, @"(\d+)\s+nights?", RegexOptions.IgnoreCase);
+            if (nightsMatch.Success && int.TryParse(nightsMatch.Groups[1].Value, out var nights))
             {
-                var checkOutStr = checkOutMatch.Groups[1].Value;
-                // If year is missing, infer from check-in date
-                if (!checkOutStr.Contains("20"))
-                {
-                    var year = booking.CheckInDate != default ? booking.CheckInDate.Year : DateTime.Now.Year;
-                    checkOutStr += $", {year}";
-                    
-                    // Try parsing
-                    if (DateTime.TryParse(checkOutStr, out var tempCheckOut) && booking.CheckInDate != default)
-                    {
-                        // If checkout is before checkin, it must be next year
-                        if (tempCheckOut < booking.CheckInDate)
-                        {
-                            checkOutStr = $"{checkOutMatch.Groups[1].Value}, {year + 1}";
-                        }
-                    }
-                }
-                
-                if (DateTime.TryParse(checkOutStr, out var checkOut))
-                {
-                    booking.CheckOutDate = checkOut;
-                }
+                booking.CheckOutDate = booking.CheckInDate.AddDays(nights);
+                _logger.LogInformation($"Calculated check-out date from {nights} nights: {booking.CheckOutDate:yyyy-MM-dd}");
             }
         }
 
