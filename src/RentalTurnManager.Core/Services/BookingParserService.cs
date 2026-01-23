@@ -216,6 +216,31 @@ public class BookingParserService : IBookingParserService
             booking.CheckOutDate = numericCheckOut;
         }
         
+        // Try extracting check-in date from subject line format "arrives [Month] [Day]" before trying text-based content extraction
+        if (booking.CheckInDate == default)
+        {
+            var subjectDateMatch = Regex.Match(subject, @"arrives\s+(\w+\s+\d{1,2})", RegexOptions.IgnoreCase);
+            if (subjectDateMatch.Success)
+            {
+                var dateStr = subjectDateMatch.Groups[1].Value;
+                var currentYear = DateTime.Now.Year;
+                var dateWithYear = $"{dateStr}, {currentYear}";
+                
+                // Try parsing with current year
+                if (DateTime.TryParse(dateWithYear, out var tempCheckIn))
+                {
+                    // If the date is more than 30 days in the past, it's probably next year
+                    if (tempCheckIn < DateTime.Now.AddDays(-30))
+                    {
+                        dateWithYear = $"{dateStr}, {currentYear + 1}";
+                        DateTime.TryParse(dateWithYear, out tempCheckIn);
+                    }
+                    booking.CheckInDate = tempCheckIn;
+                    _logger.LogInformation($"Extracted check-in date from subject: {booking.CheckInDate:yyyy-MM-dd}");
+                }
+            }
+        }
+        
         // If dates not found, try format: "Mon, Dec 3" or "Monday, December 3"
         if (booking.CheckInDate == default)
         {
@@ -282,31 +307,6 @@ public class BookingParserService : IBookingParserService
         if (subjectGuestMatch.Success)
         {
             booking.GuestName = subjectGuestMatch.Groups[1].Value;
-        }
-        
-        // Extract check-in date from subject line format "arrives [Month] [Day]" if not already found
-        if (booking.CheckInDate == default)
-        {
-            var subjectDateMatch = Regex.Match(subject, @"arrives\s+(\w+\s+\d{1,2})", RegexOptions.IgnoreCase);
-            if (subjectDateMatch.Success)
-            {
-                var dateStr = subjectDateMatch.Groups[1].Value;
-                var currentYear = DateTime.Now.Year;
-                var dateWithYear = $"{dateStr}, {currentYear}";
-                
-                // Try parsing with current year
-                if (DateTime.TryParse(dateWithYear, out var tempCheckIn))
-                {
-                    // If the date is more than 30 days in the past, it's probably next year
-                    if (tempCheckIn < DateTime.Now.AddDays(-30))
-                    {
-                        dateWithYear = $"{dateStr}, {currentYear + 1}";
-                        DateTime.TryParse(dateWithYear, out tempCheckIn);
-                    }
-                    booking.CheckInDate = tempCheckIn;
-                    _logger.LogInformation($"Extracted check-in date from subject: {booking.CheckInDate:yyyy-MM-dd}");
-                }
-            }
         }
         else
         {
