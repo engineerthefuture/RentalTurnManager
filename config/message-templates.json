@@ -2,7 +2,7 @@
   "templates": {
     "cleanerRequest": {
       "subject": "Cleaning Request for {PropertyName} on {Date}",
-      "body": "Hello {CleanerName},\n\nWe have a new booking for {PropertyName} and need a cleaning and laundry turnover.\n\nDetails:\n- Date: {Date}\n- Time: {Time}\n- Address: {Address}\n- Estimated Duration: {CleaningDuration}\n\nAre you available on {Date} at {Time} to do a cleaning and laundry turnover at {Address}?\n\nPlease reply with \"yes\" or \"no\".\n\nThank you,\n{OwnerName}"
+      "body": "Hello {CleanerName},\n\nWe have a new booking for {PropertyName} and need a cleaning and laundry turnover.\n\nDetails:\n- Date: {Date}\n- Time: {Time}\n- Address: {Address}\n- Guests: {NumberOfGuests}\n- Nights: {NumberOfNights}\n- Estimated Duration: {CleaningDuration}\n\nAre you available on {Date} at {Time} to do a cleaning and laundry turnover at {Address}?\n\nPlease reply with \"yes\" or \"no\".\n\nThank you,\n{OwnerName}"
     },
     "cleanerConfirmation": {
       "subject": "Cleaning Confirmed for {PropertyName} on {Date}",
@@ -14,7 +14,7 @@
     },
     "ownerEscalation": {
       "subject": "URGENT: Unable to Schedule Cleaning for {PropertyName} on {Date}",
-      "body": "Hello,\n\nWe were unable to secure a cleaner for the following booking:\n\n- Property: {PropertyName}\n- Check-in Date: {CheckInDate}\n- Checkout Date: {CheckoutDate}\n- Cleaning Needed: {Date} at {Time}\n- Address: {Address}\n\nAll {CleanerCount} preferred cleaners were contacted and either declined or did not respond.\n\nCleaners contacted:\n{CleanerList}\n\nPlease arrange for cleaning services manually.\n\nBooking Details:\n- Platform: {Platform}\n- Booking Reference: {BookingReference}\n- Guest Name: {GuestName}\n\nThank you,\n{OwnerName}"
+      "body": "Hello,\n\nWe were unable to secure a cleaner for the following booking:\n\n- Property: {PropertyName}\n- Check-in Date: {CheckInDate}\n- Checkout Date: {CheckoutDate}\n- Cleaning Needed: {Date} at {Time}\n- Address: {Address}\n- Guests: {NumberOfGuests}\n- Nights: {NumberOfNights}\n\nAll {CleanerCount} preferred cleaners were contacted and either declined or did not respond.\n\nCleaners contacted:\n{CleanerList}\n\nPlease arrange for cleaning services manually.\n\nBooking Details:\n- Platform: {Platform}\n- Booking Reference: {BookingReference}\n- Guest Name: {GuestName}\n\nThank you,\n{OwnerName}"
     },
     "calendarInvite": {
       "subject": "Cleaning Appointment: {PropertyName}",

@@ -236,53 +236,14 @@ public class BookingParserService : IBookingParserService
             }
         }
         
-        if (booking.CheckOutDate == default)
+        // Calculate check-out date from number of nights if check-in date is available
+        if (booking.CheckOutDate == default && booking.CheckInDate != default)
         {
-            // Handle format where "Checkout" is on one line and date is on the next line(s)
-            // Pattern: "Checkout ... Sun, Mar 1" with potential whitespace/newlines between
-            var checkOutMatch = Regex.Match(content, @"check[\s-]*out[\s\S]{0,100}?(?:\w+,\s+)?(\w+\s+\d{1,2})(?:,?\s+(\d{4}))?", RegexOptions.IgnoreCase);
-            
-            if (checkOutMatch.Success)
+            var nightsMatch = Regex.Match(content, @"(\d+)\s+nights?", RegexOptions.IgnoreCase);
+            if (nightsMatch.Success && int.TryParse(nightsMatch.Groups[1].Value, out var nights))
             {
-                var checkOutStr = checkOutMatch.Groups[1].Value;
-                var yearGroup = checkOutMatch.Groups[2].Value;
-                _logger.LogInformation($"Found check-out date string: '{checkOutStr}' with year: '{yearGroup}'");
-                
-                // If year is missing, infer from check-in date
-                if (string.IsNullOrEmpty(yearGroup))
-                {
-                    var year = booking.CheckInDate != default ? booking.CheckInDate.Year : DateTime.Now.Year;
-                    checkOutStr += $", {year}";
-                    
-                    // Try parsing
-                    if (DateTime.TryParse(checkOutStr, out var tempCheckOut) && booking.CheckInDate != default)
-                    {
-                        // If checkout is before checkin, it must be next year
-                        if (tempCheckOut < booking.CheckInDate)
-                        {
-                            checkOutStr = $"{checkOutMatch.Groups[1].Value}, {year + 1}";
-                            _logger.LogInformation($"Check-out is before check-in, adjusting to next year: {checkOutStr}");
-                        }
-                    }
-                }
-                else
-                {
-                    checkOutStr += $", {yearGroup}";
-                }
-                
-                if (DateTime.TryParse(checkOutStr, out var checkOut))
-                {
-                    booking.CheckOutDate = checkOut;
-                    _logger.LogInformation($"Parsed check-out date: {booking.CheckOutDate:yyyy-MM-dd}");
-                }
-                else
-                {
-                    _logger.LogWarning($"Failed to parse check-out date string: '{checkOutStr}'");
-                }
-            }
-            else
-            {
-                _logger.LogWarning("Could not find check-out date pattern in email content");
+                booking.CheckOutDate = booking.CheckInDate.AddDays(nights);
+                _logger.LogInformation($"Calculated check-out date from {nights} nights: {booking.CheckOutDate:yyyy-MM-dd}");
             }
         }
 
