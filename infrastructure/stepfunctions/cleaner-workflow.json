@@ -95,49 +95,64 @@
         "cleaningDate.$": "States.Format('{}-{}-{}', States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 1), States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 2), States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 0))"
       },
       "ResultPath": "$.state",
-      "Next": "SendCleanerRequest"
+      "Next": "NotifyCleanerParallel"
     },
-    "SendCleanerRequest": {
-      "Type": "Task",
-      "Comment": "Send email to cleaner requesting availability with callback links",
-      "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail.waitForTaskToken",
-      "TimeoutSeconds": 32400,
-      "Parameters": {
-        "Source.$": "$.state.input.ownerEmail",
-        "Destination": {
-          "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
-          "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
+    "NotifyCleanerParallel": {
+      "Type": "Parallel",
+      "Comment": "Send email and SMS to cleaner in parallel",
+      "Branches": [
+        {
+          "StartAt": "SendCleanerRequestEmail",
+          "States": {
+            "SendCleanerRequestEmail": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail.waitForTaskToken",
+              "TimeoutSeconds": 32400,
+              "Parameters": {
+                "Source.$": "$.state.input.ownerEmail",
+                "Destination": {
+                  "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
+                  "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
+                },
+                "Message": {
+                  "Subject": {
+                    "Data.$": "States.Format('Cleaning Request for {} on {}', $.state.propertyName, $.state.cleaningDate)"
+                  },
+                  "Body": {
+                    "Html": {
+                      "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li><li>Guests: {}</li><li>Nights: {}</li></ul><p>Are you available on {} at 12:00 PM to do a cleaning and laundry turnover at {}?</p><p style=\\\"margin: 30px 0;\\\"><a href=\\\"{}/respond?token={}&response=yes\\\" style=\\\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\\\">YES</a><a href=\\\"{}/respond?token={}&response=no\\\" style=\\\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\\\">NO</a></p><p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress, $.state.numberOfGuests, $.state.numberOfNights, $.state.cleaningDate, $.state.propertyAddress, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.ownerName)"
+                    }
+                  }
+                }
+              },
+              "ResultPath": "$.emailResult",
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "ResultPath": "$.error",
+                  "Next": "IncrementCleanerIndex"
+                }
+              ],
+              "End": true
+            }
+          }
         },
-        "Message": {
-          "Subject": {
-            "Data.$": "States.Format('Cleaning Request for {} on {}', $.state.propertyName, $.state.cleaningDate)"
-          },
-          "Body": {
-            "Html": {
-              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li><li>Guests: {}</li><li>Nights: {}</li></ul><p>Are you available on {} at 12:00 PM to do a cleaning and laundry turnover at {}?</p><p style=\"margin: 30px 0;\"><a href=\"{}/respond?token={}&response=yes\" style=\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\">YES</a><a href=\"{}/respond?token={}&response=no\" style=\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\">NO</a></p><p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress, $.state.numberOfGuests, $.state.numberOfNights, $.state.cleaningDate, $.state.propertyAddress, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.ownerName)"
+        {
+          "StartAt": "SendCleanerRequestSMS",
+          "States": {
+            "SendCleanerRequestSMS": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:sns:publish",
+              "Parameters": {
+                "PhoneNumber.$": "$.state.currentCleaner.phone",
+                "Message.$": "States.Format('Cleaning request for {} on {} at {}. Please check your email for details and confirm availability.', $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress)"
+              },
+              "ResultPath": "$.smsResult",
+              "End": true
             }
           }
         }
-      },
-      "ResultPath": "$.emailResult",
-      "Catch": [
-        {
-          "ErrorEquals": ["States.ALL"],
-          "ResultPath": "$.error",
-          "Next": "IncrementCleanerIndex"
-        }
       ],
-      "Next": "SendCleanerSMS"
-    },
-    "SendCleanerSMS": {
-      "Type": "Task",
-      "Comment": "Send SMS to cleaner with cleaning request",
-      "Resource": "arn:aws:states:::aws-sdk:sns:publish",
-      "Parameters": {
-        "PhoneNumber.$": "$.state.currentCleaner.phone",
-        "Message.$": "States.Format('Cleaning request for {} on {} at {}. Please check your email for details and confirm availability.', $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress)"
-      },
-      "ResultPath": "$.smsResult",
       "Next": "EvaluateResponse"
     },
     "EvaluateResponse": {
