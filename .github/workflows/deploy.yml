@@ -22,7 +22,7 @@ env:
   DOTNET_VERSION: '10.0.x'
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
   AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-  OIDC_ROLE_NAME: ${{ vars.OIDC_ROLE_NAME }}
+  OIDC_ROLE_NAME: ${{ secrets.OIDC_ROLE_NAME }}
   IMAP_HOST: ${{ secrets.IMAP_HOST }}
   OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
 
