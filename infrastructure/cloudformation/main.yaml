@@ -95,13 +95,13 @@ Metadata:
         Parameters:
           - ScheduleInterval
 
-Resources:
-  # Secrets Manager Secret for Email Credentials
 Conditions:
   IsDev:
     Fn::Equals:
       - !Ref Environment
       - dev
+Resources:
+  # Secrets Manager Secret for Email Credentials
   EmailCredentialsSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
