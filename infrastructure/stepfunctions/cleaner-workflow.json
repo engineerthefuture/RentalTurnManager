@@ -106,7 +106,8 @@
         "Source.$": "$.state.input.ownerEmail",
         "Destination": {
           "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
-          "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
+          "CcAddresses.$": "States.Array($.state.input.ownerEmail)",
+          "BccAddresses.$": "States.Array($.state.currentCleaner.phoneEmail)"
         },
         "Message": {
           "Subject": {
@@ -127,27 +128,21 @@
           "Next": "IncrementCleanerIndex"
         }
       ],
-      "Next": "SendCleanerSMS"
-    },
-    "SendCleanerSMS": {
-      "Type": "Task",
-      "Comment": "Send SMS to cleaner with cleaning request",
-      "Resource": "arn:aws:states:::aws-sdk:sns:publish",
-      "Parameters": {
-        "PhoneNumber.$": "$.state.currentCleaner.phone",
-        "Message.$": "States.Format('Cleaning request for {} on {} at {}. Please check your email for details and confirm availability.', $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress)"
-      },
-      "ResultPath": "$.smsResult",
       "Next": "EvaluateResponse"
     },
     "EvaluateResponse": {
       "Type": "Choice",
-      "Comment": "Check if cleaner confirmed availability",
+      "Comment": "Check if cleaner confirmed availability or declined",
       "Choices": [
         {
           "Variable": "$.emailResult.response",
           "StringEquals": "yes",
           "Next": "CleanerConfirmed"
+        },
+        {
+          "Variable": "$.emailResult.response",
+          "StringEquals": "no",
+          "Next": "IncrementCleanerIndex"
         }
       ],
       "Default": "SendReminderEmail"
@@ -161,7 +156,8 @@
         "Source.$": "$.state.input.ownerEmail",
         "Destination": {
           "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
-          "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
+          "CcAddresses.$": "States.Array($.state.input.ownerEmail)",
+          "BccAddresses.$": "States.Array($.state.currentCleaner.phoneEmail)"
         },
         "Message": {
           "Subject": {
@@ -182,17 +178,6 @@
           "Next": "IncrementCleanerIndex"
         }
       ],
-      "Next": "SendReminderSMS"
-    },
-    "SendReminderSMS": {
-      "Type": "Task",
-      "Comment": "Send SMS reminder to cleaner",
-      "Resource": "arn:aws:states:::aws-sdk:sns:publish",
-      "Parameters": {
-        "PhoneNumber.$": "$.state.currentCleaner.phone",
-        "Message.$": "States.Format('Reminder: Cleaning request for {} on {} at {}. Please check your email for details and confirm availability.', $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress)"
-      },
-      "ResultPath": "$.reminderSmsResult",
       "Next": "EvaluateReminderResponse"
     },
     "EvaluateReminderResponse": {
@@ -237,7 +222,7 @@
                   "CleaningDuration.$": "$.state.cleaningDuration",
                   "Platform.$": "$.state.input.booking.platform",
                   "BookingReference.$": "$.state.input.booking.bookingReference",
-                  "BookingStateBucket.$": "$.state.input.bookingStateBucket"
+                  "BookingStateBucket.$": "$.bookingStateBucket"
                 }
               },
               "End": true
@@ -270,7 +255,7 @@
                   "CleaningDuration.$": "$.state.cleaningDuration",
                   "Platform.$": "$.state.input.booking.platform",
                   "BookingReference.$": "$.state.input.booking.bookingReference",
-                  "BookingStateBucket.$": "$.state.input.bookingStateBucket"
+                  "BookingStateBucket.$": "$.bookingStateBucket"
                 }
               },
               "End": true

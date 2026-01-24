@@ -10,9 +10,9 @@ Rental Turn Manager automates the process of scheduling property cleanings when 
 
 - **Email Monitoring**: Scans IMAP inbox for all booking confirmations on a scheduled basis
 - **Multi-Platform Support**: Parses bookings from Airbnb, VRBO, and Booking.com
-- **Smart Booking Tracking**: Uses S3 to track booking state and prevent duplicate processing
+- **Smart Booking Tracking**: Uses S3 to track booking state and prevent duplicate processing. The Step Function now references the booking state bucket at the root of the input object, fixing previous workflow errors related to JSONPath.
 - **Change Detection**: Automatically detects booking modifications and re-triggers workflows
-- **Automated Cleaner Coordination**: Contacts cleaners in priority order via email with confirm/deny links
+- **Automated Cleaner Coordination**: Contacts cleaners in priority order via email with confirm/deny links. Each cleaner can also have a `phoneEmail` property (e.g., `1234567890@vtext.com` for Verizon, `1234567890@txt.att.net` for AT&T, etc.) to receive SMS text notifications via email. As of January 2026, the system now sends these notifications as BCC (not CC) for privacy.
 - **Calendar Integration**: Sends ICS calendar invites with proper timezone handling to cleaners and owners
 - **Property Configuration**: Maintains property metadata, addresses, and cleaner preferences
 - **Multi-Environment**: Supports dev and prod deployments with GitHub Actions
@@ -104,84 +104,6 @@ sequenceDiagram
     Note over ML: Skip - no workflow needed
   end
 ```
-    participant S3 as S3 Bucket
-    participant SF as Step Functions
-    participant SES as Amazon SES
-    participant Cleaner as Cleaner
-    participant APIGW as API Gateway
-    participant CBL as Callback Lambda
-    participant CL as Calendar Lambda
-    participant Owner as Property Owner
-    
-    EB->>ML: Trigger (every 15 min)
-    ML->>IMAP: Scan for booking emails
-    IMAP-->>ML: Return booking emails
-    
-    ML->>ML: Parse booking details
-    Note over ML: Extract confirmation code,<br/>dates, guests, property
-    
-    ML->>S3: Check existing booking state
-    S3-->>ML: Return previous state (if exists)
-    
-    alt Booking changed or new
-        ML->>S3: Save updated booking state
-        ML->>SF: Start cleaner workflow
-        
-        loop For each cleaner (by rank)
-          SF->>SES: Send confirmation request
-          SES->>Cleaner: Email with YES/NO buttons
-          SF->>SNS: Send SMS notification
-          SNS->>Cleaner: Text message with cleaning request
-
-            alt Cleaner confirms
-              Cleaner->>APIGW: Click YES link
-              APIGW->>CBL: HTTP request
-              CBL->>SF: Send success token
-
-              SF->>CL: Generate calendar invites
-              CL->>S3: Update booking with cleaner details
-
-              par Send to cleaner
-                CL->>SES: Send calendar invite
-                SES->>Cleaner: ICS attachment
-              and Send to owner
-                CL->>SES: Send calendar invite
-                SES->>Owner: ICS attachment with cleaner info
-              end
-
-              Note over SF: Workflow complete
-            else Cleaner declines
-              Cleaner->>APIGW: Click NO link
-              APIGW->>CBL: HTTP request
-              CBL->>SF: Send failure token
-              Note over SF: Try next cleaner
-            else Timeout (9 hours)
-              SF->>SES: Send reminder email (YES/NO buttons)
-              SES->>Cleaner: Reminder email
-              alt Cleaner confirms after reminder
-                Cleaner->>APIGW: Click YES link
-                APIGW->>CBL: HTTP request
-                CBL->>SF: Send success token
-                ... (calendar invite as above)
-              else Cleaner declines after reminder
-                Cleaner->>APIGW: Click NO link
-                APIGW->>CBL: HTTP request
-                CBL->>SF: Send failure token
-                Note over SF: Try next cleaner
-              else Timeout (3 hours after reminder)
-                Note over SF: Try next cleaner
-              end
-            end
-          end
-
-          alt All cleaners declined/timeout
-            SF->>SES: Send escalation email
-            SES->>Owner: Manual coordination needed
-          end
-        else Booking unchanged
-          Note over ML: Skip - no workflow needed
-        end
-```
 
 ## Project Structure
 
@@ -223,6 +145,7 @@ RentalTurnManager/
 
 ### Initial Configuration
 
+
 #### 1. GitHub Secrets
 
 Navigate to your GitHub repository → Settings → Secrets and variables → Actions
@@ -231,6 +154,11 @@ Add the following **secrets**:
 
 - `EMAIL_USERNAME`: IMAP email account username
 - `EMAIL_PASSWORD`: IMAP email account password (use app-specific password for Gmail/iCloud)
+- `AWS_ACCOUNT_ID`: Your AWS account ID (12-digit number)
+- `IMAP_HOST`: IMAP server hostname (e.g., `imap.gmail.com`, `imap.mail.me.com`)
+- `OWNER_EMAIL`: Property owner email address
+- `PROPERTIES_CONFIG_DEV`: JSON string with property configurations for dev environment (see below)
+- `PROPERTIES_CONFIG`: JSON string with property configurations for prod environment (see below)
 
 #### 2. GitHub Variables
 
@@ -238,12 +166,7 @@ Add the following **variables**:
 
 **Required:**
 - `AWS_REGION`: AWS region (e.g., `us-east-1`)
-- `AWS_ACCOUNT_ID`: Your AWS account ID (12-digit number)
 - `OIDC_ROLE_NAME`: `GitHubActionsOIDCRole` (IAM role for GitHub Actions)
-- `OWNER_EMAIL`: Property owner email address
-- `IMAP_HOST`: IMAP server hostname (e.g., `imap.gmail.com`, `imap.mail.me.com`)
-- `PROPERTIES_CONFIG_DEV`: JSON string with property configurations for dev environment (see below)
-- `PROPERTIES_CONFIG`: JSON string with property configurations for prod environment (see below)
 
 **Optional (with defaults):**
 - `NAMESPACE_PREFIX`: Resource name prefix (default: `bf`)
@@ -255,7 +178,7 @@ Add the following **variables**:
 
 #### 3. Properties Configuration
 
-Create two GitHub variables for your rental property configurations:
+Create two GitHub secrets for your rental property configurations:
 
 **`PROPERTIES_CONFIG_DEV`**: Development environment configuration (used when deploying to dev branch)
 **`PROPERTIES_CONFIG`**: Production environment configuration (used when deploying to main branch)
@@ -278,15 +201,29 @@ Both should contain JSON in this format:
           "name": "Primary Cleaner",
           "email": "cleaner1@example.com",
           "phone": "+1-555-0100",
+          "phoneEmail": "1234567890@vtext.com", // Optional: SMS via email (Verizon, AT&T, etc.)
           "rank": 1
         },
         {
           "name": "Backup Cleaner",
           "email": "cleaner2@example.com",
           "phone": "+1-555-0200",
+          "phoneEmail": "1234567890@txt.att.net",
           "rank": 2
         }
       ],
+      ### Cleaner SMS/Text Notification (phoneEmail)
+
+      Each cleaner object can include an optional `phoneEmail` property. This should be a valid email-to-SMS gateway address for the cleaner's mobile carrier. When present, the system will BCC this address on cleaner notification emails, allowing the cleaner to receive a text message alert while keeping the address private from other recipients.
+
+      **Examples:**
+
+      - Verizon: `1234567890@vtext.com`
+      - AT&T: `1234567890@txt.att.net`
+      - T-Mobile: `1234567890@tmomail.net`
+      - Sprint: `1234567890@messaging.sprintpcs.com`
+
+      This enables real-time SMS notifications for cleaners in addition to standard email.
       "metadata": {
         "propertyName": "Beach House",
         "bedrooms": 3,
@@ -304,7 +241,7 @@ Both should contain JSON in this format:
 }
 ```
 
-**Note**: Store these as single-line JSON strings in the GitHub variables. The deployment workflow will automatically select the appropriate configuration based on the environment (dev or prod) and write it to `config/properties.json`.
+**Note**: Store these as single-line JSON strings in the GitHub secrets. The deployment workflow will automatically select the appropriate configuration based on the environment (dev or prod) and write it to `config/properties.json`.
 
 #### 4. Email Provider Setup
 
@@ -467,7 +404,7 @@ aws lambda invoke \
 
 ### Cleaner Coordination Workflow (Updated)
 
-1. **Initial Contact**: Step Functions sends email to highest-ranked cleaner with YES/NO buttons.
+1. **Initial Contact**: Step Functions sends email to highest-ranked cleaner with YES/NO buttons. If the cleaner has a `phoneEmail`, it is included as a BCC for SMS notification.
 2. **Callback Wait**: Workflow pauses using task token, waiting for HTTP callback from cleaner.
 3. **Response Processing**:
   - **YES**: Calendar Lambda generates ICS invites for cleaner and owner (12:00 PM EST on checkout day)
@@ -712,11 +649,11 @@ Set by CloudFormation and available in Lambda:
 - `EMAIL_SECRET_NAME`: Secrets Manager secret ARN
 - `CLEANER_WORKFLOW_STATE_MACHINE_ARN`: Step Functions ARN
 - `BOOKING_STATE_BUCKET`: S3 bucket for booking state
-- `OWNER_EMAIL`: Property owner email
+- `OWNER_EMAIL`: Property owner email (from GitHub secret)
 - `OWNER_NAME`: Property owner name
-- `IMAP_HOST`: IMAP server hostname
+- `IMAP_HOST`: IMAP server hostname (from GitHub secret)
 - `IMAP_PORT`: IMAP server port
-- `PROPERTIES_CONFIG`: JSON property configuration
+- `PROPERTIES_CONFIG`: JSON property configuration (from GitHub secret)
 - `CALLBACK_API_URL`: API Gateway callback endpoint
 
 ## Support
