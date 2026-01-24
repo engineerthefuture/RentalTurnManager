@@ -324,6 +324,10 @@ Resources:
                 Resource: '*'
               - Effect: Allow
                 Action:
+                  - sns:Publish
+                Resource: '*'
+              - Effect: Allow
+                Action:
                   - logs:CreateLogDelivery
                   - logs:GetLogDelivery
                   - logs:UpdateLogDelivery
