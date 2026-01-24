@@ -139,6 +139,50 @@
           "Next": "CleanerConfirmed"
         }
       ],
+      "Default": "SendReminderEmail"
+    },
+    "SendReminderEmail": {
+      "Type": "Task",
+      "Comment": "Send reminder email to cleaner after no response to initial request",
+      "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail.waitForTaskToken",
+      "TimeoutSeconds": 10800,
+      "Parameters": {
+        "Source.$": "$.state.input.ownerEmail",
+        "Destination": {
+          "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
+          "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
+        },
+        "Message": {
+          "Subject": {
+            "Data.$": "States.Format('Reminder: Cleaning Request for {} on {}', $.state.propertyName, $.state.cleaningDate)"
+          },
+          "Body": {
+            "Html": {
+              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>This is a reminder regarding the cleaning request for <strong>{}</strong> on {}. Please respond if you are available.</p><p style=\"margin: 30px 0;\"><a href=\"{}/respond?token={}&response=yes\" style=\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\">YES - I am available</a><a href=\"{}/respond?token={}&response=no\" style=\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\">NO - Not available</a></p><p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.ownerName)"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.reminderResult",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.reminderError",
+          "Next": "IncrementCleanerIndex"
+        }
+      ],
+      "Next": "EvaluateReminderResponse"
+    },
+    "EvaluateReminderResponse": {
+      "Type": "Choice",
+      "Comment": "Check if cleaner confirmed after reminder",
+      "Choices": [
+        {
+          "Variable": "$.reminderResult.response",
+          "StringEquals": "yes",
+          "Next": "CleanerConfirmed"
+        }
+      ],
       "Default": "IncrementCleanerIndex"
     },
     "CleanerConfirmed": {
