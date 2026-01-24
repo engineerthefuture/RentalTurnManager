@@ -12,7 +12,7 @@ Rental Turn Manager automates the process of scheduling property cleanings when 
 - **Multi-Platform Support**: Parses bookings from Airbnb, VRBO, and Booking.com
 - **Smart Booking Tracking**: Uses S3 to track booking state and prevent duplicate processing
 - **Change Detection**: Automatically detects booking modifications and re-triggers workflows
-- **Automated Cleaner Coordination**: Contacts cleaners in priority order via email with confirm/deny links
+- **Automated Cleaner Coordination**: Contacts cleaners in priority order via email with confirm/deny links. Each cleaner can also have a `phoneEmail` property (e.g., `1234567890@vtext.com` for Verizon, `1234567890@txt.att.net` for AT&T, etc.) to receive SMS text notifications via email.
 - **Calendar Integration**: Sends ICS calendar invites with proper timezone handling to cleaners and owners
 - **Property Configuration**: Maintains property metadata, addresses, and cleaner preferences
 - **Multi-Environment**: Supports dev and prod deployments with GitHub Actions
@@ -201,15 +201,29 @@ Both should contain JSON in this format:
           "name": "Primary Cleaner",
           "email": "cleaner1@example.com",
           "phone": "+1-555-0100",
+          "phoneEmail": "1234567890@vtext.com", // Optional: SMS via email (Verizon, AT&T, etc.)
           "rank": 1
         },
         {
           "name": "Backup Cleaner",
           "email": "cleaner2@example.com",
           "phone": "+1-555-0200",
+          "phoneEmail": "1234567890@txt.att.net",
           "rank": 2
         }
       ],
+      ### Cleaner SMS/Text Notification (phoneEmail)
+
+      Each cleaner object can include an optional `phoneEmail` property. This should be a valid email-to-SMS gateway address for the cleaner's mobile carrier. When present, the system will CC this address on cleaner notification emails, allowing the cleaner to receive a text message alert.
+
+      **Examples:**
+
+      - Verizon: `1234567890@vtext.com`
+      - AT&T: `1234567890@txt.att.net`
+      - T-Mobile: `1234567890@tmomail.net`
+      - Sprint: `1234567890@messaging.sprintpcs.com`
+
+      This enables real-time SMS notifications for cleaners in addition to standard email.
       "metadata": {
         "propertyName": "Beach House",
         "bedrooms": 3,

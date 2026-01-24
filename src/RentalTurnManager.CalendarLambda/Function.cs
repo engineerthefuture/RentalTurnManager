@@ -341,8 +341,8 @@ public class Function
 }
 
 public class CalendarEmailRequest
-    public string? PropertyId { get; set; } = string.Empty;
 {
+    public string? PropertyId { get; set; } = string.Empty;
     public string FromEmail { get; set; } = string.Empty;
     public string ToEmail { get; set; } = string.Empty;
     public string CcEmail { get; set; } = string.Empty;
@@ -358,7 +358,6 @@ public class CalendarEmailRequest
     public string CleaningDate { get; set; } = string.Empty;
     public string? CleaningDateTime { get; set; }
     public string CleaningDuration { get; set; } = string.Empty;
-    
     // Booking details for state update
     public string? Platform { get; set; }
     public string? BookingReference { get; set; }
