@@ -106,7 +106,8 @@
         "Source.$": "$.state.input.ownerEmail",
         "Destination": {
           "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
-          "CcAddresses.$": "States.Array($.state.input.ownerEmail, $.state.currentCleaner.phoneEmail)"
+          "CcAddresses.$": "States.Array($.state.input.ownerEmail)",
+          "BccAddresses.$": "States.Array($.state.currentCleaner.phoneEmail)"
         },
         "Message": {
           "Subject": {
@@ -155,7 +156,8 @@
         "Source.$": "$.state.input.ownerEmail",
         "Destination": {
           "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
-          "CcAddresses.$": "States.Array($.state.input.ownerEmail, $.state.currentCleaner.phoneEmail)"
+          "CcAddresses.$": "States.Array($.state.input.ownerEmail)",
+          "BccAddresses.$": "States.Array($.state.currentCleaner.phoneEmail)"
         },
         "Message": {
           "Subject": {
