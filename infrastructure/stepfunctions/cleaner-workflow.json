@@ -131,12 +131,17 @@
     },
     "EvaluateResponse": {
       "Type": "Choice",
-      "Comment": "Check if cleaner confirmed availability",
+      "Comment": "Check if cleaner confirmed availability or declined",
       "Choices": [
         {
           "Variable": "$.emailResult.response",
           "StringEquals": "yes",
           "Next": "CleanerConfirmed"
+        },
+        {
+          "Variable": "$.emailResult.response",
+          "StringEquals": "no",
+          "Next": "IncrementCleanerIndex"
         }
       ],
       "Default": "SendReminderEmail"
