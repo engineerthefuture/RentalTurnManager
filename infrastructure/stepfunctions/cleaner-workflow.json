@@ -220,7 +220,7 @@
                   "CleaningDuration.$": "$.state.cleaningDuration",
                   "Platform.$": "$.state.input.booking.platform",
                   "BookingReference.$": "$.state.input.booking.bookingReference",
-                  "BookingStateBucket.$": "$.state.input.bookingStateBucket"
+                  "BookingStateBucket.$": "$.bookingStateBucket"
                 }
               },
               "End": true
@@ -253,7 +253,7 @@
                   "CleaningDuration.$": "$.state.cleaningDuration",
                   "Platform.$": "$.state.input.booking.platform",
                   "BookingReference.$": "$.state.input.booking.bookingReference",
-                  "BookingStateBucket.$": "$.state.input.bookingStateBucket"
+                  "BookingStateBucket.$": "$.bookingStateBucket"
                 }
               },
               "End": true
