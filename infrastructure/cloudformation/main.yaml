@@ -359,6 +359,12 @@ Resources:
         Key: !Sub '${AppName}/stepfunctions/${Environment}/cleaner-workflow.json'
       DefinitionSubstitutions:
         CalendarLambdaArn: !GetAtt CalendarLambda.Arn
+      LoggingConfiguration:
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt StepFunctionsLogGroup.Arn
+        Level: ALL
+        IncludeExecutionData: true
       Tags:
         - Key: OwnerName
           Value: !Ref OwnerName
