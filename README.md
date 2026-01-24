@@ -129,42 +129,56 @@ sequenceDiagram
         
         loop For each cleaner (by rank)
             SF->>SES: Send confirmation request
-            SES->>Cleaner: Email with confirm/deny links
-            
+            SES->>Cleaner: Email with YES/NO buttons
+
             alt Cleaner confirms
-                Cleaner->>APIGW: Click confirm link
+              Cleaner->>APIGW: Click YES link
+              APIGW->>CBL: HTTP request
+              CBL->>SF: Send success token
+
+              SF->>CL: Generate calendar invites
+              CL->>S3: Update booking with cleaner details
+
+              par Send to cleaner
+                CL->>SES: Send calendar invite
+                SES->>Cleaner: ICS attachment
+              and Send to owner
+                CL->>SES: Send calendar invite
+                SES->>Owner: ICS attachment with cleaner info
+              end
+
+              Note over SF: Workflow complete
+            else Cleaner declines
+              Cleaner->>APIGW: Click NO link
+              APIGW->>CBL: HTTP request
+              CBL->>SF: Send failure token
+              Note over SF: Try next cleaner
+            else Timeout (9 hours)
+              SF->>SES: Send reminder email (YES/NO buttons)
+              SES->>Cleaner: Reminder email
+              alt Cleaner confirms after reminder
+                Cleaner->>APIGW: Click YES link
                 APIGW->>CBL: HTTP request
                 CBL->>SF: Send success token
-                
-                SF->>CL: Generate calendar invites
-                CL->>S3: Update booking with cleaner details
-                
-                par Send to cleaner
-                    CL->>SES: Send calendar invite
-                    SES->>Cleaner: ICS attachment
-                and Send to owner
-                    CL->>SES: Send calendar invite
-                    SES->>Owner: ICS attachment with cleaner info
-                end
-                
-                Note over SF: Workflow complete
-            else Cleaner declines
-                Cleaner->>APIGW: Click decline link
+                ... (calendar invite as above)
+              else Cleaner declines after reminder
+                Cleaner->>APIGW: Click NO link
                 APIGW->>CBL: HTTP request
                 CBL->>SF: Send failure token
                 Note over SF: Try next cleaner
-            else Timeout (9 hours)
+              else Timeout (3 hours after reminder)
                 Note over SF: Try next cleaner
+              end
             end
-        end
-        
-        alt All cleaners declined/timeout
+          end
+
+          alt All cleaners declined/timeout
             SF->>SES: Send escalation email
             SES->>Owner: Manual coordination needed
+          end
+        else Booking unchanged
+          Note over ML: Skip - no workflow needed
         end
-    else Booking unchanged
-        Note over ML: Skip - no workflow needed
-    end
 ```
 
 ## Project Structure
@@ -448,20 +462,33 @@ aws lambda invoke \
 5. **Property Matching**: Looks up property configuration using platform-specific listing IDs
 6. **Workflow Trigger**: Starts Step Functions workflow with booking and property details
 
-### Cleaner Coordination Workflow
 
-1. **Initial Contact**: Step Functions sends email to highest-ranked cleaner with confirm/deny links
-2. **Callback Wait**: Workflow pauses using task token, waiting for HTTP callback from cleaner
+### Cleaner Coordination Workflow (Updated)
+
+1. **Initial Contact**: Step Functions sends email to highest-ranked cleaner with YES/NO buttons.
+2. **Callback Wait**: Workflow pauses using task token, waiting for HTTP callback from cleaner.
 3. **Response Processing**:
-   - **Confirmed**: Calendar Lambda generates ICS invites for cleaner and owner (12:00 PM EST on checkout day)
-   - **Declined**: Workflow contacts next cleaner in ranked list
-   - **Timeout**: After configured period, moves to next cleaner
+  - **YES**: Calendar Lambda generates ICS invites for cleaner and owner (12:00 PM EST on checkout day)
+  - **NO**: Workflow contacts next cleaner in ranked list
+  - **Timeout (9 hours)**: Sends a reminder email to the cleaner (with YES/NO buttons), waits an additional 3 hours for a response
+  - **Reminder Response**:
+    - **YES**: Calendar Lambda generates ICS invites
+    - **NO**: Workflow contacts next cleaner
+    - **Timeout (3 hours after reminder)**: Workflow contacts next cleaner
 4. **Calendar Invites**: 
-   - Includes property address, guest details, cleaning duration
-   - Adds cleaner as required participant, owner as optional participant
-   - Proper timezone conversion (Eastern Time)
-   - Sent via Amazon SES with raw MIME format
+  - Includes property address, guest details, cleaning duration
+  - Adds cleaner as required participant, owner as optional participant
+  - Proper timezone conversion (Eastern Time)
+  - Sent via Amazon SES with raw MIME format
 5. **Escalation**: If all cleaners decline or timeout, notifies property owner
+
+#### Email Button Labels
+
+- Both the initial and reminder emails now use simple "YES" and "NO" buttons for cleaner responses.
+
+#### Dev Environment Scheduling
+
+- The CloudFormation template disables scheduled execution for the dev environment by default. To enable, update the stack parameters or template.
 
 ### Booking Change Detection
 
