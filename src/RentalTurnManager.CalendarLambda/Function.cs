@@ -17,6 +17,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using System.Text;
 using System.Text.Json;
+using RentalTurnManager.Models;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
