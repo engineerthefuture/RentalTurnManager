@@ -130,7 +130,7 @@
                 {
                   "ErrorEquals": ["States.ALL"],
                   "ResultPath": "$.error",
-                  "Next": "IncrementCleanerIndex"
+                  "Next": "NotifyCleanerParallel.Failed"
                 }
               ],
               "End": true
