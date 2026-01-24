@@ -145,6 +145,7 @@ RentalTurnManager/
 
 ### Initial Configuration
 
+
 #### 1. GitHub Secrets
 
 Navigate to your GitHub repository → Settings → Secrets and variables → Actions
@@ -153,6 +154,11 @@ Add the following **secrets**:
 
 - `EMAIL_USERNAME`: IMAP email account username
 - `EMAIL_PASSWORD`: IMAP email account password (use app-specific password for Gmail/iCloud)
+- `AWS_ACCOUNT_ID`: Your AWS account ID (12-digit number)
+- `IMAP_HOST`: IMAP server hostname (e.g., `imap.gmail.com`, `imap.mail.me.com`)
+- `OWNER_EMAIL`: Property owner email address
+- `PROPERTIES_CONFIG_DEV`: JSON string with property configurations for dev environment (see below)
+- `PROPERTIES_CONFIG`: JSON string with property configurations for prod environment (see below)
 
 #### 2. GitHub Variables
 
@@ -160,12 +166,7 @@ Add the following **variables**:
 
 **Required:**
 - `AWS_REGION`: AWS region (e.g., `us-east-1`)
-- `AWS_ACCOUNT_ID`: Your AWS account ID (12-digit number)
 - `OIDC_ROLE_NAME`: `GitHubActionsOIDCRole` (IAM role for GitHub Actions)
-- `OWNER_EMAIL`: Property owner email address
-- `IMAP_HOST`: IMAP server hostname (e.g., `imap.gmail.com`, `imap.mail.me.com`)
-- `PROPERTIES_CONFIG_DEV`: JSON string with property configurations for dev environment (see below)
-- `PROPERTIES_CONFIG`: JSON string with property configurations for prod environment (see below)
 
 **Optional (with defaults):**
 - `NAMESPACE_PREFIX`: Resource name prefix (default: `bf`)
@@ -177,7 +178,7 @@ Add the following **variables**:
 
 #### 3. Properties Configuration
 
-Create two GitHub variables for your rental property configurations:
+Create two GitHub secrets for your rental property configurations:
 
 **`PROPERTIES_CONFIG_DEV`**: Development environment configuration (used when deploying to dev branch)
 **`PROPERTIES_CONFIG`**: Production environment configuration (used when deploying to main branch)
@@ -226,7 +227,7 @@ Both should contain JSON in this format:
 }
 ```
 
-**Note**: Store these as single-line JSON strings in the GitHub variables. The deployment workflow will automatically select the appropriate configuration based on the environment (dev or prod) and write it to `config/properties.json`.
+**Note**: Store these as single-line JSON strings in the GitHub secrets. The deployment workflow will automatically select the appropriate configuration based on the environment (dev or prod) and write it to `config/properties.json`.
 
 #### 4. Email Provider Setup
 
@@ -634,11 +635,11 @@ Set by CloudFormation and available in Lambda:
 - `EMAIL_SECRET_NAME`: Secrets Manager secret ARN
 - `CLEANER_WORKFLOW_STATE_MACHINE_ARN`: Step Functions ARN
 - `BOOKING_STATE_BUCKET`: S3 bucket for booking state
-- `OWNER_EMAIL`: Property owner email
+- `OWNER_EMAIL`: Property owner email (from GitHub secret)
 - `OWNER_NAME`: Property owner name
-- `IMAP_HOST`: IMAP server hostname
+- `IMAP_HOST`: IMAP server hostname (from GitHub secret)
 - `IMAP_PORT`: IMAP server port
-- `PROPERTIES_CONFIG`: JSON property configuration
+- `PROPERTIES_CONFIG`: JSON property configuration (from GitHub secret)
 - `CALLBACK_API_URL`: API Gateway callback endpoint
 
 ## Support

@@ -21,8 +21,10 @@ on:
 env:
   DOTNET_VERSION: '10.0.x'
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
   OIDC_ROLE_NAME: ${{ vars.OIDC_ROLE_NAME }}
+  IMAP_HOST: ${{ secrets.IMAP_HOST }}
+  OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
 
 jobs:
   test:
@@ -117,11 +119,11 @@ jobs:
         run: |
           if [ "${{ env.ENVIRONMENT }}" = "dev" ]; then
             cat > config/properties.json << 'EOF'
-          ${{ vars.PROPERTIES_CONFIG_DEV }}
+          ${{ secrets.PROPERTIES_CONFIG_DEV }}
           EOF
           else
             cat > config/properties.json << 'EOF'
-          ${{ vars.PROPERTIES_CONFIG }}
+          ${{ secrets.PROPERTIES_CONFIG }}
           EOF
           fi
 
@@ -176,7 +178,7 @@ jobs:
           
           # Prepare JSON parameters (minify to single line and create override parameters file)
           cat > /tmp/properties.json << 'PROPERTIES_EOF'
-          ${{ env.ENVIRONMENT == 'dev' && vars.PROPERTIES_CONFIG_DEV || vars.PROPERTIES_CONFIG || '{}' }}
+          ${{ env.ENVIRONMENT == 'dev' && secrets.PROPERTIES_CONFIG_DEV || secrets.PROPERTIES_CONFIG || '{}' }}
           PROPERTIES_EOF
           cat > /tmp/templates.json << 'TEMPLATES_EOF'
           ${{ vars.MESSAGE_TEMPLATES || '{}' }}
@@ -189,8 +191,8 @@ jobs:
             --arg environment "${{ env.ENVIRONMENT }}" \
             --arg email_user "${{ secrets.EMAIL_USERNAME }}" \
             --arg email_pass "${{ secrets.EMAIL_PASSWORD }}" \
-            --arg owner_email "${{ vars.OWNER_EMAIL }}" \
-            --arg imap_host "${{ vars.IMAP_HOST }}" \
+            --arg owner_email "${{ secrets.OWNER_EMAIL }}" \
+            --arg imap_host "${{ secrets.IMAP_HOST }}" \
             --arg imap_port "${{ vars.IMAP_PORT || '993' }}" \
             --arg schedule "${{ vars.SCHEDULE_INTERVAL || 'rate(15 minutes)' }}" \
             --arg owner_name "${{ vars.OWNER_NAME || 'Property Owner' }}" \
