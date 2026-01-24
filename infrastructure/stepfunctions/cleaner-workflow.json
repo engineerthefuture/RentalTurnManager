@@ -111,8 +111,8 @@
               "Parameters": {
                 "Source.$": "$.state.input.ownerEmail",
                 "Destination": {
-                  "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
-                  "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
+                  "ToAddresses.$": "[ $.state.currentCleaner.email ]",
+                  "CcAddresses.$": "[ $.state.input.ownerEmail ]"
                 },
                 "Message": {
                   "Subject": {
@@ -130,7 +130,7 @@
                 {
                   "ErrorEquals": ["States.ALL"],
                   "ResultPath": "$.error",
-                  "Next": "NotifyCleanerParallel.Failed"
+                  "Next": "EvaluateResponse"
                 }
               ],
               "End": true
