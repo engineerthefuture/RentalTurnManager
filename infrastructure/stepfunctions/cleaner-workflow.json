@@ -13,55 +13,30 @@
       "ResultPath": "$.state",
       "Next": "CheckCleanerList"
     },
-    "CheckCleanerList": {
-      "Type": "Pass",
-      "Comment": "Get cleaner count for comparison",
-      "Parameters": {
-        "input.$": "$.state.input",
-        "cleanersCount.$": "States.ArrayLength($.state.input.property.cleaners)"
-      },
-      "ResultPath": "$.state.checkData",
-      "Next": "CompareCleanerIndex"
-    },
-    "CompareCleanerIndex": {
-      "Type": "Choice",
-      "Comment": "Check if current index is beyond cleaner list",
-      "Choices": [
-        {
-          "Variable": "$.state.input.currentCleanerIndex",
-          "NumericLessThanPath": "$.state.checkData.cleanersCount",
-          "Next": "GetCurrentCleaner"
-        }
-      ],
-      "Default": "PrepareEscalation"
-    },
-    "PrepareEscalation": {
-      "Type": "Pass",
-      "Comment": "Extract values needed for escalation email",
-      "Parameters": {
-        "input.$": "$.state.input",
-        "propertyName.$": "$.state.input.property.metadata.propertyName",
-        "propertyAddress.$": "$.state.input.property.address",
-        "checkInDate.$": "$.state.input.booking.checkInDate",
-        "checkOutDate.$": "$.state.input.booking.checkOutDate",
-        "cleaningDate.$": "States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0)",
-        "numberOfGuests.$": "$.state.input.booking.numberOfGuests",
-        "numberOfNights.$": "$.state.input.booking.numberOfDays",
-        "platform.$": "$.state.input.booking.platform",
-        "bookingRef.$": "$.state.input.booking.bookingReference",
-        "guestName.$": "$.state.input.booking.guestName",
-        "ownerName.$": "$.state.input.property.metadata.ownerName"
-      },
-      "ResultPath": "$.state",
-      "Next": "AllCleanersExhausted"
-    },
-    "GetCurrentCleaner": {
-      "Type": "Pass",
-      "Comment": "Extract current cleaner object from array",
-      "Parameters": {
-        "input.$": "$.state.input",
-        "currentCleaner.$": "States.ArrayGetItem($.state.input.property.cleaners, $.state.input.currentCleanerIndex)",
-        "propertyName.$": "$.state.input.property.metadata.propertyName",
+            "SendCleanerRequestEmail": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail.waitForTaskToken",
+              "TimeoutSeconds": 32400,
+              "Parameters": {
+                "Source.$": "$.state.input.ownerEmail",
+                "Destination": {
+                  "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
+                  "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
+                },
+                "Message": {
+                  "Subject": {
+                    "Data.$": "States.Format('Cleaning Request for {} on {}', $.state.propertyName, $.state.cleaningDate)"
+                  },
+                  "Body": {
+                    "Html": {
+                      "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li><li>Guests: {}</li><li>Nights: {}</li></ul><p>Are you available on {} at 12:00 PM to do a cleaning and laundry turnover at {}?</p><p style=\\\"margin: 30px 0;\\\"><a href=\\\"{}/respond?token={}&response=yes\\\" style=\\\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\\\">YES</a><a href=\\\"{}/respond?token={}&response=no\\\" style=\\\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\\\">NO</a></p><p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress, $.state.numberOfGuests, $.state.numberOfNights, $.state.cleaningDate, $.state.propertyAddress, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.ownerName)"
+                    }
+                  }
+                }
+              },
+              "ResultPath": "$.emailResult",
+              "End": true
+            }
         "propertyAddress.$": "$.state.input.property.address",
         "cleaningDateTime.$": "$.state.input.cleaningDateTime",
         "cleaningDate.$": "States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0)",
