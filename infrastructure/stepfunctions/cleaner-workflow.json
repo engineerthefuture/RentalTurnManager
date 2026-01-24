@@ -164,6 +164,16 @@
     },
     "CleanerConfirmed": {
       "Type": "Succeed"
+    },
+    "PrepareEscalation": {
+      "Type": "Pass",
+      "Comment": "Prepare escalation when all cleaners exhausted",
+      "Next": "WorkflowFailed"
+    },
+    "WorkflowFailed": {
+      "Type": "Fail",
+      "Error": "NoCleanerAvailable",
+      "Cause": "All cleaners in the list were contacted but none confirmed availability"
     }
   }
 }
