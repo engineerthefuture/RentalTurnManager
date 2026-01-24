@@ -87,7 +87,7 @@
               "Resource": "arn:aws:states:::aws-sdk:sns:publish",
               "Parameters": {
                 "PhoneNumber.$": "$.state.currentCleaner.phone",
-                "Message.$": "States.Format('Cleaning request for {} on {}. Reply by tapping YES or NO: {}/respond?token={}&response=yes | {}/respond?token={}&response=no', $.state.propertyName, $.state.cleaningDate, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token)"
+                "Message.$": "States.Format('Cleaning request for {} on {}. Respond YES or NO: {}/respond?executionId={}&response=yes | {}/respond?executionId={}&response=no', $.state.propertyName, $.state.cleaningDate, $.state.input.callbackApiUrl, $$.Execution.Id, $.state.input.callbackApiUrl, $$.Execution.Id)"
               },
               "End": true
             }
@@ -145,7 +145,7 @@
               "Resource": "arn:aws:states:::aws-sdk:sns:publish",
               "Parameters": {
                 "PhoneNumber.$": "$.state.currentCleaner.phone",
-                "Message.$": "States.Format('Reminder: cleaning request for {}. Please respond: {}/respond?token={}&response=yes | {}/respond?token={}&response=no', $.state.propertyName, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token)"
+                "Message.$": "States.Format('Reminder: cleaning request for {}. Respond here: {}/respond?executionId={}&response=yes | {}/respond?executionId={}&response=no', $.state.propertyName, $.state.input.callbackApiUrl, $$.Execution.Id, $.state.input.callbackApiUrl, $$.Execution.Id)"
               },
               "End": true
             }
