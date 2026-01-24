@@ -18,92 +18,92 @@ Rental Turn Manager automates the process of scheduling property cleanings when 
 - **Multi-Environment**: Supports dev and prod deployments with GitHub Actions
 - **Secure Credentials**: Uses AWS Secrets Manager for email credentials
 
-## Architecture
-
-### Components
-
-1. **Main Lambda (C# .NET 10)**: Scheduled function that scans IMAP inbox, parses bookings, checks for changes, and triggers workflows
-2. **Calendar Lambda (C# .NET 10)**: Generates and sends ICS calendar invites with timezone support via Amazon SES
-3. **Callback Lambda (C# .NET 10)**: HTTP endpoint that receives cleaner responses and signals Step Functions
-4. **Step Functions Workflow**: Orchestrates the cleaner coordination process with wait states and callbacks
-5. **S3 Bucket**: Stores booking state as JSON files organized by platform and confirmation code
-6. **CloudFormation Stack**: Infrastructure as code defining all AWS resources
-7. **GitHub Actions**: CI/CD pipeline with OIDC authentication
-
-### AWS Services Used
-
-- **AWS Lambda** (C# .NET 10): Email scanning, booking parsing, calendar generation, callback handling
-- **AWS Step Functions**: Workflow orchestration with task callbacks
-- **Amazon S3**: Booking state persistence and change tracking
-- **AWS Secrets Manager**: Secure email credential storage
-- **Amazon EventBridge**: Scheduled Lambda invocations (configurable interval)
-- **Amazon SES**: Outbound email sending (cleaner notifications, calendar invites)
-- **API Gateway HTTP**: RESTful callback endpoint for cleaner responses
-- **CloudWatch Logs**: Centralized logging and monitoring
-- **AWS CloudFormation**: Infrastructure as code deployment
-
-### Architecture Diagram
-
-```mermaid
-graph TB
-    subgraph "Scheduled Trigger"
-        EB[EventBridge Rule<br/>15 min interval]
-    end
-    
-    subgraph "Email Processing"
-        ML[Main Lambda<br/>Email Scanner]
-        IMAP[IMAP Email Server<br/>Gmail/iCloud]
-        SM[Secrets Manager<br/>Email Credentials]
-        S3[S3 Bucket<br/>Booking State]
-    end
-    
-    subgraph "Workflow Orchestration"
-        SF[Step Functions<br/>Cleaner Workflow]
-        CL[Calendar Lambda<br/>ICS Generator]
-        CBL[Callback Lambda<br/>Response Handler]
-    end
-    
-    subgraph "External Communication"
-        SES[Amazon SES<br/>Email Delivery]
-        APIGW[API Gateway<br/>HTTP Callback]
-        Cleaner[Cleaner Email<br/>Confirm/Deny Links]
-        Owner[Property Owner<br/>Notifications]
-    end
-    
-    EB -->|Invoke| ML
-    ML -->|Get Credentials| SM
-    ML -->|Scan Emails| IMAP
-    ML -->|Check/Update State| S3
-    ML -->|Start Execution| SF
-    
-    SF -->|Contact Cleaner| SES
-    SF -->|Wait for Response| APIGW
-    SF -->|Generate Calendar| CL
-    
-    CL -->|Update State| S3
-    CL -->|Send Invite| SES
-    
-    SES -->|Email| Cleaner
-    SES -->|Email| Owner
-    Cleaner -->|Click Link| APIGW
-    APIGW -->|Invoke| CBL
-    CBL -->|Send Token| SF
-    
-    style ML fill:#ff9900
-    style CL fill:#ff9900
-    style CBL fill:#ff9900
-    style SF fill:#e7157b
-    style S3 fill:#569a31
-    style SES fill:#dd344c
-```
-
-### Workflow Sequence Diagram
-
 ```mermaid
 sequenceDiagram
-    participant EB as EventBridge
-    participant ML as Main Lambda
-    participant IMAP as Email Server
+  participant EB as EventBridge
+  participant ML as Main Lambda
+  participant IMAP as Email Server
+  participant S3 as S3 Bucket
+  participant SF as Step Functions
+  participant SES as Amazon SES
+  participant Cleaner as Cleaner
+  participant APIGW as API Gateway
+  participant CBL as Callback Lambda
+  participant CL as Calendar Lambda
+  participant Owner as Property Owner
+
+  EB->>ML: Trigger (every 15 min)
+  ML->>IMAP: Scan for booking emails
+  IMAP-->>ML: Return booking emails
+
+  ML->>ML: Parse booking details
+  Note over ML: Extract confirmation code, dates, guests, property
+
+  ML->>S3: Check existing booking state
+  S3-->>ML: Return previous state (if exists)
+
+  alt Booking changed or new
+    ML->>S3: Save updated booking state
+    ML->>SF: Start cleaner workflow
+
+    loop For each cleaner (by rank)
+      SF->>SES: Send confirmation request
+      SES->>Cleaner: Email with YES/NO buttons
+      alt Cleaner confirms
+        Cleaner->>APIGW: Click YES link
+        APIGW->>CBL: HTTP request
+        CBL->>SF: Send success token
+        SF->>CL: Generate calendar invites
+        CL->>S3: Update booking with cleaner details
+        par Send to cleaner
+          CL->>SES: Send calendar invite
+          SES->>Cleaner: ICS attachment
+        and Send to owner
+          CL->>SES: Send calendar invite
+          SES->>Owner: ICS attachment with cleaner info
+        end
+        Note over SF: Workflow complete
+      else Cleaner declines
+        Cleaner->>APIGW: Click NO link
+        APIGW->>CBL: HTTP request
+        CBL->>SF: Send failure token
+        Note over SF: Try next cleaner
+      else Timeout (9 hours)
+        SF->>SES: Send reminder email (YES/NO buttons)
+        SES->>Cleaner: Reminder email
+        alt Cleaner confirms after reminder
+          Cleaner->>APIGW: Click YES link
+          APIGW->>CBL: HTTP request
+          CBL->>SF: Send success token
+          SF->>CL: Generate calendar invites
+          CL->>S3: Update booking with cleaner details
+          par Send to cleaner
+            CL->>SES: Send calendar invite
+            SES->>Cleaner: ICS attachment
+          and Send to owner
+            CL->>SES: Send calendar invite
+            SES->>Owner: ICS attachment with cleaner info
+          end
+          Note over SF: Workflow complete
+        else Cleaner declines after reminder
+          Cleaner->>APIGW: Click NO link
+          APIGW->>CBL: HTTP request
+          CBL->>SF: Send failure token
+          Note over SF: Try next cleaner
+        else Timeout (3 hours after reminder)
+          Note over SF: Try next cleaner
+        end
+      end
+    end
+
+    alt All cleaners declined or timed out
+      SF->>SES: Send escalation email
+      SES->>Owner: Manual coordination needed
+    end
+  else Booking unchanged
+    Note over ML: Skip - no workflow needed
+  end
+```
     participant S3 as S3 Bucket
     participant SF as Step Functions
     participant SES as Amazon SES
@@ -128,8 +128,10 @@ sequenceDiagram
         ML->>SF: Start cleaner workflow
         
         loop For each cleaner (by rank)
-            SF->>SES: Send confirmation request
-            SES->>Cleaner: Email with YES/NO buttons
+          SF->>SES: Send confirmation request
+          SES->>Cleaner: Email with YES/NO buttons
+          SF->>SNS: Send SMS notification
+          SNS->>Cleaner: Text message with cleaning request
 
             alt Cleaner confirms
               Cleaner->>APIGW: Click YES link

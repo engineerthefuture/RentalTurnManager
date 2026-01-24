@@ -127,6 +127,17 @@
           "Next": "IncrementCleanerIndex"
         }
       ],
+      "Next": "SendCleanerSMS"
+    },
+    "SendCleanerSMS": {
+      "Type": "Task",
+      "Comment": "Send SMS to cleaner with cleaning request",
+      "Resource": "arn:aws:states:::aws-sdk:sns:publish",
+      "Parameters": {
+        "PhoneNumber.$": "$.state.currentCleaner.phone",
+        "Message.$": "States.Format('Cleaning request for {} on {} at {}. Please check your email for details and confirm availability.', $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress)"
+      },
+      "ResultPath": "$.smsResult",
       "Next": "EvaluateResponse"
     },
     "EvaluateResponse": {
@@ -171,6 +182,17 @@
           "Next": "IncrementCleanerIndex"
         }
       ],
+      "Next": "SendReminderSMS"
+    },
+    "SendReminderSMS": {
+      "Type": "Task",
+      "Comment": "Send SMS reminder to cleaner",
+      "Resource": "arn:aws:states:::aws-sdk:sns:publish",
+      "Parameters": {
+        "PhoneNumber.$": "$.state.currentCleaner.phone",
+        "Message.$": "States.Format('Reminder: Cleaning request for {} on {} at {}. Please check your email for details and confirm availability.', $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress)"
+      },
+      "ResultPath": "$.reminderSmsResult",
       "Next": "EvaluateReminderResponse"
     },
     "EvaluateReminderResponse": {
