@@ -292,35 +292,45 @@
       "Type": "Pass",
       "Comment": "Move to next cleaner in list",
       "Parameters": {
-        "input": {
-          "booking.$": "$.state.input.booking",
-          "property.$": "$.state.input.property",
-          "cleaningDateTime.$": "$.state.input.cleaningDateTime",
-          "currentCleanerIndex.$": "States.MathAdd($.state.input.currentCleanerIndex, 1)",
-          "attemptCount.$": "States.MathAdd($.state.input.attemptCount, 1)",
-          "ownerEmail.$": "$.state.input.ownerEmail",
-          "callbackApiUrl.$": "$.state.input.callbackApiUrl"
+        {
+          "StartAt": "WrapEmailAddresses",
+          "States": {
+            "WrapEmailAddresses": {
+              "Type": "Pass",
+              "Parameters": {
+                "Source.$": "$.state.input.ownerEmail",
+                "ToAddresses.$": "$.state.currentCleaner.email",
+                "CcAddresses.$": "$.state.input.ownerEmail"
+              },
+              "ResultPath": "$.emailAddresses",
+              "Next": "SendCleanerRequestEmail"
+            },
+            "SendCleanerRequestEmail": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail.waitForTaskToken",
+              "TimeoutSeconds": 32400,
+              "Parameters": {
+                "Source.$": "$.emailAddresses.Source",
+                "Destination": {
+                  "ToAddresses": [ { "Ref": "$.emailAddresses.ToAddresses" } ],
+                  "CcAddresses": [ { "Ref": "$.emailAddresses.CcAddresses" } ]
+                },
+                "Message": {
+                  "Subject": {
+                    "Data.$": "States.Format('Cleaning Request for {} on {}', $.state.propertyName, $.state.cleaningDate)"
+                  },
+                  "Body": {
+                    "Html": {
+                      "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li><li>Guests: {}</li><li>Nights: {}</li></ul><p>Are you available on {} at 12:00 PM to do a cleaning and laundry turnover at {}?</p><p style=\\\"margin: 30px 0;\\\"><a href=\\\"{}/respond?token={}&response=yes\\\" style=\\\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\\\">YES</a><a href=\\\"{}/respond?token={}&response=no\\\" style=\\\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\\\">NO</a></p><p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress, $.state.numberOfGuests, $.state.numberOfNights, $.state.cleaningDate, $.state.propertyAddress, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.ownerName)"
+                    }
+                  }
+                }
+              },
+              "ResultPath": "$.emailResult",
+              "End": true
+            }
+          }
         },
-        "cleanerConfirmed": false,
-        "allCleanersExhausted": false
-      },
-      "ResultPath": "$.state",
-      "Next": "CheckCleanerList"
-    },
-    "AllCleanersExhausted": {
-      "Type": "Task",
-      "Comment": "Send escalation email to owner",
-      "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail",
-      "Parameters": {
-        "Source.$": "$.state.input.ownerEmail",
-        "Destination": {
-          "ToAddresses.$": "States.Array($.state.input.ownerEmail)"
-        },
-        "Message": {
-          "Subject": {
-            "Data.$": "States.Format('URGENT: Unable to Schedule Cleaning for {} on {}', $.state.propertyName, $.state.cleaningDate)"
-          },
-          "Body": {
             "Html": {
               "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We were unable to secure a cleaner for the following booking:</p><ul><li>Property: {}</li><li>Check-in Date: {}</li><li>Checkout Date: {}</li><li>Cleaning Date: {}</li><li>Address: {}</li><li>Guests: {}</li><li>Nights: {}</li></ul><p>All preferred cleaners were contacted and either declined or did not respond.</p><p><strong>Please arrange for cleaning services manually.</strong></p><h3>Booking Details:</h3><ul><li>Platform: {}</li><li>Booking Reference: {}</li><li>Guest Name: {}</li></ul><p>Thank you,<br/>{}</p></body></html>', $.state.ownerName, $.state.propertyName, $.state.checkInDate, $.state.checkOutDate, $.state.cleaningDate, $.state.propertyAddress, $.state.numberOfGuests, $.state.numberOfNights, $.state.platform, $.state.bookingRef, $.state.guestName, $.state.ownerName)"
             }
