@@ -17,7 +17,6 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using System.Text;
 using System.Text.Json;
-using RentalTurnManager.Models;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
@@ -50,27 +49,6 @@ public class Function
     {
         context.Logger.LogInformation($"Generating calendar invite email for {request.ToEmail}");
 
-
-        // Try to extract phoneEmail from the assigned cleaner in property config (if present)
-        string ccEmail = request.CcEmail;
-        try
-        {
-            if (!string.IsNullOrEmpty(request.PropertyId) && !string.IsNullOrEmpty(request.CleanerEmail) && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PROPERTIES_CONFIG")))
-            {
-                var propertiesConfig = System.Text.Json.JsonSerializer.Deserialize<RentalTurnManager.Models.PropertiesConfiguration>(Environment.GetEnvironmentVariable("PROPERTIES_CONFIG"), new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                var property = propertiesConfig?.Properties?.FirstOrDefault(p => p.PropertyId == request.PropertyId);
-                var cleaner = property?.Cleaners?.FirstOrDefault(c => c.Email == request.CleanerEmail);
-                if (cleaner != null && !string.IsNullOrEmpty(cleaner.PhoneEmail))
-                {
-                    if (string.IsNullOrEmpty(ccEmail))
-                        ccEmail = cleaner.PhoneEmail;
-                    else
-                        ccEmail = ccEmail + "," + cleaner.PhoneEmail;
-                }
-            }
-        }
-        catch { /* fallback to original cc if any error */ }
-
         // Generate ICS content
         var icsContent = GenerateIcsContent(
             request.CleanerName,
@@ -89,7 +67,7 @@ public class Function
         var rawMessage = CreateRawEmailWithAttachment(
             request.FromEmail,
             request.ToEmail,
-            ccEmail,
+            request.CcEmail,
             request.Subject,
             request.HtmlBody,
             icsContent,
@@ -343,7 +321,6 @@ public class Function
 
 public class CalendarEmailRequest
 {
-    public string? PropertyId { get; set; } = string.Empty;
     public string FromEmail { get; set; } = string.Empty;
     public string ToEmail { get; set; } = string.Empty;
     public string CcEmail { get; set; } = string.Empty;
@@ -359,6 +336,7 @@ public class CalendarEmailRequest
     public string CleaningDate { get; set; } = string.Empty;
     public string? CleaningDateTime { get; set; }
     public string CleaningDuration { get; set; } = string.Empty;
+    
     // Booking details for state update
     public string? Platform { get; set; }
     public string? BookingReference { get; set; }
