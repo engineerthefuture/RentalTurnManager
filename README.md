@@ -10,9 +10,9 @@ Rental Turn Manager automates the process of scheduling property cleanings when 
 
 - **Email Monitoring**: Scans IMAP inbox for all booking confirmations on a scheduled basis
 - **Multi-Platform Support**: Parses bookings from Airbnb, VRBO, and Booking.com
-- **Smart Booking Tracking**: Uses S3 to track booking state and prevent duplicate processing
+- **Smart Booking Tracking**: Uses S3 to track booking state and prevent duplicate processing. The Step Function now references the booking state bucket at the root of the input object, fixing previous workflow errors related to JSONPath.
 - **Change Detection**: Automatically detects booking modifications and re-triggers workflows
-- **Automated Cleaner Coordination**: Contacts cleaners in priority order via email with confirm/deny links. Each cleaner can also have a `phoneEmail` property (e.g., `1234567890@vtext.com` for Verizon, `1234567890@txt.att.net` for AT&T, etc.) to receive SMS text notifications via email.
+- **Automated Cleaner Coordination**: Contacts cleaners in priority order via email with confirm/deny links. Each cleaner can also have a `phoneEmail` property (e.g., `1234567890@vtext.com` for Verizon, `1234567890@txt.att.net` for AT&T, etc.) to receive SMS text notifications via email. As of January 2026, the system now sends these notifications as BCC (not CC) for privacy.
 - **Calendar Integration**: Sends ICS calendar invites with proper timezone handling to cleaners and owners
 - **Property Configuration**: Maintains property metadata, addresses, and cleaner preferences
 - **Multi-Environment**: Supports dev and prod deployments with GitHub Actions
@@ -214,7 +214,7 @@ Both should contain JSON in this format:
       ],
       ### Cleaner SMS/Text Notification (phoneEmail)
 
-      Each cleaner object can include an optional `phoneEmail` property. This should be a valid email-to-SMS gateway address for the cleaner's mobile carrier. When present, the system will CC this address on cleaner notification emails, allowing the cleaner to receive a text message alert.
+      Each cleaner object can include an optional `phoneEmail` property. This should be a valid email-to-SMS gateway address for the cleaner's mobile carrier. When present, the system will BCC this address on cleaner notification emails, allowing the cleaner to receive a text message alert while keeping the address private from other recipients.
 
       **Examples:**
 
@@ -404,7 +404,7 @@ aws lambda invoke \
 
 ### Cleaner Coordination Workflow (Updated)
 
-1. **Initial Contact**: Step Functions sends email to highest-ranked cleaner with YES/NO buttons.
+1. **Initial Contact**: Step Functions sends email to highest-ranked cleaner with YES/NO buttons. If the cleaner has a `phoneEmail`, it is included as a BCC for SMS notification.
 2. **Callback Wait**: Workflow pauses using task token, waiting for HTTP callback from cleaner.
 3. **Response Processing**:
   - **YES**: Calendar Lambda generates ICS invites for cleaner and owner (12:00 PM EST on checkout day)
