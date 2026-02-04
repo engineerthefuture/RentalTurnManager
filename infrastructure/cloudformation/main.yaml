@@ -426,6 +426,9 @@ Resources:
       Role: !GetAtt CallbackLambdaRole.Arn
       Timeout: 30
       MemorySize: 256
+      Environment:
+        Variables:
+          OWNER_EMAIL: !Ref OwnerEmail
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         S3Key: !Sub '${AppName}/lambda/callback-lambda-deployment.zip'

@@ -93,11 +93,39 @@ public class Function
             catch (Amazon.StepFunctions.Model.InvalidTokenException ex)
             {
                 context.Logger.LogError($"Invalid token error: {ex.Message}. This usually means the task has already completed, timed out, or the token is incorrect.");
+                
+                var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+                
+                var errorHtml = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Link Expired</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f8f9fa; }}
+        .error-container {{ background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto; }}
+        .error-icon {{ color: #dc3545; font-size: 48px; margin-bottom: 20px; }}
+        .error-title {{ color: #dc3545; font-size: 24px; font-weight: bold; margin-bottom: 15px; }}
+        .message {{ font-size: 18px; color: #6c757d; margin-bottom: 10px; line-height: 1.5; }}
+        .contact-link {{ color: #007bff; text-decoration: none; }}
+        .contact-link:hover {{ text-decoration: underline; }}
+    </style>
+</head>
+<body>
+    <div class='error-container'>
+        <div class='error-icon'>⚠️</div>
+        <div class='error-title'>This Link Has Expired</div>
+        <div class='message'>This response link has already been used or the request has timed out.</div>
+        <div class='message'>If you need to update your response, please contact <a href='mailto:{ownerEmail}' class='contact-link'>{ownerEmail}</a> for assistance.</div>
+    </div>
+</body>
+</html>";
+                
                 return new APIGatewayProxyResponse
                 {
                     StatusCode = 400,
-                    Body = "This response link has already been used or has expired. Please contact support if you need assistance.",
-                    Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+                    Body = errorHtml,
+                    Headers = new Dictionary<string, string> { { "Content-Type", "text/html; charset=utf-8" } }
                 };
             }
             catch (Exception ex)
