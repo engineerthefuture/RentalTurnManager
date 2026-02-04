@@ -14,6 +14,7 @@ using Amazon.Lambda.Core;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.StepFunctions;
 using Amazon.StepFunctions.Model;
+using System.Net;
 using System.Text.Json;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
@@ -95,11 +96,14 @@ public class Function
                 context.Logger.LogError($"Invalid token error: {ex.Message}. This usually means the task has already completed, timed out, or the token is incorrect.");
                 
                 var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+                var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
                 
                 var errorHtml = $@"
 <!DOCTYPE html>
-<html>
+<html lang=""en"">
 <head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
     <title>Link Expired</title>
     <style>
         body {{ font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f8f9fa; }}
@@ -112,11 +116,11 @@ public class Function
     </style>
 </head>
 <body>
-    <div class='error-container'>
-        <div class='error-icon'>⚠️</div>
+    <div class='error-container' role='alert' aria-live='polite'>
+        <div class='error-icon' aria-hidden='true'>⚠️</div>
         <div class='error-title'>This Link Has Expired</div>
         <div class='message'>This response link has already been used or the request has timed out.</div>
-        <div class='message'>If you need to update your response, please contact <a href='mailto:{ownerEmail}' class='contact-link'>{ownerEmail}</a> for assistance.</div>
+        <div class='message'>If you need to update your response, please contact <a href='mailto:{encodedEmail}' class='contact-link'>{encodedEmail}</a> for assistance.</div>
     </div>
 </body>
 </html>";
@@ -137,8 +141,10 @@ public class Function
             // Return HTML response
             var htmlResponse = $@"
 <!DOCTYPE html>
-<html>
+<html lang=""en"">
 <head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
     <title>Response Recorded</title>
     <style>
         body {{ font-family: Arial, sans-serif; text-align: center; padding: 50px; }}
@@ -147,9 +153,12 @@ public class Function
     </style>
 </head>
 <body>
-    <div class='success'>✓ Response Recorded</div>
-    <div class='message'>Thank you! Your response ({response.ToUpper()}) has been recorded.</div>
-    <div class='message'>You can close this window.</div>
+    <div role='alert' aria-live='polite'>
+        <div class='success' aria-hidden='true'>✓</div>
+        <div class='success'>Response Recorded</div>
+        <div class='message'>Thank you! Your response ({response.ToUpper()}) has been recorded.</div>
+        <div class='message'>You can close this window.</div>
+    </div>
 </body>
 </html>";
 
@@ -163,11 +172,25 @@ public class Function
         catch (Exception ex)
         {
             context.Logger.LogError($"Error processing callback: {ex.Message}");
+            var encodedMessage = WebUtility.HtmlEncode(ex.Message);
+            var errorResponse = $@"
+<!DOCTYPE html>
+<html lang=""en"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Error</title>
+</head>
+<body>
+    <h1>Error</h1>
+    <p>{encodedMessage}</p>
+</body>
+</html>";
             return new APIGatewayProxyResponse
             {
                 StatusCode = 500,
-                Body = $"Error: {ex.Message}",
-                Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+                Body = errorResponse,
+                Headers = new Dictionary<string, string> { { "Content-Type", "text/html; charset=utf-8" } }
             };
         }
     }
