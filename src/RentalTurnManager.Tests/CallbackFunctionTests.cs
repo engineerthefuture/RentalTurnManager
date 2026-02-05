@@ -122,7 +122,9 @@ public class CallbackFunctionTests
         // Assert
         response.StatusCode.Should().Be(400);
         response.Headers["Content-Type"].Should().Be("text/html; charset=utf-8");
-        response.Body.Should().Contain("This Link Has Expired");
+        response.Body.Should().Contain("Response Already Recorded");
+        response.Body.Should().Contain("A response has already been received for this request, or the link has expired");
+        response.Body.Should().Contain("You attempted to respond: <span class='highlight'>YES</span>");
         response.Body.Should().Contain("owner@test.com");
         response.Body.Should().Contain("mailto:owner@test.com");
         response.Body.Should().Contain("lang=\"en\"");

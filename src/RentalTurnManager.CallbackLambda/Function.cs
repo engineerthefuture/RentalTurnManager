@@ -109,6 +109,7 @@ public class Function
                 
                 var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
                 var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
+                var encodedResponse = WebUtility.HtmlEncode(response.ToUpper());
                 
                 var errorHtml = $@"
 <!DOCTYPE html>
@@ -116,23 +117,25 @@ public class Function
 <head>
     <meta charset=""UTF-8"">
     <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
-    <title>Link Expired</title>
+    <title>Response Already Recorded</title>
     <style>
         body {{ font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f8f9fa; }}
         .error-container {{ background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto; }}
-        .error-icon {{ color: #dc3545; font-size: 48px; margin-bottom: 20px; }}
-        .error-title {{ color: #dc3545; font-size: 24px; font-weight: bold; margin-bottom: 15px; }}
+        .error-icon {{ color: #ffc107; font-size: 48px; margin-bottom: 20px; }}
+        .error-title {{ color: #856404; font-size: 24px; font-weight: bold; margin-bottom: 15px; }}
         .message {{ font-size: 18px; color: #6c757d; margin-bottom: 10px; line-height: 1.5; }}
+        .highlight {{ font-weight: bold; color: #495057; }}
         .contact-link {{ color: #007bff; text-decoration: none; }}
         .contact-link:hover {{ text-decoration: underline; }}
     </style>
 </head>
 <body>
     <div class='error-container' role='alert' aria-live='polite'>
-        <div class='error-icon' aria-hidden='true'>⚠️</div>
-        <div class='error-title'>This Link Has Expired</div>
-        <div class='message'>This response link has already been used or the request has timed out.</div>
-        <div class='message'>If you need to update your response, please contact <a href='mailto:{encodedEmail}' class='contact-link'>{encodedEmail}</a> for assistance.</div>
+        <div class='error-icon' aria-hidden='true'>ℹ️</div>
+        <div class='error-title'>Response Already Recorded</div>
+        <div class='message'>A response has already been received for this request, or the link has expired.</div>
+        <div class='message'>You attempted to respond: <span class='highlight'>{encodedResponse}</span></div>
+        <div class='message'>If you need to change your response, please contact <a href='mailto:{encodedEmail}' class='contact-link'>{encodedEmail}</a> for assistance.</div>
     </div>
 </body>
 </html>";
