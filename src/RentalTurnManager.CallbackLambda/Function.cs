@@ -4,7 +4,8 @@
  * 
  * AWS Lambda function that handles HTTP callbacks from cleaners via
  * API Gateway. Processes cleaner responses (confirm/deny) and sends
- * task success/failure signals back to Step Functions workflows.
+ * task success/failure signals back to Step Functions workflows and  
+ * provides a message to the cleaner.
  * 
  * Author: Brent Foster
  * Created: 01-11-2026
