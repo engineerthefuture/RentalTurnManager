@@ -13,6 +13,7 @@ using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.TestUtilities;
 using Amazon.StepFunctions;
 using Amazon.StepFunctions.Model;
+using Amazon.SecretsManager;
 using FluentAssertions;
 using Moq;
 using RentalTurnManager.CallbackLambda;
@@ -23,11 +24,13 @@ namespace RentalTurnManager.Tests;
 public class CallbackFunctionTests
 {
     private readonly Mock<IAmazonStepFunctions> _mockStepFunctions;
+    private readonly Mock<IAmazonSecretsManager> _mockSecretsManager;
     private readonly TestLambdaContext _context;
 
     public CallbackFunctionTests()
     {
         _mockStepFunctions = new Mock<IAmazonStepFunctions>();
+        _mockSecretsManager = new Mock<IAmazonSecretsManager>();
         _context = new TestLambdaContext
         {
             FunctionName = "CallbackFunction",
@@ -40,7 +43,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_ValidYesResponse_ReturnsSuccessHtml()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -70,7 +73,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_ValidNoResponse_ReturnsSuccessHtml()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -99,7 +102,7 @@ public class CallbackFunctionTests
     {
         // Arrange
         Environment.SetEnvironmentVariable("OWNER_EMAIL", "owner@test.com");
-        var function = new Function(_mockStepFunctions.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -135,7 +138,7 @@ public class CallbackFunctionTests
     {
         // Arrange
         Environment.SetEnvironmentVariable("OWNER_EMAIL", null);
-        var function = new Function(_mockStepFunctions.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -164,7 +167,7 @@ public class CallbackFunctionTests
     {
         // Arrange
         Environment.SetEnvironmentVariable("OWNER_EMAIL", "<script>alert('xss')</script>@test.com");
-        var function = new Function(_mockStepFunctions.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -195,7 +198,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_MissingToken_ReturnsBadRequest()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -216,7 +219,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_MissingResponse_ReturnsBadRequest()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -237,7 +240,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_InvalidResponse_ReturnsBadRequest()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -259,7 +262,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_TokenWithSpaces_ReplacesWithPlus()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -287,7 +290,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_SendTaskSuccessException_EncodesErrorMessage()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
