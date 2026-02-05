@@ -148,6 +148,50 @@ public class Function
                     Headers = new Dictionary<string, string> { { "Content-Type", "text/html; charset=utf-8" } }
                 };
             }
+            catch (TaskTimedOutException ex)
+            {
+                context.Logger.LogError($"Task timeout error: {ex.Message}");
+                
+                var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+                var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
+                var encodedResponse = WebUtility.HtmlEncode(response.ToUpper());
+                
+                var errorHtml = $@"
+<!DOCTYPE html>
+<html lang=""en"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Response Already Recorded</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f8f9fa; }}
+        .error-container {{ background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto; }}
+        .error-icon {{ color: #ffc107; font-size: 48px; margin-bottom: 20px; }}
+        .error-title {{ color: #856404; font-size: 24px; font-weight: bold; margin-bottom: 15px; }}
+        .message {{ font-size: 18px; color: #6c757d; margin-bottom: 10px; line-height: 1.5; }}
+        .highlight {{ font-weight: bold; color: #495057; }}
+        .contact-link {{ color: #007bff; text-decoration: none; }}
+        .contact-link:hover {{ text-decoration: underline; }}
+    </style>
+</head>
+<body>
+    <div class='error-container' role='alert' aria-live='polite'>
+        <div class='error-icon' aria-hidden='true'>ℹ️</div>
+        <div class='error-title'>Response Already Recorded</div>
+        <div class='message'>A response has already been received for this request, or the link has expired.</div>
+        <div class='message'>You attempted to respond: <span class='highlight'>{encodedResponse}</span></div>
+        <div class='message'>If you need to change your response, please contact <a href='mailto:{encodedEmail}' class='contact-link'>{encodedEmail}</a> for assistance.</div>
+    </div>
+</body>
+</html>";
+                
+                return new APIGatewayProxyResponse
+                {
+                    StatusCode = 400,
+                    Body = errorHtml,
+                    Headers = new Dictionary<string, string> { { "Content-Type", "text/html; charset=utf-8" } }
+                };
+            }
             catch (Exception ex)
             {
                 context.Logger.LogError($"Error sending task success: {ex.GetType().Name} - {ex.Message}");
@@ -155,6 +199,10 @@ public class Function
             }
 
             // Return HTML response
+            var isYes = response.Equals("yes", StringComparison.OrdinalIgnoreCase);
+            var color = isYes ? "#28a745" : "#dc3545";
+            var icon = isYes ? "✓" : "✗";
+            
             var htmlResponse = $@"
 <!DOCTYPE html>
 <html lang=""en"">
@@ -164,14 +212,14 @@ public class Function
     <title>Response Recorded</title>
     <style>
         body {{ font-family: Arial, sans-serif; text-align: center; padding: 50px; }}
-        .success {{ color: #28a745; font-size: 24px; }}
+        .response {{ color: {color}; font-size: 24px; }}
         .message {{ margin-top: 20px; font-size: 18px; }}
     </style>
 </head>
 <body>
     <div role='alert' aria-live='polite'>
-        <div class='success' aria-hidden='true'>✓</div>
-        <div class='success'>Response Recorded</div>
+        <div class='response' aria-hidden='true'>{icon}</div>
+        <div class='response'>Response Recorded</div>
         <div class='message'>Thank you! Your response ({response.ToUpper()}) has been recorded.</div>
         <div class='message'>You can close this window.</div>
     </div>
