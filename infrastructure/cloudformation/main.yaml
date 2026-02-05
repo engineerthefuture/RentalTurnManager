@@ -40,6 +40,12 @@ Parameters:
     Description: Email account password
     NoEcho: true
 
+  OwnerOverrideToken:
+    Type: String
+    Description: Secret token for owner override actions
+    NoEcho: true
+    Default: ''
+
   OwnerName:
     Type: String
     Description: Owner name for tagging
@@ -113,7 +119,8 @@ Resources:
           "port": ${ImapPort},
           "username": "${EmailUsername}",
           "password": "${EmailPassword}",
-          "useSsl": true
+          "useSsl": true,
+          "ownerOverrideToken": "${OwnerOverrideToken}"
         }
       Tags:
         - Key: OwnerName
@@ -415,6 +422,14 @@ Resources:
                   - states:SendTaskSuccess
                   - states:SendTaskFailure
                 Resource: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref EmailCredentialsSecret
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
 
   CallbackLambda:
     Type: AWS::Lambda::Function
@@ -429,6 +444,8 @@ Resources:
       Environment:
         Variables:
           OWNER_EMAIL: !Ref OwnerEmail
+          EMAIL_SECRET_NAME: !Ref EmailCredentialsSecret
+          CLEANER_WORKFLOW_STATE_MACHINE_ARN: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         S3Key: !Sub '${AppName}/lambda/callback-lambda-deployment.zip'

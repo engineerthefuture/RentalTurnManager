@@ -13,10 +13,12 @@ Rental Turn Manager automates the process of scheduling property cleanings when 
 - **Smart Booking Tracking**: Uses S3 to track booking state and prevent duplicate processing. The Step Function now references the booking state bucket at the root of the input object, fixing previous workflow errors related to JSONPath.
 - **Change Detection**: Automatically detects booking modifications and re-triggers workflows
 - **Automated Cleaner Coordination**: Contacts cleaners in priority order via email with confirm/deny links. Each cleaner can also have a `phoneEmail` property (e.g., `1234567890@vtext.com` for Verizon, `1234567890@txt.att.net` for AT&T, etc.) to receive SMS text notifications via email. As of January 2026, the system now sends these notifications as BCC (not CC) for privacy.
+- **Owner Override Capability**: Property owners can manually schedule or cancel cleanings using a secure token-based override system when all cleaners are unavailable
+- **Enhanced Error Handling**: User-friendly HTML error pages for expired or used callback links with owner contact information and accessibility features (ARIA attributes, proper semantic HTML)
 - **Calendar Integration**: Sends ICS calendar invites with proper timezone handling to cleaners and owners
 - **Property Configuration**: Maintains property metadata, addresses, and cleaner preferences
 - **Multi-Environment**: Supports dev and prod deployments with GitHub Actions
-- **Secure Credentials**: Uses AWS Secrets Manager for email credentials
+- **Secure Credentials**: Uses AWS Secrets Manager for email credentials and owner override tokens
 
 ```mermaid
 sequenceDiagram
@@ -157,6 +159,7 @@ Add the following **secrets**:
 - `AWS_ACCOUNT_ID`: Your AWS account ID (12-digit number)
 - `IMAP_HOST`: IMAP server hostname (e.g., `imap.gmail.com`, `imap.mail.me.com`)
 - `OWNER_EMAIL`: Property owner email address
+- `OWNER_OVERRIDE_TOKEN`: Secure token for owner override capability (generate a random 32+ character string)
 - `PROPERTIES_CONFIG_DEV`: JSON string with property configurations for dev environment (see below)
 - `PROPERTIES_CONFIG`: JSON string with property configurations for prod environment (see below)
 
@@ -419,11 +422,49 @@ aws lambda invoke \
   - Adds cleaner as required participant, owner as optional participant
   - Proper timezone conversion (Eastern Time)
   - Sent via Amazon SES with raw MIME format
-5. **Escalation**: If all cleaners decline or timeout, notifies property owner
+5. **Escalation**: If all cleaners decline or timeout, sends escalation email to property owner with:
+  - Complete booking details and attempted cleaner list
+  - **Owner Override Buttons**: Pre-formatted links to manually schedule specific cleaners or cancel the cleaning
+  - Secure token-based authentication (no login required, just click the link)
+  - Professional HTML formatting with visual hierarchy and call-to-action styling
 
 #### Email Button Labels
 
 - Both the initial and reminder emails now use simple "YES" and "NO" buttons for cleaner responses.
+
+#### Owner Override Capability
+
+When all cleaners are unavailable, the escalation email includes secure override buttons that allow the property owner to:
+
+- **Schedule Specific Cleaner**: Manually assign the cleaning to a specific cleaner (bypasses their response)
+- **Cancel Cleaning**: Mark the cleaning as cancelled/not needed
+
+The override system:
+- Uses a secure token stored in AWS Secrets Manager (`OWNER_OVERRIDE_TOKEN` GitHub secret)
+- Authenticates via URL parameter (no login required)
+- Returns user-friendly HTML success/error pages
+- Integrates with Step Functions to trigger calendar invites when scheduling
+- Includes XSS protection (HTML encoding) and accessibility features (ARIA attributes, semantic HTML)
+
+**Override URL Format:**
+```
+https://{api-gateway-url}/respond?ownerToken={token}&action=schedule&cleanerId={cleanerId}&propertyId={propertyId}&bookingRef={bookingRef}
+```
+
+**Actions:**
+- `action=schedule`: Schedules the specified cleaner
+- `action=cancel`: Cancels/skips the cleaning
+
+#### Callback Error Handling
+
+When cleaners click expired or already-used callback links, they receive:
+- **Professional HTML error page** with proper styling and responsive design
+- **Specific error messages**:
+  - "This link has expired" for timeout scenarios
+  - "A response has already been received" for duplicate clicks
+- **Owner contact information** from the `OWNER_EMAIL` environment variable
+- **Accessibility features**: ARIA live regions, semantic HTML, proper language attributes
+- **XSS protection**: All dynamic content is HTML-encoded
 
 #### Dev Environment Scheduling
 
@@ -571,13 +612,16 @@ All AWS resources are tagged with:
 
 ## Security
 
-- Email credentials stored in AWS Secrets Manager (encrypted at rest)
+- Email credentials and owner override token stored in AWS Secrets Manager (encrypted at rest)
 - OIDC authentication for GitHub Actions (no long-lived AWS credentials)
 - IAM roles follow least-privilege principle
 - Lambda functions run with minimal required permissions
-- API Gateway callback endpoint is public but validated with task tokens
+- API Gateway callback endpoint is public but validated with task tokens or owner tokens
+- Owner override uses secure random token (32+ characters recommended)
+- XSS protection: All user-generated content in HTML responses is encoded using `WebUtility.HtmlEncode`
 - S3 bucket has server-side encryption enabled
 - All traffic uses HTTPS/TLS
+- Accessibility: HTML responses include proper ARIA attributes and semantic markup
 
 ## License
 
@@ -646,7 +690,7 @@ git push origin v1.0.0
 Set by CloudFormation and available in Lambda:
 
 - `ENVIRONMENT`: `dev` or `prod`
-- `EMAIL_SECRET_NAME`: Secrets Manager secret ARN
+- `EMAIL_SECRET_NAME`: Secrets Manager secret ARN (includes email credentials and owner override token)
 - `CLEANER_WORKFLOW_STATE_MACHINE_ARN`: Step Functions ARN
 - `BOOKING_STATE_BUCKET`: S3 bucket for booking state
 - `OWNER_EMAIL`: Property owner email (from GitHub secret)
