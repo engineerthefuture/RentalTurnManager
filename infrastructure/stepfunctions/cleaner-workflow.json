@@ -121,8 +121,7 @@
         "Source.$": "$.state.input.ownerEmail",
         "Destination": {
           "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
-          "CcAddresses.$": "States.Array($.state.input.ownerEmail)",
-          "BccAddresses.$": "States.Array($.state.currentCleaner.phoneEmail)"
+          "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
         },
         "Message": {
           "Subject": {
@@ -137,6 +136,11 @@
       },
       "ResultPath": "$.emailResult",
       "Catch": [
+        {
+          "ErrorEquals": ["States.Timeout"],
+          "ResultPath": "$.error",
+          "Next": "SendReminderEmail"
+        },
         {
           "ErrorEquals": ["States.ALL"],
           "ResultPath": "$.error",
@@ -171,8 +175,7 @@
         "Source.$": "$.state.input.ownerEmail",
         "Destination": {
           "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
-          "CcAddresses.$": "States.Array($.state.input.ownerEmail)",
-          "BccAddresses.$": "States.Array($.state.currentCleaner.phoneEmail)"
+          "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
         },
         "Message": {
           "Subject": {
