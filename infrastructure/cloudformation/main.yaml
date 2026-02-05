@@ -335,6 +335,10 @@ Resources:
                 Resource: '*'
               - Effect: Allow
                 Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref EmailCredentialsSecret
+              - Effect: Allow
+                Action:
                   - logs:CreateLogDelivery
                   - logs:GetLogDelivery
                   - logs:UpdateLogDelivery
@@ -366,6 +370,7 @@ Resources:
         Key: !Sub '${AppName}/stepfunctions/${Environment}/cleaner-workflow.json'
       DefinitionSubstitutions:
         CalendarLambdaArn: !GetAtt CalendarLambda.Arn
+        EmailSecretName: !Ref EmailCredentialsSecret
       LoggingConfiguration:
         Destinations:
           - CloudWatchLogsLogGroup:
