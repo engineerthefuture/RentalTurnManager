@@ -361,23 +361,28 @@ public class Function
                         workflowContextJson = await reader.ReadToEndAsync();
                     }
 
-                    // Deserialize the workflow input
-                    var workflowInput = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(workflowContextJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    if (workflowInput == null)
+                    context.Logger.LogInformation($"Retrieved workflow context (length: {workflowContextJson.Length})");
+
+                    // Parse the workflow input as a JsonDocument for manipulation
+                    using var jsonDoc = JsonDocument.Parse(workflowContextJson);
+                    var root = jsonDoc.RootElement;
+
+                    // Get the property data to find the cleaner index
+                    if (!root.TryGetProperty("property", out var propertyData))
                     {
-                        context.Logger.LogError("Failed to deserialize workflow context");
-                        throw new Exception("Invalid workflow context");
+                        context.Logger.LogError("Property data not found in workflow context");
+                        throw new Exception("Invalid workflow context: missing property data");
                     }
 
-                    // Update the workflow input to specify the selected cleaner
-                    // We'll set currentCleanerIndex to point to the selected cleaner
-                    // and mark it as pre-confirmed
-                    
-                    // Get the property data to find the cleaner index
-                    var propertyData = workflowInput["property"].Deserialize<JsonElement>();
-                    var cleaners = propertyData.GetProperty("cleaners").EnumerateArray().ToList();
+                    if (!propertyData.TryGetProperty("cleaners", out var cleanersArray))
+                    {
+                        context.Logger.LogError("Cleaners array not found in property data");
+                        throw new Exception("Invalid property data: missing cleaners");
+                    }
+
+                    var cleaners = cleanersArray.EnumerateArray().ToList();
                     var selectedCleanerIndex = cleaners.FindIndex(c => 
-                        c.GetProperty("cleanerId").GetString() == cleanerId);
+                        c.TryGetProperty("cleanerId", out var id) && id.GetString() == cleanerId);
                     
                     if (selectedCleanerIndex == -1)
                     {
@@ -385,10 +390,21 @@ public class Function
                         throw new Exception("Cleaner not found");
                     }
 
-                    // Create a new workflow input with the selected cleaner
-                    workflowInput["currentCleanerIndex"] = JsonSerializer.SerializeToElement(selectedCleanerIndex);
-                    workflowInput["attemptCount"] = JsonSerializer.SerializeToElement(0);
-                    workflowInput["ownerOverride"] = JsonSerializer.SerializeToElement(true);
+                    context.Logger.LogInformation($"Found cleaner at index {selectedCleanerIndex}");
+
+                    // Build a new workflow input with the modifications
+                    var modifiedInput = new Dictionary<string, object>();
+                    
+                    // Copy all existing properties
+                    foreach (var property in root.EnumerateObject())
+                    {
+                        modifiedInput[property.Name] = JsonSerializer.Deserialize<object>(property.Value.GetRawText())!;
+                    }
+
+                    // Update with override values
+                    modifiedInput["currentCleanerIndex"] = selectedCleanerIndex;
+                    modifiedInput["attemptCount"] = 0;
+                    modifiedInput["ownerOverride"] = true;
                     
                     // Start a new workflow execution
                     var stateMachineArn = Environment.GetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN");
@@ -403,7 +419,7 @@ public class Function
                     {
                         StateMachineArn = stateMachineArn,
                         Name = executionName,
-                        Input = JsonSerializer.Serialize(workflowInput)
+                        Input = JsonSerializer.Serialize(modifiedInput)
                     };
 
                     var executionResponse = await _stepFunctionsClient.StartExecutionAsync(startExecutionRequest);
