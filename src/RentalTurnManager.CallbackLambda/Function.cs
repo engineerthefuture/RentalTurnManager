@@ -397,15 +397,38 @@ public class Function
 
                     context.Logger.LogInformation($"Retrieved workflow context (length: {workflowContextJson.Length})");
 
-                    // Parse the workflow input as a JsonDocument for manipulation
-                    using var jsonDoc = JsonDocument.Parse(workflowContextJson);
-                    var root = jsonDoc.RootElement;
+                    // Log first 500 chars for debugging
+                    context.Logger.LogInformation($"Workflow context preview: {workflowContextJson.Substring(0, Math.Min(500, workflowContextJson.Length))}");
+
+                    // Build a new workflow input by deserializing to Dictionary<string, JsonElement>
+                    var workflowInput = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                        workflowContextJson, 
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    );
+
+                    if (workflowInput == null)
+                    {
+                        context.Logger.LogError("Failed to deserialize workflow context");
+                        throw new Exception("Invalid workflow context");
+                    }
 
                     // Get the property data to find the cleaner index
-                    if (!root.TryGetProperty("property", out var propertyData))
+                    if (!workflowInput.TryGetValue("property", out var propertyElement))
                     {
                         context.Logger.LogError("Property data not found in workflow context");
                         throw new Exception("Invalid workflow context: missing property data");
+                    }
+
+                    // Property might be a string (escaped JSON) or an object
+                    JsonElement propertyData;
+                    if (propertyElement.ValueKind == JsonValueKind.String)
+                    {
+                        // Parse the escaped JSON string
+                        propertyData = JsonDocument.Parse(propertyElement.GetString()!).RootElement;
+                    }
+                    else
+                    {
+                        propertyData = propertyElement;
                     }
 
                     if (!propertyData.TryGetProperty("cleaners", out var cleanersArray))
@@ -425,19 +448,6 @@ public class Function
                     }
 
                     context.Logger.LogInformation($"Found cleaner at index {selectedCleanerIndex}");
-
-                    // Build a new workflow input by deserializing to Dictionary<string, JsonElement>
-                    // then modifying specific fields
-                    var workflowInput = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
-                        workflowContextJson, 
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                    );
-
-                    if (workflowInput == null)
-                    {
-                        context.Logger.LogError("Failed to deserialize workflow context");
-                        throw new Exception("Invalid workflow context");
-                    }
 
                     // Update with override values (serialize primitives to JsonElement)
                     workflowInput["currentCleanerIndex"] = JsonDocument.Parse(selectedCleanerIndex.ToString()).RootElement;
