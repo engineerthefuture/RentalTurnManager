@@ -141,53 +141,54 @@ RentalTurnManager/
 The cleaner coordination workflow is managed by AWS Step Functions with the following state flow:
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'12px'}}}%%
 graph TD
-    Start([Start]) --> InitializeState[Initialize State]
-    InitializeState --> CheckOwnerOverride{Owner Override?}
-    CheckOwnerOverride -->|Yes/No| CheckCleanerList[Check Cleaner List]
-    CheckCleanerList --> CompareCleanerIndex{Index < Cleaner Count?}
+    Start([Start]) --> Init[Initialize]
+    Init --> ChkOverride{Override?}
+    ChkOverride -->|Yes/No| ChkList[Check List]
+    ChkList --> CmpIdx{More Cleaners?}
     
-    CompareCleanerIndex -->|Yes| GetCurrentCleaner[Get Current Cleaner]
-    CompareCleanerIndex -->|No| PrepareEscalation[Prepare Escalation]
+    CmpIdx -->|Yes| GetCleaner[Get Cleaner]
+    CmpIdx -->|No| PrepEsc[Prepare<br/>Escalation]
     
-    GetCurrentCleaner --> CheckForOwnerOverride{Owner Override?}
-    CheckForOwnerOverride -->|Yes| CleanerConfirmed[Cleaner Confirmed]
-    CheckForOwnerOverride -->|No| FormatCleaningDate[Format Cleaning Date]
+    GetCleaner --> ChkOvr{Override?}
+    ChkOvr -->|Yes| Confirmed[Confirmed]
+    ChkOvr -->|No| FmtDate[Format Date]
     
-    FormatCleaningDate --> SendCleanerRequest[Send Cleaner Request<br/>Wait for Response<br/>9 hour timeout]
+    FmtDate --> SendReq[Send Request<br/>9hr timeout]
     
-    SendCleanerRequest -->|Success| EvaluateReminderResponse{Check Response}
-    SendCleanerRequest -->|Timeout| SendReminderEmail[Send Reminder Email<br/>Wait for Response<br/>3 hour timeout]
-    SendCleanerRequest -->|Failure| IncrementCleanerIndex[Increment Cleaner Index]
+    SendReq -->|Success| EvalResp{Response?}
+    SendReq -->|Timeout| SendRem[Send Reminder<br/>3hr timeout]
+    SendReq -->|Failure| IncIdx[Next Cleaner]
     
-    SendReminderEmail -->|Success| EvaluateReminderResponse
-    SendReminderEmail -->|Timeout| IncrementCleanerIndex
-    SendReminderEmail -->|Failure| IncrementCleanerIndex
+    SendRem -->|Success| EvalResp
+    SendRem -->|Timeout| IncIdx
+    SendRem -->|Failure| IncIdx
     
-    EvaluateReminderResponse -->|Confirmed| CleanerConfirmed
-    EvaluateReminderResponse -->|Declined| IncrementCleanerIndex
+    EvalResp -->|Confirmed| Confirmed
+    EvalResp -->|Declined| IncIdx
     
-    IncrementCleanerIndex --> CompareCleanerIndex
+    IncIdx --> CmpIdx
     
-    PrepareEscalation --> SaveWorkflowContext[Save Workflow Context to S3]
-    SaveWorkflowContext --> AllCleanersExhausted[All Cleaners Exhausted<br/>Send Escalation Email]
-    AllCleanersExhausted --> WorkflowFailed([Workflow Failed])
+    PrepEsc --> SaveCtx[Save Context<br/>to S3]
+    SaveCtx --> AllExh[All Exhausted<br/>Send Escalation]
+    AllExh --> Failed([Failed])
     
-    CleanerConfirmed --> SendCleanerConfirmation[Send Cleaner Confirmation<br/>with Calendar Invite]
-    SendCleanerConfirmation --> SendOwnerNotification[Send Owner Notification<br/>with Calendar Invite]
-    SendOwnerNotification --> WorkflowSuccess([Workflow Success])
+    Confirmed --> SendConf[Send Cleaner<br/>Confirmation]
+    SendConf --> SendOwner[Send Owner<br/>Notification]
+    SendOwner --> Success([Success])
     
-    WorkflowFailed --> End([End])
-    WorkflowSuccess --> End
+    Failed --> End([End])
+    Success --> End
     
     style Start fill:#90EE90
     style End fill:#FFB6C1
-    style CleanerConfirmed fill:#87CEEB
-    style AllCleanersExhausted fill:#FFA500
-    style SendCleanerRequest fill:#DDA0DD
-    style SendReminderEmail fill:#DDA0DD
-    style WorkflowSuccess fill:#90EE90
-    style WorkflowFailed fill:#FF6B6B
+    style Confirmed fill:#87CEEB
+    style AllExh fill:#FFA500
+    style SendReq fill:#DDA0DD
+    style SendRem fill:#DDA0DD
+    style Success fill:#90EE90
+    style Failed fill:#FF6B6B
 ```
 
 ### Workflow States Explained
