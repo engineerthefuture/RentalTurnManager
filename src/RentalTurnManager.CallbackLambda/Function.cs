@@ -17,6 +17,8 @@ using Amazon.StepFunctions;
 using Amazon.StepFunctions.Model;
 using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
+using Amazon.S3;
+using Amazon.S3.Model;
 using System.Net;
 using System.Text.Json;
 
@@ -28,17 +30,20 @@ public class Function
 {
     private readonly IAmazonStepFunctions _stepFunctionsClient;
     private readonly IAmazonSecretsManager _secretsManagerClient;
+    private readonly IAmazonS3 _s3Client;
 
     public Function()
     {
         _stepFunctionsClient = new AmazonStepFunctionsClient();
         _secretsManagerClient = new AmazonSecretsManagerClient();
+        _s3Client = new AmazonS3Client();
     }
 
-    public Function(IAmazonStepFunctions stepFunctionsClient, IAmazonSecretsManager secretsManagerClient)
+    public Function(IAmazonStepFunctions stepFunctionsClient, IAmazonSecretsManager secretsManagerClient, IAmazonS3 s3Client)
     {
         _stepFunctionsClient = stepFunctionsClient;
         _secretsManagerClient = secretsManagerClient;
+        _s3Client = s3Client;
     }
 
     public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest request, ILambdaContext context)
@@ -323,8 +328,107 @@ public class Function
 
             context.Logger.LogInformation($"Valid owner override: {action} cleaner {cleanerId} for booking {bookingRef}");
 
-            // TODO: Implement the actual scheduling/cancellation logic here
-            // For now, return success
+            if (action == "schedule")
+            {
+                // Retrieve workflow context from S3
+                var bucketName = Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET");
+                if (string.IsNullOrEmpty(bucketName))
+                {
+                    context.Logger.LogError("BOOKING_STATE_BUCKET environment variable not set");
+                    return new APIGatewayProxyResponse
+                    {
+                        StatusCode = 500,
+                        Body = "Server configuration error",
+                        Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+                    };
+                }
+
+                try
+                {
+                    // Get workflow context from S3
+                    var s3Key = $"{bookingRef}/workflow-context.json";
+                    context.Logger.LogInformation($"Retrieving workflow context from s3://{bucketName}/{s3Key}");
+                    
+                    var getObjectResponse = await _s3Client.GetObjectAsync(new GetObjectRequest
+                    {
+                        BucketName = bucketName,
+                        Key = s3Key
+                    });
+
+                    string workflowContextJson;
+                    using (var reader = new StreamReader(getObjectResponse.ResponseStream))
+                    {
+                        workflowContextJson = await reader.ReadToEndAsync();
+                    }
+
+                    // Deserialize the workflow input
+                    var workflowInput = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(workflowContextJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (workflowInput == null)
+                    {
+                        context.Logger.LogError("Failed to deserialize workflow context");
+                        throw new Exception("Invalid workflow context");
+                    }
+
+                    // Update the workflow input to specify the selected cleaner
+                    // We'll set currentCleanerIndex to point to the selected cleaner
+                    // and mark it as pre-confirmed
+                    
+                    // Get the property data to find the cleaner index
+                    var propertyData = workflowInput["property"].Deserialize<JsonElement>();
+                    var cleaners = propertyData.GetProperty("cleaners").EnumerateArray().ToList();
+                    var selectedCleanerIndex = cleaners.FindIndex(c => 
+                        c.GetProperty("cleanerId").GetString() == cleanerId);
+                    
+                    if (selectedCleanerIndex == -1)
+                    {
+                        context.Logger.LogError($"Cleaner {cleanerId} not found in property configuration");
+                        throw new Exception("Cleaner not found");
+                    }
+
+                    // Create a new workflow input with the selected cleaner
+                    workflowInput["currentCleanerIndex"] = JsonSerializer.SerializeToElement(selectedCleanerIndex);
+                    workflowInput["attemptCount"] = JsonSerializer.SerializeToElement(0);
+                    workflowInput["ownerOverride"] = JsonSerializer.SerializeToElement(true);
+                    
+                    // Start a new workflow execution
+                    var stateMachineArn = Environment.GetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN");
+                    if (string.IsNullOrEmpty(stateMachineArn))
+                    {
+                        context.Logger.LogError("CLEANER_WORKFLOW_STATE_MACHINE_ARN environment variable not set");
+                        throw new Exception("State machine ARN not configured");
+                    }
+
+                    var executionName = $"owner-override-{bookingRef}-{DateTime.UtcNow:yyyyMMddHHmmss}";
+                    var startExecutionRequest = new StartExecutionRequest
+                    {
+                        StateMachineArn = stateMachineArn,
+                        Name = executionName,
+                        Input = JsonSerializer.Serialize(workflowInput)
+                    };
+
+                    var executionResponse = await _stepFunctionsClient.StartExecutionAsync(startExecutionRequest);
+                    context.Logger.LogInformation($"Started workflow execution: {executionResponse.ExecutionArn}");
+                }
+                catch (AmazonS3Exception s3Ex) when (s3Ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    context.Logger.LogError($"Workflow context not found for booking {bookingRef}. The escalation may not have been triggered yet.");
+                    return new APIGatewayProxyResponse
+                    {
+                        StatusCode = 404,
+                        Body = "Workflow context not found. Please ensure the escalation email was sent.",
+                        Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+                    };
+                }
+                catch (Exception ex)
+                {
+                    context.Logger.LogError($"Error restarting workflow: {ex.Message}");
+                    throw;
+                }
+            }
+            else if (action == "cancel")
+            {
+                context.Logger.LogInformation($"Owner cancelled cleaning for booking {bookingRef}");
+            }
 
             var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
             var encodedCleanerId = WebUtility.HtmlEncode(cleanerId);
@@ -355,6 +459,7 @@ public class Function
         <div class='detail'>Booking: {encodedBookingRef}</div>
         <div class='detail'>Property: {encodedPropertyId}</div>
         <div class='detail'>Cleaner: {encodedCleanerId}</div>
+        {(action == "schedule" ? "<div class='message' style='margin-top: 20px;'>The cleaner and owner will receive confirmation emails shortly.</div>" : "")}
         <div class='message' style='margin-top: 20px;'>You can close this window.</div>
     </div>
 </body>

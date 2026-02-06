@@ -11,7 +11,19 @@
         "allCleanersExhausted": false
       },
       "ResultPath": "$.state",
-      "Next": "CheckCleanerList"
+      "Next": "CheckOwnerOverride"
+    },
+    "CheckOwnerOverride": {
+      "Type": "Choice",
+      "Comment": "Check if this is an owner override that skips to confirmation",
+      "Choices": [
+        {
+          "Variable": "$.state.input.ownerOverride",
+          "BooleanEquals": true,
+          "Next": "CleanerConfirmed"
+        }
+      ],
+      "Default": "CheckCleanerList"
     },
     "CheckCleanerList": {
       "Type": "Pass",
@@ -55,6 +67,18 @@
         "cleaners.$": "$.state.input.property.cleaners"
       },
       "ResultPath": "$.state",
+      "Next": "SaveWorkflowContext"
+    },
+    "SaveWorkflowContext": {
+      "Type": "Task",
+      "Comment": "Save workflow context to S3 for owner override",
+      "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+      "Parameters": {
+        "Bucket.$": "$.state.input.bookingStateBucket",
+        "Key.$": "States.Format('{}/workflow-context.json', $.state.bookingRef)",
+        "Body.$": "States.JsonToString($.state.input)"
+      },
+      "ResultPath": "$.saveResult",
       "Next": "AllCleanersExhausted"
     },
     "GetCurrentCleaner": {
