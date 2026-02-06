@@ -292,6 +292,40 @@ public class Function
                     var bookingStateBucket = Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET") ?? 
                                            $"{Environment.GetEnvironmentVariable("NAMESPACE_PREFIX") ?? "bf"}-{Environment.GetEnvironmentVariable("ENVIRONMENT") ?? "dev"}-s3-{(Environment.GetEnvironmentVariable("APP_NAME") ?? "RentalTurnManager").ToLower()}-bookings";
 
+                    // Get owner token for escalation email
+                    var emailSecretName = Environment.GetEnvironmentVariable("EMAIL_SECRET_NAME");
+                    if (string.IsNullOrEmpty(emailSecretName))
+                    {
+                        _logger.LogWarning("EMAIL_SECRET_NAME environment variable not set");
+                        emailSecretName = "RentalTurnManager-EmailCredentials";
+                    }
+
+                    string ownerToken;
+                    try
+                    {
+                        var secretsManager = _serviceProvider.GetRequiredService<IAmazonSecretsManager>();
+                        var secretResponse = await secretsManager.GetSecretValueAsync(new Amazon.SecretsManager.Model.GetSecretValueRequest
+                        {
+                            SecretId = emailSecretName
+                        });
+                        var emailSecret = JsonSerializer.Deserialize<EmailSecret>(secretResponse.SecretString);
+                        ownerToken = emailSecret?.OwnerOverrideToken ?? "MISSING_TOKEN";
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to retrieve owner token from Secrets Manager, using fallback");
+                        ownerToken = "MISSING_TOKEN";
+                    }
+
+                    // Generate escalation email HTML with dynamic cleaner list
+                    var escalationEmailHtml = GenerateEscalationEmailHtml(
+                        property,
+                        booking,
+                        cleaningDateTimeUtc,
+                        ownerToken,
+                        callbackApiUrl
+                    );
+
                     // Start Step Functions workflow
                     var workflowInput = new CleanerWorkflowInput
                     {
@@ -302,7 +336,8 @@ public class Function
                         AttemptCount = 0,
                         OwnerEmail = ownerEmail,
                         CallbackApiUrl = callbackApiUrl,
-                        BookingStateBucket = bookingStateBucket
+                        BookingStateBucket = bookingStateBucket,
+                        EscalationEmailHtml = escalationEmailHtml
                     };
 
                     var executionArn = await stepFunctionService.StartCleanerWorkflowAsync(workflowInput);
@@ -336,4 +371,80 @@ public class Function
 
         return response;
     }
+
+    /// <summary>
+    /// Generates escalation email HTML with dynamic cleaner list based on actual property configuration
+    /// </summary>
+    private string GenerateEscalationEmailHtml(
+        PropertyConfiguration property,
+        Booking booking,
+        DateTime cleaningDateTime,
+        string ownerToken,
+        string callbackApiUrl)
+    {
+        var cleaningDate = cleaningDateTime.ToString("yyyy-MM-dd").Split('-');
+        var formattedDate = $"{cleaningDate[1]}-{cleaningDate[2]}-{cleaningDate[0]}";
+        var cleaningDateTimeIso = cleaningDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+        var cleanerButtonsHtml = new System.Text.StringBuilder();
+        foreach (var cleaner in property.Cleaners)
+        {
+            var scheduleUrl = $"{callbackApiUrl}/override?propertyId={System.Net.WebUtility.UrlEncode(property.PropertyId)}&cleanerId={System.Net.WebUtility.UrlEncode(cleaner.CleanerId)}&token={System.Net.WebUtility.UrlEncode(ownerToken)}&action=schedule&booking={System.Net.WebUtility.UrlEncode(booking.BookingReference)}&date={System.Net.WebUtility.UrlEncode(cleaningDateTimeIso)}";
+            var cancelUrl = $"{callbackApiUrl}/override?propertyId={System.Net.WebUtility.UrlEncode(property.PropertyId)}&cleanerId={System.Net.WebUtility.UrlEncode(cleaner.CleanerId)}&token={System.Net.WebUtility.UrlEncode(ownerToken)}&action=cancel&booking={System.Net.WebUtility.UrlEncode(booking.BookingReference)}";
+
+            cleanerButtonsHtml.AppendLine($@"
+                <div style=""margin-bottom: 25px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #007bff;"">
+                    <h3 style=""margin-top: 0; color: #343a40;"">{System.Net.WebUtility.HtmlEncode(cleaner.Name)}</h3>
+                    <p style=""margin: 10px 0; color: #6c757d;"">
+                        <strong>Email:</strong> {System.Net.WebUtility.HtmlEncode(cleaner.Email)}<br>
+                        <strong>Phone:</strong> {System.Net.WebUtility.HtmlEncode(cleaner.Phone)}
+                    </p>
+                    <div style=""margin-top: 15px;"">
+                        <a href=""{scheduleUrl}""
+                           style=""background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-right: 10px; display: inline-block;"">
+                            Schedule This Cleaner
+                        </a>
+                        <a href=""{cancelUrl}""
+                           style=""background-color: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;"">
+                            Decline This Cleaner
+                        </a>
+                    </div>
+                </div>");
+        }
+
+        return $@"<html>
+<body>
+    <p>Hello,</p>
+    <p><strong style=""color: #dc3545;"">URGENT:</strong> All cleaners have been contacted for the following booking, but none have responded or all have declined.</p>
+    <p><strong>Property:</strong> {System.Net.WebUtility.HtmlEncode(property.Metadata.PropertyName)}</p>
+    <p><strong>Address:</strong> {System.Net.WebUtility.HtmlEncode(property.Address)}</p>
+    <p><strong>Cleaning Date:</strong> {System.Net.WebUtility.HtmlEncode(formattedDate)}</p>
+    <p><strong>Booking Details:</strong></p>
+    <ul>
+        <li><strong>Check-in:</strong> {System.Net.WebUtility.HtmlEncode(booking.CheckInDate.ToString("MM-dd-yyyy"))}</li>
+        <li><strong>Check-out:</strong> {System.Net.WebUtility.HtmlEncode(booking.CheckOutDate.ToString("MM-dd-yyyy"))}</li>
+        <li><strong>Guests:</strong> {booking.NumberOfGuests}</li>
+        <li><strong>Nights:</strong> {booking.NumberOfDays}</li>
+    </ul>
+    <p><strong>Please manually schedule one of the cleaners below:</strong></p>
+    {cleanerButtonsHtml}
+    <p style=""margin-top: 30px; color: #6c757d; font-size: 12px;"">
+        This is an automated escalation email from your Rental Turn Manager system.
+    </p>
+</body>
+</html>";
+    }
+}
+
+/// <summary>
+/// Email secret structure matching Secrets Manager format
+/// </summary>
+public class EmailSecret
+{
+    public string Host { get; set; } = string.Empty;
+    public int Port { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public bool UseSsl { get; set; }
+    public string? OwnerOverrideToken { get; set; }
 }
