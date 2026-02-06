@@ -136,6 +136,90 @@ RentalTurnManager/
 └── README.md
 ```
 
+## Step Functions Workflow
+
+The cleaner coordination workflow is managed by AWS Step Functions with the following state flow:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'12px'}}}%%
+graph TD
+    Start([Start]) --> Init[Initialize]
+    Init --> ChkOverride{Override?}
+    ChkOverride -->|Yes/No| ChkList[Check List]
+    ChkList --> CmpIdx{More Cleaners?}
+    
+    CmpIdx -->|Yes| GetCleaner[Get Cleaner]
+    CmpIdx -->|No| PrepEsc[Prepare<br/>Escalation]
+    
+    GetCleaner --> ChkOvr{Override?}
+    ChkOvr -->|Yes| Confirmed[Confirmed]
+    ChkOvr -->|No| FmtDate[Format Date]
+    
+    FmtDate --> SendReq[Send Request<br/>9hr timeout]
+    
+    SendReq -->|Success| EvalResp{Response?}
+    SendReq -->|Timeout| SendRem[Send Reminder<br/>3hr timeout]
+    SendReq -->|Failure| IncIdx[Next Cleaner]
+    
+    SendRem -->|Success| EvalResp
+    SendRem -->|Timeout| IncIdx
+    SendRem -->|Failure| IncIdx
+    
+    EvalResp -->|Confirmed| Confirmed
+    EvalResp -->|Declined| IncIdx
+    
+    IncIdx --> CmpIdx
+    
+    PrepEsc --> SaveCtx[Save Context<br/>to S3]
+    SaveCtx --> AllExh[All Exhausted<br/>Send Escalation]
+    AllExh --> Failed([Failed])
+    
+    Confirmed --> SendConf[Send Cleaner<br/>Confirmation]
+    SendConf --> SendOwner[Send Owner<br/>Notification]
+    SendOwner --> Success([Success])
+    
+    Failed --> End([End])
+    Success --> End
+    
+    style Start fill:#90EE90
+    style End fill:#FFB6C1
+    style Confirmed fill:#87CEEB
+    style AllExh fill:#FFA500
+    style SendReq fill:#DDA0DD
+    style SendRem fill:#DDA0DD
+    style Success fill:#90EE90
+    style Failed fill:#FF6B6B
+```
+
+### Workflow States Explained
+
+- **InitializeState**: Sets up initial workflow state with `cleanerConfirmed: false` and `allCleanersExhausted: false`
+- **CheckOwnerOverride**: Determines if this is a manual owner override (when owner manually selects cleaner from escalation email)
+- **CheckCleanerList**: Gets the total count of available cleaners for the property
+- **CompareCleanerIndex**: Checks if there are more cleaners to try
+- **GetCurrentCleaner**: Extracts the current cleaner's information from the property configuration
+- **CheckForOwnerOverride**: If owner override, skip email request and go straight to confirmation
+- **FormatCleaningDate**: Reformats dates for display in emails (YYYY-MM-DD to MM-DD-YYYY)
+- **SendCleanerRequest**: Sends email to cleaner with YES/NO callback links, waits up to 9 hours for response
+- **SendReminderEmail**: If no response after 9 hours, sends reminder email and waits 3 more hours
+- **EvaluateReminderResponse**: Checks if cleaner confirmed or declined after reminder
+- **IncrementCleanerIndex**: Moves to the next cleaner in the list
+- **PrepareEscalation**: Prepares data for escalation email when all cleaners are exhausted
+- **SaveWorkflowContext**: Saves complete workflow state to S3 for potential owner override restart
+- **AllCleanersExhausted**: Sends escalation email to owner with manual scheduling options
+- **CleanerConfirmed**: Marks the workflow as having a confirmed cleaner
+- **SendCleanerConfirmation**: Sends confirmation email with calendar invite to the cleaner
+- **SendOwnerNotification**: Sends notification email with calendar invite to the property owner
+
+### Owner Override Flow
+
+When all cleaners are exhausted, the owner receives an escalation email with "Schedule This Cleaner" buttons. When clicked:
+
+1. Owner clicks button → Callback Lambda validates secure token
+2. Lambda retrieves saved workflow context from S3
+3. Lambda restarts workflow with selected cleaner and `ownerOverride: true`
+4. Workflow skips cleaner request email and goes directly to confirmation emails
+
 ## Setup
 
 ### Prerequisites
@@ -183,7 +267,7 @@ Add the following **variables**:
 
 Create two GitHub secrets for your rental property configurations:
 
-**`PROPERTIES_CONFIG_DEV`**: Development environment configuration (used when deploying to dev branch)
+**`PROPERTIES_CONFIG_DEV`**: Dev environment configuration (used when deploying to dev branch)
 **`PROPERTIES_CONFIG`**: Production environment configuration (used when deploying to main branch)
 
 Both should contain JSON in this format:
@@ -217,29 +301,6 @@ Both should contain JSON in this format:
           "rank": 2
         }
       ],
-      ### Cleaner Configuration
-
-      Each cleaner object requires the following fields:
-
-      - **`cleanerId`** (required): Unique identifier for the cleaner, used in owner override URLs
-      - **`name`** (required): Cleaner's full name
-      - **`email`** (required): Cleaner's email address for notifications
-      - **`phone`** (required): Cleaner's phone number
-      - **`phoneEmail`** (optional): Email-to-SMS gateway address for text notifications (e.g., `1234567890@vtext.com` for Verizon)
-      - **`rank`** (required): Priority order (1 = highest priority)
-
-      #### Cleaner SMS/Text Notification (phoneEmail)
-
-      The optional `phoneEmail` property should be a valid email-to-SMS gateway address for the cleaner's mobile carrier. When present, the system will BCC this address on cleaner notification emails, allowing the cleaner to receive a text message alert while keeping the address private from other recipients.
-
-      **Examples:**
-
-      - Verizon: `1234567890@vtext.com`
-      - AT&T: `1234567890@txt.att.net`
-      - T-Mobile: `1234567890@tmomail.net`
-      - Sprint: `1234567890@messaging.sprintpcs.com`
-
-      This enables real-time SMS notifications for cleaners in addition to standard email.
       "metadata": {
         "propertyName": "Beach House",
         "bedrooms": 3,
@@ -256,6 +317,30 @@ Both should contain JSON in this format:
   }
 }
 ```
+
+### Cleaner Configuration
+
+Each cleaner object requires the following fields:
+
+- **`cleanerId`** (required): Unique identifier for the cleaner, used in owner override URLs
+- **`name`** (required): Cleaner's full name
+- **`email`** (required): Cleaner's email address for notifications
+- **`phone`** (required): Cleaner's phone number
+- **`phoneEmail`** (optional): Email-to-SMS gateway address for text notifications (e.g., `1234567890@vtext.com` for Verizon)
+- **`rank`** (required): Priority order (1 = highest priority)
+
+#### Cleaner SMS/Text Notification (phoneEmail)
+
+The optional `phoneEmail` property should be a valid email-to-SMS gateway address for the cleaner's mobile carrier. When present, the system will BCC this address on cleaner notification emails, allowing the cleaner to receive a text message alert while keeping the address private from other recipients.
+
+**Examples:**
+
+- Verizon: `1234567890@vtext.com`
+- AT&T: `1234567890@txt.att.net`
+- T-Mobile: `1234567890@tmomail.net`
+- Sprint: `1234567890@messaging.sprintpcs.com`
+
+This enables real-time SMS notifications for cleaners in addition to standard email.
 
 **Note**: Store these as single-line JSON strings in the GitHub secrets. The deployment workflow will automatically select the appropriate configuration based on the environment (dev or prod) and write it to `config/properties.json`.
 
