@@ -201,6 +201,7 @@ jobs:
             --arg app_name_lower "$(echo "${{ env.APP_NAME }}" | tr '[:upper:]' '[:lower:]')" \
             --arg props_config "${PROPERTIES_CONFIG}" \
             --arg msg_templates "${MESSAGE_TEMPLATES}" \
+            --arg owner_token "${{ secrets.OWNER_OVERRIDE_TOKEN }}" \
             '[
               {ParameterKey: "Environment", ParameterValue: $environment},
               {ParameterKey: "EmailUsername", ParameterValue: $email_user},
@@ -214,7 +215,8 @@ jobs:
               {ParameterKey: "AppName", ParameterValue: $app_name},
               {ParameterKey: "AppNameLowercase", ParameterValue: $app_name_lower},
               {ParameterKey: "PropertiesConfig", ParameterValue: $props_config},
-              {ParameterKey: "MessageTemplates", ParameterValue: $msg_templates}
+              {ParameterKey: "MessageTemplates", ParameterValue: $msg_templates},
+              {ParameterKey: "OwnerOverrideToken", ParameterValue: $owner_token}
             ]' > /tmp/override-params.json
           
           # Deploy stack

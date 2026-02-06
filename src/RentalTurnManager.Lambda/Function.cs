@@ -304,16 +304,29 @@ public class Function
                     try
                     {
                         var secretsManager = _serviceProvider.GetRequiredService<IAmazonSecretsManager>();
+                        _logger.LogInformation($"Retrieving owner token from secret: {emailSecretName}");
                         var secretResponse = await secretsManager.GetSecretValueAsync(new Amazon.SecretsManager.Model.GetSecretValueRequest
                         {
                             SecretId = emailSecretName
                         });
-                        var emailSecret = JsonSerializer.Deserialize<EmailSecret>(secretResponse.SecretString);
-                        ownerToken = emailSecret?.OwnerOverrideToken ?? "MISSING_TOKEN";
+                        
+                        _logger.LogInformation("Secret retrieved successfully, deserializing...");
+                        var emailSecret = JsonSerializer.Deserialize<EmailSecret>(secretResponse.SecretString, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        
+                        if (emailSecret?.OwnerOverrideToken == null)
+                        {
+                            _logger.LogWarning("OwnerOverrideToken field is null or missing in secret");
+                            ownerToken = "MISSING_TOKEN";
+                        }
+                        else
+                        {
+                            ownerToken = emailSecret.OwnerOverrideToken;
+                            _logger.LogInformation($"Owner token retrieved successfully (length: {ownerToken.Length})");
+                        }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Failed to retrieve owner token from Secrets Manager, using fallback");
+                        _logger.LogError(ex, $"Failed to retrieve owner token from Secrets Manager ({emailSecretName}): {ex.Message}");
                         ownerToken = "MISSING_TOKEN";
                     }
 
@@ -384,12 +397,11 @@ public class Function
     {
         var cleaningDate = cleaningDateTime.ToString("yyyy-MM-dd").Split('-');
         var formattedDate = $"{cleaningDate[1]}-{cleaningDate[2]}-{cleaningDate[0]}";
-        var cleaningDateTimeIso = cleaningDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var cleanerButtonsHtml = new System.Text.StringBuilder();
         foreach (var cleaner in property.Cleaners)
         {
-            var scheduleUrl = $"{callbackApiUrl}/override?propertyId={System.Net.WebUtility.UrlEncode(property.PropertyId)}&cleanerId={System.Net.WebUtility.UrlEncode(cleaner.CleanerId)}&token={System.Net.WebUtility.UrlEncode(ownerToken)}&action=schedule&booking={System.Net.WebUtility.UrlEncode(booking.BookingReference)}&date={System.Net.WebUtility.UrlEncode(cleaningDateTimeIso)}";
+            var scheduleUrl = $"{callbackApiUrl}/override?propertyId={System.Net.WebUtility.UrlEncode(property.PropertyId)}&cleanerId={System.Net.WebUtility.UrlEncode(cleaner.CleanerId)}&token={System.Net.WebUtility.UrlEncode(ownerToken)}&action=schedule&booking={System.Net.WebUtility.UrlEncode(booking.BookingReference)}";
             var cancelUrl = $"{callbackApiUrl}/override?propertyId={System.Net.WebUtility.UrlEncode(property.PropertyId)}&cleanerId={System.Net.WebUtility.UrlEncode(cleaner.CleanerId)}&token={System.Net.WebUtility.UrlEncode(ownerToken)}&action=cancel&booking={System.Net.WebUtility.UrlEncode(booking.BookingReference)}";
 
             cleanerButtonsHtml.AppendLine($@"
@@ -414,7 +426,7 @@ public class Function
 
         return $@"<html>
 <body>
-    <p>Hello,</p>
+    <p>Hello {System.Net.WebUtility.HtmlEncode(property.Metadata.OwnerName)},</p>
     <p><strong style=""color: #dc3545;"">URGENT:</strong> All cleaners have been contacted for the following booking, but none have responded or all have declined.</p>
     <p><strong>Property:</strong> {System.Net.WebUtility.HtmlEncode(property.Metadata.PropertyName)}</p>
     <p><strong>Address:</strong> {System.Net.WebUtility.HtmlEncode(property.Address)}</p>
