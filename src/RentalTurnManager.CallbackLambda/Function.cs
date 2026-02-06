@@ -307,7 +307,7 @@ public class Function
                 SecretId = secretName
             });
 
-            var secret = JsonSerializer.Deserialize<EmailSecret>(secretResponse.SecretString);
+            var secret = JsonSerializer.Deserialize<EmailSecret>(secretResponse.SecretString, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (secret == null || string.IsNullOrEmpty(secret.OwnerOverrideToken))
             {
                 context.Logger.LogError("Owner override token not found in secret");

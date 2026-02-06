@@ -401,7 +401,7 @@ public class Function
         var cleanerButtonsHtml = new System.Text.StringBuilder();
         foreach (var cleaner in property.Cleaners)
         {
-            var scheduleUrl = $"{callbackApiUrl}/override?propertyId={System.Net.WebUtility.UrlEncode(property.PropertyId)}&cleanerId={System.Net.WebUtility.UrlEncode(cleaner.CleanerId)}&token={System.Net.WebUtility.UrlEncode(ownerToken)}&action=schedule&booking={System.Net.WebUtility.UrlEncode(booking.BookingReference)}";
+            var scheduleUrl = $"{callbackApiUrl}/override?propertyId={System.Net.WebUtility.UrlEncode(property.PropertyId)}&cleanerId={System.Net.WebUtility.UrlEncode(cleaner.CleanerId)}&ownerToken={System.Net.WebUtility.UrlEncode(ownerToken)}&action=schedule&bookingRef={System.Net.WebUtility.UrlEncode(booking.BookingReference)}";
 
             cleanerButtonsHtml.AppendLine($@"
                 <div style=""margin-bottom: 25px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #007bff;"">
