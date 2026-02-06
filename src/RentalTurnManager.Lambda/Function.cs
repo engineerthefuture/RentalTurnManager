@@ -402,7 +402,6 @@ public class Function
         foreach (var cleaner in property.Cleaners)
         {
             var scheduleUrl = $"{callbackApiUrl}/override?propertyId={System.Net.WebUtility.UrlEncode(property.PropertyId)}&cleanerId={System.Net.WebUtility.UrlEncode(cleaner.CleanerId)}&token={System.Net.WebUtility.UrlEncode(ownerToken)}&action=schedule&booking={System.Net.WebUtility.UrlEncode(booking.BookingReference)}";
-            var cancelUrl = $"{callbackApiUrl}/override?propertyId={System.Net.WebUtility.UrlEncode(property.PropertyId)}&cleanerId={System.Net.WebUtility.UrlEncode(cleaner.CleanerId)}&token={System.Net.WebUtility.UrlEncode(ownerToken)}&action=cancel&booking={System.Net.WebUtility.UrlEncode(booking.BookingReference)}";
 
             cleanerButtonsHtml.AppendLine($@"
                 <div style=""margin-bottom: 25px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #007bff;"">
@@ -413,12 +412,8 @@ public class Function
                     </p>
                     <div style=""margin-top: 15px;"">
                         <a href=""{scheduleUrl}""
-                           style=""background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-right: 10px; display: inline-block;"">
+                           style=""background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;"">
                             Schedule This Cleaner
-                        </a>
-                        <a href=""{cancelUrl}""
-                           style=""background-color: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;"">
-                            Decline This Cleaner
                         </a>
                     </div>
                 </div>");
