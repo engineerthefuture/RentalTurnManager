@@ -345,20 +345,54 @@ public class Function
 
                 try
                 {
-                    // Get workflow context from S3
-                    var s3Key = $"{bookingRef}/workflow-context.json";
-                    context.Logger.LogInformation($"Retrieving workflow context from s3://{bucketName}/{s3Key}");
+                    // First, try to get the platform by listing objects with the bookingRef prefix
+                    // The booking files are stored as: bookings/{platform}/{bookingRef}.json
+                    // We need to find which platform folder contains this booking
                     
-                    var getObjectResponse = await _s3Client.GetObjectAsync(new GetObjectRequest
+                    context.Logger.LogInformation($"Searching for workflow context for booking {bookingRef}");
+                    
+                    string? workflowContextJson = null;
+                    string? foundKey = null;
+                    
+                    // Try common platforms
+                    var platforms = new[] { "airbnb", "vrbo", "bookingcom" };
+                    foreach (var platform in platforms)
                     {
-                        BucketName = bucketName,
-                        Key = s3Key
-                    });
+                        var s3Key = $"bookings/{platform}/{bookingRef}_workflow-context.json";
+                        try
+                        {
+                            context.Logger.LogInformation($"Trying s3://{bucketName}/{s3Key}");
+                            var getObjectResponse = await _s3Client.GetObjectAsync(new GetObjectRequest
+                            {
+                                BucketName = bucketName,
+                                Key = s3Key
+                            });
 
-                    string workflowContextJson;
-                    using (var reader = new StreamReader(getObjectResponse.ResponseStream))
+                            using (var reader = new StreamReader(getObjectResponse.ResponseStream))
+                            {
+                                workflowContextJson = await reader.ReadToEndAsync();
+                            }
+                            
+                            foundKey = s3Key;
+                            context.Logger.LogInformation($"Found workflow context at {s3Key}");
+                            break;
+                        }
+                        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                        {
+                            // Try next platform
+                            continue;
+                        }
+                    }
+                    
+                    if (string.IsNullOrEmpty(workflowContextJson))
                     {
-                        workflowContextJson = await reader.ReadToEndAsync();
+                        context.Logger.LogError($"Workflow context not found for booking {bookingRef} in any platform folder");
+                        return new APIGatewayProxyResponse
+                        {
+                            StatusCode = 404,
+                            Body = "Workflow context not found. Please ensure the escalation email was sent.",
+                            Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+                        };
                     }
 
                     context.Logger.LogInformation($"Retrieved workflow context (length: {workflowContextJson.Length})");
@@ -392,19 +426,26 @@ public class Function
 
                     context.Logger.LogInformation($"Found cleaner at index {selectedCleanerIndex}");
 
-                    // Build a new workflow input with the modifications
-                    var modifiedInput = new Dictionary<string, object>();
-                    
-                    // Copy all existing properties
-                    foreach (var property in root.EnumerateObject())
+                    // Build a new workflow input by deserializing to Dictionary<string, JsonElement>
+                    // then modifying specific fields
+                    var workflowInput = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                        workflowContextJson, 
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    );
+
+                    if (workflowInput == null)
                     {
-                        modifiedInput[property.Name] = JsonSerializer.Deserialize<object>(property.Value.GetRawText())!;
+                        context.Logger.LogError("Failed to deserialize workflow context");
+                        throw new Exception("Invalid workflow context");
                     }
 
-                    // Update with override values
-                    modifiedInput["currentCleanerIndex"] = selectedCleanerIndex;
-                    modifiedInput["attemptCount"] = 0;
-                    modifiedInput["ownerOverride"] = true;
+                    // Update with override values (serialize primitives to JsonElement)
+                    workflowInput["currentCleanerIndex"] = JsonDocument.Parse(selectedCleanerIndex.ToString()).RootElement;
+                    workflowInput["attemptCount"] = JsonDocument.Parse("0").RootElement;
+                    workflowInput["ownerOverride"] = JsonDocument.Parse("true").RootElement;
+                    
+                    // Serialize the modified input for Step Functions
+                    var modifiedInputJson = JsonSerializer.Serialize(workflowInput);
                     
                     // Start a new workflow execution
                     var stateMachineArn = Environment.GetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN");
@@ -419,21 +460,11 @@ public class Function
                     {
                         StateMachineArn = stateMachineArn,
                         Name = executionName,
-                        Input = JsonSerializer.Serialize(modifiedInput)
+                        Input = modifiedInputJson
                     };
 
                     var executionResponse = await _stepFunctionsClient.StartExecutionAsync(startExecutionRequest);
                     context.Logger.LogInformation($"Started workflow execution: {executionResponse.ExecutionArn}");
-                }
-                catch (AmazonS3Exception s3Ex) when (s3Ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    context.Logger.LogError($"Workflow context not found for booking {bookingRef}. The escalation may not have been triggered yet.");
-                    return new APIGatewayProxyResponse
-                    {
-                        StatusCode = 404,
-                        Body = "Workflow context not found. Please ensure the escalation email was sent.",
-                        Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
-                    };
                 }
                 catch (Exception ex)
                 {

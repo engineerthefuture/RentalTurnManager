@@ -83,7 +83,7 @@
       "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
       "Parameters": {
         "Bucket.$": "$.state.input.bookingStateBucket",
-        "Key.$": "States.Format('{}/workflow-context.json', $.state.bookingRef)",
+        "Key.$": "States.Format('bookings/{}/{}_workflow-context.json', $.state.platform, $.state.bookingRef)",
         "Body.$": "States.JsonToString($.state.input)"
       },
       "ResultPath": "$.saveResult",
