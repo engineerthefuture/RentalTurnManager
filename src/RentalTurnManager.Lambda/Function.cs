@@ -326,7 +326,7 @@ public class Function
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, $"Failed to retrieve owner token from Secrets Manager ({emailSecretName}): {ex.Message}");
+                        _logger.LogError(ex, $"Failed to retrieve owner token from Secrets Manager: {ex.Message}");
                         ownerToken = "MISSING_TOKEN";
                     }
 
