@@ -506,6 +506,13 @@ Resources:
       RouteKey: 'GET /respond'
       Target: !Sub 'integrations/${CallbackApiIntegration}'
 
+  CallbackApiOverrideRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref CallbackApi
+      RouteKey: 'GET /override'
+      Target: !Sub 'integrations/${CallbackApiIntegration}'
+
   CallbackApiStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
