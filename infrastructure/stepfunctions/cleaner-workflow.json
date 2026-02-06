@@ -28,7 +28,7 @@
               "BooleanEquals": true
             }
           ],
-          "Next": "CleanerConfirmed"
+          "Next": "GetCurrentCleaner"
         }
       ],
       "Default": "CheckCleanerList"
@@ -108,7 +108,27 @@
         "checkData.$": "$.state.checkData"
       },
       "ResultPath": "$.state",
-      "Next": "FormatCleaningDate"
+      "Next": "CheckForOwnerOverride"
+    },
+    "CheckForOwnerOverride": {
+      "Type": "Choice",
+      "Comment": "If owner override, skip sending request and go straight to confirmation",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.state.input.ownerOverride",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.state.input.ownerOverride",
+              "BooleanEquals": true
+            }
+          ],
+          "Next": "CleanerConfirmed"
+        }
+      ],
+      "Default": "FormatCleaningDate"
     },
     "FormatCleaningDate": {
       "Type": "Pass",
