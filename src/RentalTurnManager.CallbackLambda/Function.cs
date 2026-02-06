@@ -400,6 +400,18 @@ public class Function
                     // Log first 500 chars for debugging
                     context.Logger.LogInformation($"Workflow context preview: {workflowContextJson.Substring(0, Math.Min(500, workflowContextJson.Length))}");
 
+                    // Check if the content is a JSON string (starts with quote) - States.JsonToString produces this
+                    if (workflowContextJson.StartsWith("\""))
+                    {
+                        // Deserialize the string to get the actual JSON
+                        var unescapedJson = JsonSerializer.Deserialize<string>(workflowContextJson);
+                        if (unescapedJson != null)
+                        {
+                            workflowContextJson = unescapedJson;
+                            context.Logger.LogInformation($"Unescaped workflow context (length: {workflowContextJson.Length})");
+                        }
+                    }
+
                     // Build a new workflow input by deserializing to Dictionary<string, JsonElement>
                     var workflowInput = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
                         workflowContextJson, 
