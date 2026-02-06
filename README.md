@@ -201,13 +201,15 @@ Both should contain JSON in this format:
       "address": "123 Main St, City, State 12345",
       "cleaners": [
         {
+          "cleanerId": "primary-cleaner-id",
           "name": "Primary Cleaner",
           "email": "cleaner1@example.com",
           "phone": "+1-555-0100",
-          "phoneEmail": "1234567890@vtext.com", // Optional: SMS via email (Verizon, AT&T, etc.)
+          "phoneEmail": "1234567890@vtext.com",
           "rank": 1
         },
         {
+          "cleanerId": "backup-cleaner-id",
           "name": "Backup Cleaner",
           "email": "cleaner2@example.com",
           "phone": "+1-555-0200",
@@ -215,9 +217,20 @@ Both should contain JSON in this format:
           "rank": 2
         }
       ],
-      ### Cleaner SMS/Text Notification (phoneEmail)
+      ### Cleaner Configuration
 
-      Each cleaner object can include an optional `phoneEmail` property. This should be a valid email-to-SMS gateway address for the cleaner's mobile carrier. When present, the system will BCC this address on cleaner notification emails, allowing the cleaner to receive a text message alert while keeping the address private from other recipients.
+      Each cleaner object requires the following fields:
+
+      - **`cleanerId`** (required): Unique identifier for the cleaner, used in owner override URLs
+      - **`name`** (required): Cleaner's full name
+      - **`email`** (required): Cleaner's email address for notifications
+      - **`phone`** (required): Cleaner's phone number
+      - **`phoneEmail`** (optional): Email-to-SMS gateway address for text notifications (e.g., `1234567890@vtext.com` for Verizon)
+      - **`rank`** (required): Priority order (1 = highest priority)
+
+      #### Cleaner SMS/Text Notification (phoneEmail)
+
+      The optional `phoneEmail` property should be a valid email-to-SMS gateway address for the cleaner's mobile carrier. When present, the system will BCC this address on cleaner notification emails, allowing the cleaner to receive a text message alert while keeping the address private from other recipients.
 
       **Examples:**
 

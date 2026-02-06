@@ -32,6 +32,14 @@ public class Booking
     public DateTime? CleanerConfirmedAt { get; set; }
     public DateTime? ScheduledCleaningTime { get; set; }
     
+    // Workflow context for owner override (stored when all cleaners exhausted)
+    public string? WorkflowPropertyId { get; set; }
+    public string? WorkflowPropertyData { get; set; } // JSON serialized PropertyConfiguration
+    public DateTime? WorkflowCleaningDateTime { get; set; }
+    public string? WorkflowOwnerEmail { get; set; }
+    public string? WorkflowCallbackApiUrl { get; set; }
+    public string? WorkflowBookingStateBucket { get; set; }
+    
     /// <summary>
     /// Number of days in the booking (CheckOut - CheckIn)
     /// </summary>

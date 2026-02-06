@@ -11,7 +11,27 @@
         "allCleanersExhausted": false
       },
       "ResultPath": "$.state",
-      "Next": "CheckCleanerList"
+      "Next": "CheckOwnerOverride"
+    },
+    "CheckOwnerOverride": {
+      "Type": "Choice",
+      "Comment": "Check if this is an owner override that skips to confirmation",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.state.input.ownerOverride",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.state.input.ownerOverride",
+              "BooleanEquals": true
+            }
+          ],
+          "Next": "CheckCleanerList"
+        }
+      ],
+      "Default": "CheckCleanerList"
     },
     "CheckCleanerList": {
       "Type": "Pass",
@@ -55,6 +75,18 @@
         "cleaners.$": "$.state.input.property.cleaners"
       },
       "ResultPath": "$.state",
+      "Next": "SaveWorkflowContext"
+    },
+    "SaveWorkflowContext": {
+      "Type": "Task",
+      "Comment": "Save workflow context to S3 for owner override",
+      "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+      "Parameters": {
+        "Bucket.$": "$.state.input.bookingStateBucket",
+        "Key.$": "States.Format('bookings/{}/{}_workflow-context.json', $.state.platform, $.state.bookingRef)",
+        "Body.$": "States.JsonToString($.state.input)"
+      },
+      "ResultPath": "$.saveResult",
       "Next": "AllCleanersExhausted"
     },
     "GetCurrentCleaner": {
@@ -76,7 +108,27 @@
         "checkData.$": "$.state.checkData"
       },
       "ResultPath": "$.state",
-      "Next": "FormatCleaningDate"
+      "Next": "CheckForOwnerOverride"
+    },
+    "CheckForOwnerOverride": {
+      "Type": "Choice",
+      "Comment": "If owner override, skip sending request and go straight to confirmation",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.state.input.ownerOverride",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.state.input.ownerOverride",
+              "BooleanEquals": true
+            }
+          ],
+          "Next": "CleanerConfirmed"
+        }
+      ],
+      "Default": "FormatCleaningDate"
     },
     "FormatCleaningDate": {
       "Type": "Pass",
@@ -108,8 +160,7 @@
         "Source.$": "$.state.input.ownerEmail",
         "Destination": {
           "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
-          "CcAddresses.$": "States.Array($.state.input.ownerEmail)",
-          "BccAddresses.$": "States.Array($.state.currentCleaner.phoneEmail)"
+          "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
         },
         "Message": {
           "Subject": {
@@ -124,6 +175,11 @@
       },
       "ResultPath": "$.emailResult",
       "Catch": [
+        {
+          "ErrorEquals": ["States.Timeout"],
+          "ResultPath": "$.error",
+          "Next": "SendReminderEmail"
+        },
         {
           "ErrorEquals": ["States.ALL"],
           "ResultPath": "$.error",
@@ -158,8 +214,7 @@
         "Source.$": "$.state.input.ownerEmail",
         "Destination": {
           "ToAddresses.$": "States.Array($.state.currentCleaner.email)",
-          "CcAddresses.$": "States.Array($.state.input.ownerEmail)",
-          "BccAddresses.$": "States.Array($.state.currentCleaner.phoneEmail)"
+          "CcAddresses.$": "States.Array($.state.input.ownerEmail)"
         },
         "Message": {
           "Subject": {
@@ -278,7 +333,9 @@
           "currentCleanerIndex.$": "States.MathAdd($.state.input.currentCleanerIndex, 1)",
           "attemptCount.$": "States.MathAdd($.state.input.attemptCount, 1)",
           "ownerEmail.$": "$.state.input.ownerEmail",
-          "callbackApiUrl.$": "$.state.input.callbackApiUrl"
+          "callbackApiUrl.$": "$.state.input.callbackApiUrl",
+          "bookingStateBucket.$": "$.state.input.bookingStateBucket",
+          "escalationEmailHtml.$": "$.state.input.escalationEmailHtml"
         },
         "cleanerConfirmed": false,
         "allCleanersExhausted": false
@@ -288,7 +345,7 @@
     },
     "AllCleanersExhausted": {
       "Type": "Task",
-      "Comment": "Send escalation email to owner",
+      "Comment": "Send escalation email to owner with pre-generated HTML",
       "Resource": "arn:aws:states:::aws-sdk:ses:sendEmail",
       "Parameters": {
         "Source.$": "$.state.input.ownerEmail",
@@ -301,7 +358,7 @@
           },
           "Body": {
             "Html": {
-              "Data.$": "States.Format('<html><head><style>body{{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:800px;margin:0 auto;padding:20px}}.header{{background-color:#dc3545;color:white;padding:20px;border-radius:5px;margin-bottom:20px}}.content{{background-color:#f8f9fa;padding:20px;border-radius:5px;margin-bottom:20px}}ul{{margin:10px 0;padding-left:20px}}h3{{color:#495057;margin-top:20px}}.override-section{{background-color:#fff3cd;border:1px solid #ffc107;padding:20px;border-radius:5px;margin:20px 0}}.override-buttons{{margin:20px 0;display:flex;gap:10px;flex-wrap:wrap}}.btn{{display:inline-block;padding:12px 24px;text-decoration:none;border-radius:5px;font-weight:bold;color:white;margin:5px}}.btn-schedule{{background-color:#28a745}}.btn-cancel{{background-color:#6c757d}}</style></head><body><div class=\"header\"><h2 style=\"margin:0\">⚠️ URGENT: Cleaner Not Available</h2></div><div class=\"content\"><p>Hello {},</p><p><strong>We were unable to secure a cleaner for the following booking:</strong></p><ul><li><strong>Property:</strong> {}</li><li><strong>Check-in Date:</strong> {}</li><li><strong>Checkout Date:</strong> {}</li><li><strong>Cleaning Date:</strong> {}</li><li><strong>Address:</strong> {}</li><li><strong>Guests:</strong> {}</li><li><strong>Nights:</strong> {}</li></ul><h3>Booking Details:</h3><ul><li><strong>Platform:</strong> {}</li><li><strong>Booking Reference:</strong> {}</li><li><strong>Guest Name:</strong> {}</li></ul></div><div class=\"override-section\"><h3 style=\"margin-top:0\">Owner Override Options</h3><p>All preferred cleaners were contacted and either declined or did not respond. You can manually schedule or cancel this cleaning:</p><div class=\"override-buttons\"><a href=\"{}/respond?ownerToken=OWNER_TOKEN&action=schedule&cleanerId=CLEANER_1&propertyId={}&bookingRef={}\" class=\"btn btn-schedule\">Schedule Cleaner 1</a><a href=\"{}/respond?ownerToken=OWNER_TOKEN&action=schedule&cleanerId=CLEANER_2&propertyId={}&bookingRef={}\" class=\"btn btn-schedule\">Schedule Cleaner 2</a><a href=\"{}/respond?ownerToken=OWNER_TOKEN&action=cancel&cleanerId=NONE&propertyId={}&bookingRef={}\" class=\"btn btn-cancel\">Cancel Cleaning</a></div><p style=\"font-size:14px;color:#6c757d;margin-top:15px\"><strong>Note:</strong> Replace OWNER_TOKEN with your actual override token. Replace CLEANER_1/CLEANER_2 with actual cleaner IDs from your property configuration.</p></div><p>Thank you,<br/>{}</p></body></html>', $.state.ownerName, $.state.propertyName, $.state.checkInDate, $.state.checkOutDate, $.state.cleaningDate, $.state.propertyAddress, $.state.numberOfGuests, $.state.numberOfNights, $.state.platform, $.state.bookingRef, $.state.guestName, $.state.input.callbackApiUrl, $.state.propertyId, $.state.bookingRef, $.state.input.callbackApiUrl, $.state.propertyId, $.state.bookingRef, $.state.input.callbackApiUrl, $.state.propertyId, $.state.bookingRef, $.state.ownerName)"
+              "Data.$": "$.state.input.escalationEmailHtml"
             }
           }
         }

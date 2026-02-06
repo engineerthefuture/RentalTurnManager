@@ -14,6 +14,7 @@ using Amazon.Lambda.TestUtilities;
 using Amazon.StepFunctions;
 using Amazon.StepFunctions.Model;
 using Amazon.SecretsManager;
+using Amazon.S3;
 using FluentAssertions;
 using Moq;
 using RentalTurnManager.CallbackLambda;
@@ -25,12 +26,14 @@ public class CallbackFunctionTests
 {
     private readonly Mock<IAmazonStepFunctions> _mockStepFunctions;
     private readonly Mock<IAmazonSecretsManager> _mockSecretsManager;
+    private readonly Mock<IAmazonS3> _mockS3;
     private readonly TestLambdaContext _context;
 
     public CallbackFunctionTests()
     {
         _mockStepFunctions = new Mock<IAmazonStepFunctions>();
         _mockSecretsManager = new Mock<IAmazonSecretsManager>();
+        _mockS3 = new Mock<IAmazonS3>();
         _context = new TestLambdaContext
         {
             FunctionName = "CallbackFunction",
@@ -43,7 +46,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_ValidYesResponse_ReturnsSuccessHtml()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -73,7 +76,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_ValidNoResponse_ReturnsSuccessHtml()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -102,7 +105,7 @@ public class CallbackFunctionTests
     {
         // Arrange
         Environment.SetEnvironmentVariable("OWNER_EMAIL", "owner@test.com");
-        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -122,7 +125,9 @@ public class CallbackFunctionTests
         // Assert
         response.StatusCode.Should().Be(400);
         response.Headers["Content-Type"].Should().Be("text/html; charset=utf-8");
-        response.Body.Should().Contain("This Link Has Expired");
+        response.Body.Should().Contain("Response Already Recorded");
+        response.Body.Should().Contain("A response has already been received for this request, or the link has expired");
+        response.Body.Should().Contain("You attempted to respond: <span class='highlight'>YES</span>");
         response.Body.Should().Contain("owner@test.com");
         response.Body.Should().Contain("mailto:owner@test.com");
         response.Body.Should().Contain("lang=\"en\"");
@@ -138,7 +143,7 @@ public class CallbackFunctionTests
     {
         // Arrange
         Environment.SetEnvironmentVariable("OWNER_EMAIL", null);
-        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -167,7 +172,7 @@ public class CallbackFunctionTests
     {
         // Arrange
         Environment.SetEnvironmentVariable("OWNER_EMAIL", "<script>alert('xss')</script>@test.com");
-        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -198,7 +203,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_MissingToken_ReturnsBadRequest()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -219,7 +224,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_MissingResponse_ReturnsBadRequest()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -240,7 +245,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_InvalidResponse_ReturnsBadRequest()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -262,7 +267,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_TokenWithSpaces_ReplacesWithPlus()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
@@ -290,7 +295,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_SendTaskSuccessException_EncodesErrorMessage()
     {
         // Arrange
-        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object);
+        var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>

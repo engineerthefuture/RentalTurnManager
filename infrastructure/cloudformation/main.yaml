@@ -335,6 +335,10 @@ Resources:
                 Resource: '*'
               - Effect: Allow
                 Action:
+                  - s3:PutObject
+                Resource: !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings/*'
+              - Effect: Allow
+                Action:
                   - logs:CreateLogDelivery
                   - logs:GetLogDelivery
                   - logs:UpdateLogDelivery
@@ -430,6 +434,10 @@ Resources:
                 Action:
                   - states:StartExecution
                 Resource: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings/*'
 
   CallbackLambda:
     Type: AWS::Lambda::Function
@@ -446,6 +454,7 @@ Resources:
           OWNER_EMAIL: !Ref OwnerEmail
           EMAIL_SECRET_NAME: !Ref EmailCredentialsSecret
           CLEANER_WORKFLOW_STATE_MACHINE_ARN: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${NamespacePrefix}-${Environment}-stepfunction-${AppName}'
+          BOOKING_STATE_BUCKET: !Ref BookingStateBucket
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         S3Key: !Sub '${AppName}/lambda/callback-lambda-deployment.zip'
@@ -504,6 +513,13 @@ Resources:
     Properties:
       ApiId: !Ref CallbackApi
       RouteKey: 'GET /respond'
+      Target: !Sub 'integrations/${CallbackApiIntegration}'
+
+  CallbackApiOverrideRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref CallbackApi
+      RouteKey: 'GET /override'
       Target: !Sub 'integrations/${CallbackApiIntegration}'
 
   CallbackApiStage:
