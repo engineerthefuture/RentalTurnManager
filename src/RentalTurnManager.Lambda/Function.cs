@@ -304,7 +304,7 @@ public class Function
                     try
                     {
                         var secretsManager = _serviceProvider.GetRequiredService<IAmazonSecretsManager>();
-                        _logger.LogInformation($"Retrieving owner token from secret: {emailSecretName}");
+                        _logger.LogInformation("Retrieving owner token from Secrets Manager.");
                         var secretResponse = await secretsManager.GetSecretValueAsync(new Amazon.SecretsManager.Model.GetSecretValueRequest
                         {
                             SecretId = emailSecretName
