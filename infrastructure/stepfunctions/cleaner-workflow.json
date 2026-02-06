@@ -18,8 +18,16 @@
       "Comment": "Check if this is an owner override that skips to confirmation",
       "Choices": [
         {
-          "Variable": "$.state.input.ownerOverride",
-          "BooleanEquals": true,
+          "And": [
+            {
+              "Variable": "$.state.input.ownerOverride",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.state.input.ownerOverride",
+              "BooleanEquals": true
+            }
+          ],
           "Next": "CleanerConfirmed"
         }
       ],
