@@ -267,7 +267,7 @@ Add the following **variables**:
 
 Create two GitHub secrets for your rental property configurations:
 
-**`PROPERTIES_CONFIG_DEV`**: Development environment configuration (used when deploying to dev branch)
+**`PROPERTIES_CONFIG_DEV`**: Dev environment configuration (used when deploying to dev branch)
 **`PROPERTIES_CONFIG`**: Production environment configuration (used when deploying to main branch)
 
 Both should contain JSON in this format:
@@ -301,29 +301,6 @@ Both should contain JSON in this format:
           "rank": 2
         }
       ],
-      ### Cleaner Configuration
-
-      Each cleaner object requires the following fields:
-
-      - **`cleanerId`** (required): Unique identifier for the cleaner, used in owner override URLs
-      - **`name`** (required): Cleaner's full name
-      - **`email`** (required): Cleaner's email address for notifications
-      - **`phone`** (required): Cleaner's phone number
-      - **`phoneEmail`** (optional): Email-to-SMS gateway address for text notifications (e.g., `1234567890@vtext.com` for Verizon)
-      - **`rank`** (required): Priority order (1 = highest priority)
-
-      #### Cleaner SMS/Text Notification (phoneEmail)
-
-      The optional `phoneEmail` property should be a valid email-to-SMS gateway address for the cleaner's mobile carrier. When present, the system will BCC this address on cleaner notification emails, allowing the cleaner to receive a text message alert while keeping the address private from other recipients.
-
-      **Examples:**
-
-      - Verizon: `1234567890@vtext.com`
-      - AT&T: `1234567890@txt.att.net`
-      - T-Mobile: `1234567890@tmomail.net`
-      - Sprint: `1234567890@messaging.sprintpcs.com`
-
-      This enables real-time SMS notifications for cleaners in addition to standard email.
       "metadata": {
         "propertyName": "Beach House",
         "bedrooms": 3,
@@ -340,6 +317,30 @@ Both should contain JSON in this format:
   }
 }
 ```
+
+### Cleaner Configuration
+
+Each cleaner object requires the following fields:
+
+- **`cleanerId`** (required): Unique identifier for the cleaner, used in owner override URLs
+- **`name`** (required): Cleaner's full name
+- **`email`** (required): Cleaner's email address for notifications
+- **`phone`** (required): Cleaner's phone number
+- **`phoneEmail`** (optional): Email-to-SMS gateway address for text notifications (e.g., `1234567890@vtext.com` for Verizon)
+- **`rank`** (required): Priority order (1 = highest priority)
+
+#### Cleaner SMS/Text Notification (phoneEmail)
+
+The optional `phoneEmail` property should be a valid email-to-SMS gateway address for the cleaner's mobile carrier. When present, the system will BCC this address on cleaner notification emails, allowing the cleaner to receive a text message alert while keeping the address private from other recipients.
+
+**Examples:**
+
+- Verizon: `1234567890@vtext.com`
+- AT&T: `1234567890@txt.att.net`
+- T-Mobile: `1234567890@tmomail.net`
+- Sprint: `1234567890@messaging.sprintpcs.com`
+
+This enables real-time SMS notifications for cleaners in addition to standard email.
 
 **Note**: Store these as single-line JSON strings in the GitHub secrets. The deployment workflow will automatically select the appropriate configuration based on the environment (dev or prod) and write it to `config/properties.json`.
 
