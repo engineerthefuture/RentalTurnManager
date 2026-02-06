@@ -28,7 +28,7 @@
               "BooleanEquals": true
             }
           ],
-          "Next": "GetCurrentCleaner"
+          "Next": "CheckCleanerList"
         }
       ],
       "Default": "CheckCleanerList"
