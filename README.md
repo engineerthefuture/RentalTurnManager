@@ -136,6 +136,89 @@ RentalTurnManager/
 └── README.md
 ```
 
+## Step Functions Workflow
+
+The cleaner coordination workflow is managed by AWS Step Functions with the following state flow:
+
+```mermaid
+graph TD
+    Start([Start]) --> InitializeState[Initialize State]
+    InitializeState --> CheckOwnerOverride{Owner Override?}
+    CheckOwnerOverride -->|Yes/No| CheckCleanerList[Check Cleaner List]
+    CheckCleanerList --> CompareCleanerIndex{Index < Cleaner Count?}
+    
+    CompareCleanerIndex -->|Yes| GetCurrentCleaner[Get Current Cleaner]
+    CompareCleanerIndex -->|No| PrepareEscalation[Prepare Escalation]
+    
+    GetCurrentCleaner --> CheckForOwnerOverride{Owner Override?}
+    CheckForOwnerOverride -->|Yes| CleanerConfirmed[Cleaner Confirmed]
+    CheckForOwnerOverride -->|No| FormatCleaningDate[Format Cleaning Date]
+    
+    FormatCleaningDate --> SendCleanerRequest[Send Cleaner Request<br/>Wait for Response<br/>9 hour timeout]
+    
+    SendCleanerRequest -->|Success| EvaluateReminderResponse{Check Response}
+    SendCleanerRequest -->|Timeout| SendReminderEmail[Send Reminder Email<br/>Wait for Response<br/>3 hour timeout]
+    SendCleanerRequest -->|Failure| IncrementCleanerIndex[Increment Cleaner Index]
+    
+    SendReminderEmail -->|Success| EvaluateReminderResponse
+    SendReminderEmail -->|Timeout| IncrementCleanerIndex
+    SendReminderEmail -->|Failure| IncrementCleanerIndex
+    
+    EvaluateReminderResponse -->|Confirmed| CleanerConfirmed
+    EvaluateReminderResponse -->|Declined| IncrementCleanerIndex
+    
+    IncrementCleanerIndex --> CompareCleanerIndex
+    
+    PrepareEscalation --> SaveWorkflowContext[Save Workflow Context to S3]
+    SaveWorkflowContext --> AllCleanersExhausted[All Cleaners Exhausted<br/>Send Escalation Email]
+    AllCleanersExhausted --> WorkflowFailed([Workflow Failed])
+    
+    CleanerConfirmed --> SendCleanerConfirmation[Send Cleaner Confirmation<br/>with Calendar Invite]
+    SendCleanerConfirmation --> SendOwnerNotification[Send Owner Notification<br/>with Calendar Invite]
+    SendOwnerNotification --> WorkflowSuccess([Workflow Success])
+    
+    WorkflowFailed --> End([End])
+    WorkflowSuccess --> End
+    
+    style Start fill:#90EE90
+    style End fill:#FFB6C1
+    style CleanerConfirmed fill:#87CEEB
+    style AllCleanersExhausted fill:#FFA500
+    style SendCleanerRequest fill:#DDA0DD
+    style SendReminderEmail fill:#DDA0DD
+    style WorkflowSuccess fill:#90EE90
+    style WorkflowFailed fill:#FF6B6B
+```
+
+### Workflow States Explained
+
+- **InitializeState**: Sets up initial workflow state with `cleanerConfirmed: false` and `allCleanersExhausted: false`
+- **CheckOwnerOverride**: Determines if this is a manual owner override (when owner manually selects cleaner from escalation email)
+- **CheckCleanerList**: Gets the total count of available cleaners for the property
+- **CompareCleanerIndex**: Checks if there are more cleaners to try
+- **GetCurrentCleaner**: Extracts the current cleaner's information from the property configuration
+- **CheckForOwnerOverride**: If owner override, skip email request and go straight to confirmation
+- **FormatCleaningDate**: Reformats dates for display in emails (YYYY-MM-DD to MM-DD-YYYY)
+- **SendCleanerRequest**: Sends email to cleaner with YES/NO callback links, waits up to 9 hours for response
+- **SendReminderEmail**: If no response after 9 hours, sends reminder email and waits 3 more hours
+- **EvaluateReminderResponse**: Checks if cleaner confirmed or declined after reminder
+- **IncrementCleanerIndex**: Moves to the next cleaner in the list
+- **PrepareEscalation**: Prepares data for escalation email when all cleaners are exhausted
+- **SaveWorkflowContext**: Saves complete workflow state to S3 for potential owner override restart
+- **AllCleanersExhausted**: Sends escalation email to owner with manual scheduling options
+- **CleanerConfirmed**: Marks the workflow as having a confirmed cleaner
+- **SendCleanerConfirmation**: Sends confirmation email with calendar invite to the cleaner
+- **SendOwnerNotification**: Sends notification email with calendar invite to the property owner
+
+### Owner Override Flow
+
+When all cleaners are exhausted, the owner receives an escalation email with "Schedule This Cleaner" buttons. When clicked:
+
+1. Owner clicks button → Callback Lambda validates secure token
+2. Lambda retrieves saved workflow context from S3
+3. Lambda restarts workflow with selected cleaner and `ownerOverride: true`
+4. Workflow skips cleaner request email and goes directly to confirmation emails
+
 ## Setup
 
 ### Prerequisites
