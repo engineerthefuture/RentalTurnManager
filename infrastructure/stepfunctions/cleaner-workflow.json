@@ -281,7 +281,9 @@
           "currentCleanerIndex.$": "States.MathAdd($.state.input.currentCleanerIndex, 1)",
           "attemptCount.$": "States.MathAdd($.state.input.attemptCount, 1)",
           "ownerEmail.$": "$.state.input.ownerEmail",
-          "callbackApiUrl.$": "$.state.input.callbackApiUrl"
+          "callbackApiUrl.$": "$.state.input.callbackApiUrl",
+          "bookingStateBucket.$": "$.state.input.bookingStateBucket",
+          "escalationEmailHtml.$": "$.state.input.escalationEmailHtml"
         },
         "cleanerConfirmed": false,
         "allCleanersExhausted": false
