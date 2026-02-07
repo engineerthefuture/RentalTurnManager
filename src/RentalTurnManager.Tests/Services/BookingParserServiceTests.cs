@@ -192,4 +192,37 @@ public class BookingParserServiceTests
         result.PropertyId.Should().NotContain("Hello");
         result.PropertyId.Should().NotContain("I'd love");
     }
-}
+
+    [Fact]
+    public void ParseBooking_VrboEmailWithSubjectDateRange_ExtractsCorrectly()
+    {
+        // Arrange - Tests VRBO date format "Apr 3 - Apr 6, 2026" (no comma after first date)
+        var email = new EmailMessage
+        {
+            From = "sender@messages.homeaway.com",
+            Subject = "Instant Booking from Sara Moriarty: Apr 3 - Apr 6, 2026 - Vrbo #4906384",
+            Body = @"
+                Your booking is confirmed
+                
+                Property #4906384
+                Unit unit_5480548
+                Reservation ID HA-25496K
+                Dates Apr 3 - Apr 6, 2026, 3 nights
+                Guests 2 adults, 1 child
+                Traveler Name Sara Moriarty
+            "
+        };
+
+        // Act
+        var result = _service.ParseBooking(email);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Platform.Should().Be("vrbo");
+        result.BookingReference.Should().Be("HA-25496K");
+        result.PropertyId.Should().Be("4906384");
+        result.GuestName.Should().Be("Sara Moriarty");
+        result.CheckInDate.Should().Be(new DateTime(2026, 4, 3));
+        result.CheckOutDate.Should().Be(new DateTime(2026, 4, 6));
+        result.NumberOfGuests.Should().Be(3);
+    }}
