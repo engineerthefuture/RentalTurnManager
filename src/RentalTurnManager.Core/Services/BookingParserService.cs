@@ -372,16 +372,21 @@ public class BookingParserService : IBookingParserService
             }
         }
 
-        // VRBO uses date range format: "Dec 31, 2025 - Jan 2, 2026"
+        // VRBO uses date range format: "Dec 31, 2025 - Jan 2, 2026" or "Apr 3 - Apr 6, 2026"
         // Try extracting from subject first (more reliable)
-        var subjectDateMatch = Regex.Match(subject, @"(\w+\s+\d{1,2},\s+\d{4})\s*-\s*(\w+\s+\d{1,2},\s+\d{4})", RegexOptions.IgnoreCase);
+        // Pattern handles both "Month Day, Year - Month Day, Year" and "Month Day - Month Day, Year"
+        var subjectDateMatch = Regex.Match(subject, @"(\w+\s+\d{1,2})(?:,\s+\d{4})?\s*-\s*(\w+\s+\d{1,2}),\s+(\d{4})", RegexOptions.IgnoreCase);
         if (subjectDateMatch.Success)
         {
-            if (DateTime.TryParse(subjectDateMatch.Groups[1].Value, out var checkIn))
+            var year = subjectDateMatch.Groups[3].Value;
+            var checkInStr = $"{subjectDateMatch.Groups[1].Value}, {year}";
+            var checkOutStr = $"{subjectDateMatch.Groups[2].Value}, {year}";
+            
+            if (DateTime.TryParse(checkInStr, out var checkIn))
             {
                 booking.CheckInDate = checkIn;
             }
-            if (DateTime.TryParse(subjectDateMatch.Groups[2].Value, out var checkOut))
+            if (DateTime.TryParse(checkOutStr, out var checkOut))
             {
                 booking.CheckOutDate = checkOut;
             }
@@ -434,12 +439,12 @@ public class BookingParserService : IBookingParserService
             }
         }
 
-        // Extract number of guests - format: "6 adults, 0 children"
+        // Extract number of guests - format: "6 adults, 0 children" or "2 adults, 1 child"
         var guestsMatch = Regex.Match(content, @"Guests[:\s>]+(\d+)\s+adults?", RegexOptions.IgnoreCase);
         if (guestsMatch.Success && int.TryParse(guestsMatch.Groups[1].Value, out var adults))
         {
-            // Also check for children
-            var childrenMatch = Regex.Match(content, @"(\d+)\s+children", RegexOptions.IgnoreCase);
+            // Also check for children (both "child" and "children")
+            var childrenMatch = Regex.Match(content, @"(\d+)\s+child(?:ren)?", RegexOptions.IgnoreCase);
             var children = 0;
             if (childrenMatch.Success && int.TryParse(childrenMatch.Groups[1].Value, out children))
             {
