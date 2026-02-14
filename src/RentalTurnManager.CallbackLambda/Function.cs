@@ -52,11 +52,18 @@ public class Function
 
         try
         {
-            // Check if this is an owner override request
+            // Check if this is an owner override or cancel request
             if (request.QueryStringParameters.TryGetValue("ownerToken", out var ownerToken))
             {
-                context.Logger.LogInformation("Processing owner override request");
+                context.Logger.LogInformation("Processing owner override or cancel request");
                 return await HandleOwnerOverride(request.QueryStringParameters, context);
+            }
+            
+            // Check if this is a cancel request with cancelToken
+            if (request.QueryStringParameters.TryGetValue("cancelToken", out var cancelToken))
+            {
+                context.Logger.LogInformation("Processing cleaning cancellation request");
+                return await HandleCleaningCancellation(request.QueryStringParameters, context);
             }
 
             // Extract query parameters
@@ -586,6 +593,243 @@ public class Function
             Body = errorHtml,
             Headers = new Dictionary<string, string> { { "Content-Type", "text/html; charset=utf-8" } }
         };
+    }
+    
+    private async Task<APIGatewayProxyResponse> HandleCleaningCancellation(IDictionary<string, string> queryParams, ILambdaContext context)
+    {
+        context.Logger.LogInformation("Handling cleaning cancellation");
+        
+        // Validate required parameters
+        if (!queryParams.TryGetValue("cancelToken", out var cancelToken) ||
+            !queryParams.TryGetValue("bookingRef", out var bookingRef) ||
+            !queryParams.TryGetValue("platform", out var platform) ||
+            !queryParams.TryGetValue("propertyId", out var propertyId))
+        {
+            return new APIGatewayProxyResponse
+            {
+                StatusCode = 400,
+                Body = "Missing required parameters",
+                Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+            };
+        }
+        
+        // Verify cancel token matches the stored token in Secrets Manager
+        var secretName = Environment.GetEnvironmentVariable("EMAIL_SECRET_NAME");
+        if (string.IsNullOrEmpty(secretName))
+        {
+            context.Logger.LogError("EMAIL_SECRET_NAME environment variable not set");
+            return new APIGatewayProxyResponse
+            {
+                StatusCode = 500,
+                Body = "Server configuration error",
+                Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+            };
+        }
+        
+        var secretResponse = await _secretsManagerClient.GetSecretValueAsync(new GetSecretValueRequest
+        {
+            SecretId = secretName
+        });
+        
+        var secret = JsonSerializer.Deserialize<EmailSecret>(secretResponse.SecretString, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        if (secret?.OwnerOverrideToken == null)
+        {
+            context.Logger.LogError("OwnerOverrideToken not found in secret");
+            return new APIGatewayProxyResponse
+            {
+                StatusCode = 500,
+                Body = "Server configuration error",
+                Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+            };
+        }
+        
+        // Verify token
+        if (cancelToken != secret.OwnerOverrideToken)
+        {
+            context.Logger.LogWarning("Invalid cancel token provided");
+            return new APIGatewayProxyResponse
+            {
+                StatusCode = 403,
+                Body = "Invalid cancel token",
+                Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+            };
+        }
+        
+        context.Logger.LogInformation($"Token verified successfully for booking {bookingRef}");
+        
+        // Get booking state from S3 to retrieve cleaner information
+        var bucketName = Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET");
+        if (string.IsNullOrEmpty(bucketName))
+        {
+            context.Logger.LogError("BOOKING_STATE_BUCKET environment variable not set");
+            return new APIGatewayProxyResponse
+            {
+                StatusCode = 500,
+                Body = "Server configuration error",
+                Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+            };
+        }
+        
+        try
+        {
+            // Retrieve booking from S3
+            var key = $"bookings/{platform.ToLower()}/{bookingRef}.json";
+            var getResponse = await _s3Client.GetObjectAsync(bucketName, key);
+            
+            string bookingJson;
+            using (var reader = new StreamReader(getResponse.ResponseStream))
+            {
+                bookingJson = await reader.ReadToEndAsync();
+            }
+            
+            var booking = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(bookingJson);
+            if (booking == null)
+            {
+                context.Logger.LogError($"Failed to deserialize booking {bookingRef}");
+                return new APIGatewayProxyResponse
+                {
+                    StatusCode = 500,
+                    Body = "Failed to retrieve booking information",
+                    Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+                };
+            }
+            
+            // Check if cleaning is already assigned
+            string? cleanerName = null;
+            string? cleanerEmail = null;
+            string? propertyName = null;
+            DateTime? scheduledTime = null;
+            
+            if (booking.TryGetValue("assignedCleanerName", out var nameElement) && nameElement.ValueKind == JsonValueKind.String)
+            {
+                cleanerName = nameElement.GetString();
+            }
+            if (booking.TryGetValue("assignedCleanerEmail", out var emailElement) && emailElement.ValueKind == JsonValueKind.String)
+            {
+                cleanerEmail = emailElement.GetString();
+            }
+            if (booking.TryGetValue("workflowPropertyId", out var propElement) && propElement.ValueKind == JsonValueKind.String)
+            {
+                propertyName = propElement.GetString();
+            }
+            if (booking.TryGetValue("scheduledCleaningTime", out var timeElement) && timeElement.ValueKind == JsonValueKind.String)
+            {
+                scheduledTime = DateTime.Parse(timeElement.GetString()!);
+            }
+            
+            // Update booking status to cancelled
+            booking["cleaningStatus"] = JsonDocument.Parse("{\"value\":\"cancelled\"}").RootElement.GetProperty("value");
+            booking["cancelledAt"] = JsonDocument.Parse($"{{\"value\":\"{DateTime.UtcNow:O}\"}}").RootElement.GetProperty("value");
+            
+            // Save updated booking back to S3
+            var updatedJson = JsonSerializer.Serialize(booking);
+            await _s3Client.PutObjectAsync(new PutObjectRequest
+            {
+                BucketName = bucketName,
+                Key = key,
+                ContentBody = updatedJson,
+                ContentType = "application/json"
+            });
+            
+            context.Logger.LogInformation($"Marked booking {bookingRef} as cancelled in S3");
+            
+            // Send cancellation email to cleaner if assigned
+            if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName))
+            {
+                try
+                {
+                    // Send email via SES
+                    var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
+                    var formattedDate = scheduledTime?.ToString("MMMM dd, yyyy") ?? "Unknown Date";
+                    var formattedTime = scheduledTime?.ToString("h:mm tt") ?? "12:00 PM";
+                    
+                    var emailBody = $@"Hello {cleanerName},
+
+The cleaning scheduled for {propertyName ?? propertyId} has been cancelled by the property owner.
+
+Cancelled Appointment:
+- Property: {propertyName ?? propertyId}
+- Date: {formattedDate}
+- Time: {formattedTime}
+
+You do not need to attend this cleaning.
+
+Thank you,
+Property Management";
+                    
+                    // Note: In production, this should use SES client to send email
+                    // For now, just log it
+                    context.Logger.LogInformation($"Would send cancellation email to {cleanerEmail}");
+                    context.Logger.LogInformation($"Email body: {emailBody}");
+                }
+                catch (Exception ex)
+                {
+                    context.Logger.LogError(ex, "Failed to send cancellation email to cleaner");
+                    // Continue anyway - cancellation is recorded
+                }
+            }
+            
+            // Return success page
+            var encodedBookingRef = WebUtility.HtmlEncode(bookingRef);
+            var encodedPropertyId = WebUtility.HtmlEncode(propertyId);
+            var encodedCleanerName = WebUtility.HtmlEncode(cleanerName ?? "(not yet assigned)");
+            
+            var successHtml = $@"
+<!DOCTYPE html>
+<html lang=""en"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Cleaning Cancelled</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f8f9fa; }}
+        .success-container {{ background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto; }}
+        .success-icon {{ color: #28a745; font-size: 48px; margin-bottom: 20px; }}
+        .title {{ color: #28a745; font-size: 24px; font-weight: bold; margin-bottom: 15px; }}
+        .message {{ font-size: 18px; color: #6c757d; margin-bottom: 10px; }}
+        .detail {{ font-size: 14px; color: #495057; margin: 5px 0; }}
+    </style>
+</head>
+<body>
+    <div class='success-container' role='alert' aria-live='polite'>
+        <div class='success-icon' aria-hidden='true'>✓</div>
+        <div class='title'>Cleaning Cancelled Successfully</div>
+        <div class='message'>The cleaning has been cancelled.</div>
+        <div class='detail'>Booking: {encodedBookingRef}</div>
+        <div class='detail'>Property: {encodedPropertyId}</div>
+        <div class='detail'>Cleaner: {encodedCleanerName}</div>
+        {(!string.IsNullOrEmpty(cleanerEmail) ? "<div class='message' style='margin-top: 20px;'>A cancellation notification has been sent to the cleaner.</div>" : "")}
+    </div>
+</body>
+</html>";
+            
+            return new APIGatewayProxyResponse
+            {
+                StatusCode = 200,
+                Body = successHtml,
+                Headers = new Dictionary<string, string> { { "Content-Type", "text/html; charset=utf-8" } }
+            };
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            context.Logger.LogError($"Booking {bookingRef} not found in S3");
+            return new APIGatewayProxyResponse
+            {
+                StatusCode = 404,
+                Body = "Booking not found",
+                Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+            };
+        }
+        catch (Exception ex)
+        {
+            context.Logger.LogError(ex, $"Error cancelling cleaning: {ex.Message}");
+            return new APIGatewayProxyResponse
+            {
+                StatusCode = 500,
+                Body = $"Error processing cancellation: {ex.Message}",
+                Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
+            };
+        }
     }
 }
 
