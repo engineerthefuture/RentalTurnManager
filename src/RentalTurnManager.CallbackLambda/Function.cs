@@ -768,6 +768,9 @@ public class Function
             var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
             var calendarLambdaName = System.Environment.GetEnvironmentVariable("CALENDAR_LAMBDA_NAME") ?? "RentalTurnManager-CalendarLambda";
             
+            // Get Eastern timezone for time formatting (used in both cleaner and owner emails)
+            var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+            
             // Send to cleaner if assigned
             if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName) && scheduledTime.HasValue)
             {
@@ -775,7 +778,6 @@ public class Function
                 {
                     var formattedDate = scheduledTime.Value.ToString("MMMM dd, yyyy");
                     // Convert UTC time to Eastern Time for display
-                    var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
                     var easternTime = TimeZoneInfo.ConvertTimeFromUtc(scheduledTime.Value, easternZone);
                     var formattedTime = easternTime.ToString("h:mm tt");
                     
@@ -836,7 +838,6 @@ public class Function
                     ? scheduledTime.Value.ToString("MMMM dd, yyyy") 
                     : "Unknown Date";
                 // Convert UTC time to Eastern Time for display
-                var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
                 var formattedTime = scheduledTime.HasValue 
                     ? TimeZoneInfo.ConvertTimeFromUtc(scheduledTime.Value, easternZone).ToString("h:mm tt")
                     : "12:00 PM";
