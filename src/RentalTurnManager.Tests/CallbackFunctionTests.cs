@@ -142,6 +142,7 @@ public class CallbackFunctionTests
     public async Task FunctionHandler_InvalidTokenException_FallbackToDefaultEmail()
     {
         // Arrange
+        // Ensure fallback default is used for this test
         Environment.SetEnvironmentVariable("OWNER_EMAIL", null);
         var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
@@ -165,6 +166,9 @@ public class CallbackFunctionTests
         response.Headers["Content-Type"].Should().Be("text/html; charset=utf-8");
         response.Body.Should().Contain("support@example.com");
         response.Body.Should().Contain("mailto:support@example.com");
+
+        // Cleanup
+        Environment.SetEnvironmentVariable("OWNER_EMAIL", null);
     }
 
     [Fact]

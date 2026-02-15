@@ -35,6 +35,7 @@ public class Function
     private readonly IAmazonSecretsManager _secretsManagerClient;
     private readonly IAmazonS3 _s3Client;
     private readonly IAmazonLambda _lambdaClient;
+    private readonly string _defaultOwnerEmail;
 
     public Function()
     {
@@ -42,6 +43,8 @@ public class Function
         _secretsManagerClient = new AmazonSecretsManagerClient();
         _s3Client = new AmazonS3Client();
         _lambdaClient = new AmazonLambdaClient();
+        var ownerEnv = System.Environment.GetEnvironmentVariable("OWNER_EMAIL");
+        _defaultOwnerEmail = string.IsNullOrEmpty(ownerEnv) ? "support@example.com" : ownerEnv;
     }
 
     public Function(IAmazonStepFunctions stepFunctionsClient, IAmazonSecretsManager secretsManagerClient, IAmazonS3 s3Client)
@@ -50,6 +53,8 @@ public class Function
         _secretsManagerClient = secretsManagerClient;
         _s3Client = s3Client;
         _lambdaClient = new AmazonLambdaClient();
+        var ownerEnv = System.Environment.GetEnvironmentVariable("OWNER_EMAIL");
+        _defaultOwnerEmail = string.IsNullOrEmpty(ownerEnv) ? "support@example.com" : ownerEnv;
     }
 
     public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest request, ILambdaContext context)
@@ -129,7 +134,7 @@ public class Function
             {
                 context.Logger.LogError($"Invalid token error: {ex.Message}. This usually means the task has already completed, timed out, or the token is incorrect.");
                 
-                var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+                var ownerEmail = _defaultOwnerEmail;
                 var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
                 var encodedResponse = WebUtility.HtmlEncode(response.ToUpper());
                 
@@ -173,7 +178,7 @@ public class Function
             {
                 context.Logger.LogError($"Task timeout error: {ex.Message}");
                 
-                var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+                var ownerEmail = _defaultOwnerEmail;
                 var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
                 var encodedResponse = WebUtility.HtmlEncode(response.ToUpper());
                 
@@ -284,6 +289,9 @@ public class Function
     {
         try
         {
+            // Values captured from the saved workflow context for display in the override response
+            string? workflowPropertyIdValue = null;
+            string? assignedCleanerName = null;
             // Validate required parameters
             if (!queryParams.TryGetValue("ownerToken", out var providedToken) ||
                 !queryParams.TryGetValue("action", out var action) ||
@@ -459,6 +467,23 @@ public class Function
                         propertyData = propertyElement;
                     }
 
+                    // If the workflowPropertyId wasn't stored in the booking, prefer the property metadata name
+                    try
+                    {
+                        if (string.IsNullOrEmpty(workflowPropertyIdValue) && propertyData.ValueKind == JsonValueKind.Object)
+                        {
+                            if (propertyData.TryGetProperty("metadata", out var metadataElem) && metadataElem.ValueKind == JsonValueKind.Object &&
+                                metadataElem.TryGetProperty("propertyName", out var pnameElem) && pnameElem.ValueKind == JsonValueKind.String)
+                            {
+                                workflowPropertyIdValue = pnameElem.GetString();
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // ignore
+                    }
+
                     if (!propertyData.TryGetProperty("cleaners", out var cleanersArray))
                     {
                         context.Logger.LogError("Cleaners array not found in property data");
@@ -476,6 +501,65 @@ public class Function
                     }
 
                     context.Logger.LogInformation($"Found cleaner at index {selectedCleanerIndex}");
+
+                    // Capture displayable values from the workflow context/property data
+                    try
+                    {
+                        // Assigned cleaner name from the property cleaners array
+                        var cleanerElementForName = cleaners[selectedCleanerIndex];
+                        if (cleanerElementForName.ValueKind == JsonValueKind.Object && cleanerElementForName.TryGetProperty("name", out var nameElem) && nameElem.ValueKind == JsonValueKind.String)
+                        {
+                            assignedCleanerName = nameElem.GetString();
+                        }
+                    }
+                    catch
+                    {
+                        // ignore and leave assignedCleanerName null
+                    }
+
+                    try
+                    {
+                        // Workflow property and assigned cleaner may be stored inside the booking object
+                        if (workflowInput != null && workflowInput.TryGetValue("booking", out var bookingElemForId))
+                        {
+                            var bookingForId = bookingElemForId.ValueKind == JsonValueKind.String
+                                ? JsonDocument.Parse(bookingElemForId.GetString()!).RootElement
+                                : bookingElemForId;
+
+                            if (bookingForId.ValueKind == JsonValueKind.Object)
+                            {
+                                // support both snake/camel-case and PascalCase keys depending on serialization
+                                if (bookingForId.TryGetProperty("workflowPropertyId", out var wpElem) && wpElem.ValueKind == JsonValueKind.String)
+                                {
+                                    workflowPropertyIdValue = wpElem.GetString();
+                                }
+                                else if (bookingForId.TryGetProperty("WorkflowPropertyId", out var wpElem2) && wpElem2.ValueKind == JsonValueKind.String)
+                                {
+                                    workflowPropertyIdValue = wpElem2.GetString();
+                                }
+
+                                if (bookingForId.TryGetProperty("AssignedCleanerName", out var acnElem) && acnElem.ValueKind == JsonValueKind.String)
+                                {
+                                    assignedCleanerName = acnElem.GetString();
+                                }
+                                else if (bookingForId.TryGetProperty("assignedCleanerName", out var acnElem2) && acnElem2.ValueKind == JsonValueKind.String)
+                                {
+                                    assignedCleanerName = acnElem2.GetString();
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // ignore and leave workflowPropertyIdValue/assignedCleanerName as-is
+                    }
+
+                    // Ensure workflowInput is present (defensive check for static analysis)
+                    if (workflowInput == null)
+                    {
+                        context.Logger.LogError("Workflow input unexpectedly null when preparing owner override");
+                        throw new Exception("Workflow context missing");
+                    }
 
                     // Update with override values (serialize primitives to JsonElement)
                     workflowInput["currentCleanerIndex"] = JsonDocument.Parse(selectedCleanerIndex.ToString()).RootElement;
@@ -515,10 +599,12 @@ public class Function
                 context.Logger.LogInformation($"Owner cancelled cleaning for booking {bookingRef}");
             }
 
-            var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
-            var encodedCleanerId = WebUtility.HtmlEncode(cleanerId);
+            if (string.IsNullOrEmpty(workflowPropertyIdValue)) workflowPropertyIdValue = propertyId;
+
+            var ownerEmail = _defaultOwnerEmail;
             var encodedBookingRef = WebUtility.HtmlEncode(bookingRef);
-            var encodedPropertyId = WebUtility.HtmlEncode(propertyId);
+            var encodedPropertyDisplay = WebUtility.HtmlEncode(workflowPropertyIdValue);
+            var encodedCleanerDisplay = WebUtility.HtmlEncode(assignedCleanerName ?? cleanerId);
 
             var successHtml = $@"
 <!DOCTYPE html>
@@ -542,8 +628,8 @@ public class Function
         <div class='title'>Owner Override Successful</div>
         <div class='message'>You have {(action == "schedule" ? "scheduled" : "cancelled")} the cleaner.</div>
         <div class='detail'>Booking: {encodedBookingRef}</div>
-        <div class='detail'>Property: {encodedPropertyId}</div>
-        <div class='detail'>Cleaner: {encodedCleanerId}</div>
+        <div class='detail'>Property: {encodedPropertyDisplay}</div>
+        <div class='detail'>Assigned Cleaner: {encodedCleanerDisplay}</div>
         {(action == "schedule" ? "<div class='message' style='margin-top: 20px;'>The cleaner and owner will receive confirmation emails shortly.</div>" : "")}
         <div class='message' style='margin-top: 20px;'>You can close this window.</div>
     </div>
@@ -566,7 +652,7 @@ public class Function
 
     private APIGatewayProxyResponse CreateUnauthorizedResponse()
     {
-        var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+        var ownerEmail = _defaultOwnerEmail;
         var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
 
         var errorHtml = $@"
@@ -768,7 +854,7 @@ public class Function
             context.Logger.LogInformation($"Marked booking {bookingRef} as cancelled in S3");
             
             // Send cancellation emails with calendar CANCEL via CalendarLambda
-            var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
+            var ownerEmail = _defaultOwnerEmail;
             var calendarLambdaName = System.Environment.GetEnvironmentVariable("CALENDAR_LAMBDA_NAME") ?? "RentalTurnManager-CalendarLambda";
             
             // Get Eastern timezone for time formatting (used in both cleaner and owner emails)
