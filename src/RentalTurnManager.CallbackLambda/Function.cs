@@ -19,8 +19,8 @@ using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using Amazon.S3;
 using Amazon.S3.Model;
-using Amazon.SimpleEmail;
-using Amazon.SimpleEmail.Model;
+using Amazon.Lambda;
+using Amazon.Lambda.Model;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -34,14 +34,14 @@ public class Function
     private readonly IAmazonStepFunctions _stepFunctionsClient;
     private readonly IAmazonSecretsManager _secretsManagerClient;
     private readonly IAmazonS3 _s3Client;
-    private readonly IAmazonSimpleEmailService _sesClient;
+    private readonly IAmazonLambda _lambdaClient;
 
     public Function()
     {
         _stepFunctionsClient = new AmazonStepFunctionsClient();
         _secretsManagerClient = new AmazonSecretsManagerClient();
         _s3Client = new AmazonS3Client();
-        _sesClient = new AmazonSimpleEmailServiceClient();
+        _lambdaClient = new AmazonLambdaClient();
     }
 
     public Function(IAmazonStepFunctions stepFunctionsClient, IAmazonSecretsManager secretsManagerClient, IAmazonS3 s3Client)
@@ -49,7 +49,7 @@ public class Function
         _stepFunctionsClient = stepFunctionsClient;
         _secretsManagerClient = secretsManagerClient;
         _s3Client = s3Client;
-        _sesClient = new AmazonSimpleEmailServiceClient();
+        _lambdaClient = new AmazonLambdaClient();
     }
 
     public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest request, ILambdaContext context)
@@ -126,7 +126,7 @@ public class Function
             {
                 context.Logger.LogError($"Invalid token error: {ex.Message}. This usually means the task has already completed, timed out, or the token is incorrect.");
                 
-                var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+                var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
                 var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
                 var encodedResponse = WebUtility.HtmlEncode(response.ToUpper());
                 
@@ -170,7 +170,7 @@ public class Function
             {
                 context.Logger.LogError($"Task timeout error: {ex.Message}");
                 
-                var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+                var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
                 var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
                 var encodedResponse = WebUtility.HtmlEncode(response.ToUpper());
                 
@@ -308,7 +308,7 @@ public class Function
             }
 
             // Get owner token from Secrets Manager
-            var secretName = Environment.GetEnvironmentVariable("EMAIL_SECRET_NAME");
+            var secretName = System.Environment.GetEnvironmentVariable("EMAIL_SECRET_NAME");
             if (string.IsNullOrEmpty(secretName))
             {
                 context.Logger.LogError("EMAIL_SECRET_NAME environment variable not set");
@@ -344,7 +344,7 @@ public class Function
             if (action == "schedule")
             {
                 // Retrieve workflow context from S3
-                var bucketName = Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET");
+                var bucketName = System.Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET");
                 if (string.IsNullOrEmpty(bucketName))
                 {
                     context.Logger.LogError("BOOKING_STATE_BUCKET environment variable not set");
@@ -483,7 +483,7 @@ public class Function
                     var modifiedInputJson = JsonSerializer.Serialize(workflowInput);
                     
                     // Start a new workflow execution
-                    var stateMachineArn = Environment.GetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN");
+                    var stateMachineArn = System.Environment.GetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN");
                     if (string.IsNullOrEmpty(stateMachineArn))
                     {
                         context.Logger.LogError("CLEANER_WORKFLOW_STATE_MACHINE_ARN environment variable not set");
@@ -512,7 +512,7 @@ public class Function
                 context.Logger.LogInformation($"Owner cancelled cleaning for booking {bookingRef}");
             }
 
-            var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
+            var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
             var encodedCleanerId = WebUtility.HtmlEncode(cleanerId);
             var encodedBookingRef = WebUtility.HtmlEncode(bookingRef);
             var encodedPropertyId = WebUtility.HtmlEncode(propertyId);
@@ -563,7 +563,7 @@ public class Function
 
     private APIGatewayProxyResponse CreateUnauthorizedResponse()
     {
-        var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+        var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
         var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
 
         var errorHtml = $@"
@@ -620,7 +620,7 @@ public class Function
         }
         
         // Verify cancel token matches the stored token in Secrets Manager
-        var secretName = Environment.GetEnvironmentVariable("EMAIL_SECRET_NAME");
+        var secretName = System.Environment.GetEnvironmentVariable("EMAIL_SECRET_NAME");
         if (string.IsNullOrEmpty(secretName))
         {
             context.Logger.LogError("EMAIL_SECRET_NAME environment variable not set");
@@ -664,7 +664,7 @@ public class Function
         context.Logger.LogInformation($"Token verified successfully for booking {bookingRef}");
         
         // Get booking state from S3 to retrieve cleaner information
-        var bucketName = Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET");
+        var bucketName = System.Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET");
         if (string.IsNullOrEmpty(bucketName))
         {
             context.Logger.LogError("BOOKING_STATE_BUCKET environment variable not set");
@@ -739,70 +739,72 @@ public class Function
             
             context.Logger.LogInformation($"Marked booking {bookingRef} as cancelled in S3");
             
-            // Send cancellation emails with calendar CANCEL to cleaner and owner
-            var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
-            var formattedDate = scheduledTime?.ToString("MMMM dd, yyyy") ?? "Unknown Date";
-            var formattedTime = scheduledTime?.ToString("h:mm tt") ?? "12:00 PM";
-            
-            // Generate calendar cancellation ICS
-            string? icsContent = null;
-            if (scheduledTime.HasValue)
-            {
-                icsContent = GenerateCancellationIcs(propertyName ?? propertyId, scheduledTime.Value, cleanerName, cleanerEmail, ownerEmail);
-            }
+            // Send cancellation emails with calendar CANCEL via CalendarLambda
+            var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
+            var calendarLambdaName = System.Environment.GetEnvironmentVariable("CALENDAR_LAMBDA_NAME") ?? "RentalTurnManager-CalendarLambda";
             
             // Send to cleaner if assigned
-            if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName))
+            if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName) && scheduledTime.HasValue)
             {
                 try
                 {
-                    var cleanerHtmlBody = $@"<html><body>
-<p>Hello {WebUtility.HtmlEncode(cleanerName)},</p>
-<p>The cleaning scheduled for <strong>{WebUtility.HtmlEncode(propertyName ?? propertyId)}</strong> has been <strong style=""color: #dc3545;"">cancelled</strong> by the property owner.</p>
-<p><strong>Cancelled Appointment:</strong></p>
-<ul>
-<li><strong>Property:</strong> {WebUtility.HtmlEncode(propertyName ?? propertyId)}</li>
-<li><strong>Date:</strong> {WebUtility.HtmlEncode(formattedDate)}</li>
-<li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTime)}</li>
-</ul>
-<p>You do not need to attend this cleaning. If you added this to your calendar, the attached cancellation should remove it automatically.</p>
-<p>Thank you,<br/>Property Management</p>
-</body></html>";
+                    var cleanerRequest = new
+                    {
+                        PropertyName = propertyName ?? propertyId,
+                        CleanerName = cleanerName,
+                        CleanerEmail = cleanerEmail,
+                        OwnerEmail = ownerEmail,
+                        CleaningDate = scheduledTime.Value.ToString("o"),
+                        IsCancellation = true
+                    };
                     
-                    await SendCancellationEmail(ownerEmail, cleanerEmail, $"Cleaning Cancelled for {propertyName ?? propertyId} on {formattedDate}", cleanerHtmlBody, icsContent, context);
-                    context.Logger.LogInformation($"Sent cancellation email to cleaner: {cleanerEmail}");
+                    var invokeRequest = new InvokeRequest
+                    {
+                        FunctionName = calendarLambdaName,
+                        InvocationType = InvocationType.RequestResponse,
+                        Payload = JsonSerializer.Serialize(cleanerRequest)
+                    };
+                    
+                    await _lambdaClient.InvokeAsync(invokeRequest);
+                    context.Logger.LogInformation($"Invoked CalendarLambda to send cancellation email to cleaner: {cleanerEmail}");
                 }
                 catch (Exception ex)
                 {
-                    context.Logger.LogError($"Failed to send cancellation email to cleaner: {ex.Message}");
+                    context.Logger.LogError($"Failed to invoke CalendarLambda for cleaner email: {ex.Message}");
                     // Continue anyway - cancellation is recorded
                 }
             }
             
             // Send to owner
-            try
+            if (scheduledTime.HasValue)
             {
-                var ownerHtmlBody = $@"<html><body>
-<p>Hello,</p>
-<p>The cleaning for <strong>{WebUtility.HtmlEncode(propertyName ?? propertyId)}</strong> has been <strong style=""color: #dc3545;"">cancelled</strong>.</p>
-<p><strong>Cancelled Appointment:</strong></p>
-<ul>
-<li><strong>Property:</strong> {WebUtility.HtmlEncode(propertyName ?? propertyId)}</li>
-<li><strong>Cleaner:</strong> {WebUtility.HtmlEncode(cleanerName ?? "(not yet assigned)")}</li>
-<li><strong>Date:</strong> {WebUtility.HtmlEncode(formattedDate)}</li>
-<li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTime)}</li>
-</ul>
-<p>The cleaning appointment has been removed. The attached cancellation should remove it from your calendar automatically.</p>
-<p>Thank you,<br/>Property Management</p>
-</body></html>";
-                
-                await SendCancellationEmail(ownerEmail, ownerEmail, $"Cleaning Cancelled for {propertyName ?? propertyId} on {formattedDate}", ownerHtmlBody, icsContent, context);
-                context.Logger.LogInformation($"Sent cancellation email to owner: {ownerEmail}");
-            }
-            catch (Exception ex)
-            {
-                context.Logger.LogError($"Failed to send cancellation email to owner: {ex.Message}");
-                // Continue anyway - cancellation is recorded
+                try
+                {
+                    var ownerRequest = new
+                    {
+                        PropertyName = propertyName ?? propertyId,
+                        CleanerName = cleanerName ?? "(not yet assigned)",
+                        CleanerEmail = ownerEmail, // Send to owner's email
+                        OwnerEmail = ownerEmail,
+                        CleaningDate = scheduledTime.Value.ToString("o"),
+                        IsCancellation = true
+                    };
+                    
+                    var invokeRequest = new InvokeRequest
+                    {
+                        FunctionName = calendarLambdaName,
+                        InvocationType = InvocationType.RequestResponse,
+                        Payload = JsonSerializer.Serialize(ownerRequest)
+                    };
+                    
+                    await _lambdaClient.InvokeAsync(invokeRequest);
+                    context.Logger.LogInformation($"Invoked CalendarLambda to send cancellation email to owner: {ownerEmail}");
+                }
+                catch (Exception ex)
+                {
+                    context.Logger.LogError($"Failed to invoke CalendarLambda for owner email: {ex.Message}");
+                    // Continue anyway - cancellation is recorded
+                }
             }
             
             // Return success page
@@ -866,94 +868,8 @@ public class Function
                 Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
             };
         }
-    }    
-    private string GenerateCancellationIcs(string propertyName, DateTime scheduledTime, string? cleanerName, string? cleanerEmail, string ownerEmail)
-    {
-        var startDateTime = scheduledTime;
-        var endDateTime = startDateTime.AddHours(3);
-        var now = DateTime.UtcNow;
-        
-        // Generate a consistent UID based on property and date so it matches the original event
-        var uid = $"cleaning-{propertyName.Replace(" ", "-")}-{scheduledTime:yyyyMMdd}@rentalturnmanager.com";
-        
-        var icsBuilder = new StringBuilder();
-        icsBuilder.AppendLine("BEGIN:VCALENDAR");
-        icsBuilder.AppendLine("VERSION:2.0");
-        icsBuilder.AppendLine("PRODID:-//RentalTurnManager//Calendar//EN");
-        icsBuilder.AppendLine("METHOD:CANCEL");
-        icsBuilder.AppendLine("BEGIN:VEVENT");
-        icsBuilder.AppendLine($"UID:{uid}");
-        icsBuilder.AppendLine($"DTSTAMP:{FormatDateTime(now)}");
-        icsBuilder.AppendLine($"DTSTART:{FormatDateTime(startDateTime)}");
-        icsBuilder.AppendLine($"DTEND:{FormatDateTime(endDateTime)}");
-        icsBuilder.AppendLine($"SUMMARY:CANCELLED: Cleaning - {propertyName}");
-        icsBuilder.AppendLine($"DESCRIPTION:This cleaning appointment has been cancelled.");
-        icsBuilder.AppendLine($"STATUS:CANCELLED");
-        icsBuilder.AppendLine($"SEQUENCE:1");
-        
-        // Add cleaner as attendee if provided
-        if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName))
-        {
-            icsBuilder.AppendLine($"ATTENDEE;CN={cleanerName}:mailto:{cleanerEmail}");
-        }
-        
-        // Add owner as attendee
-        icsBuilder.AppendLine($"ATTENDEE;CN=Owner:mailto:{ownerEmail}");
-        
-        icsBuilder.AppendLine("END:VEVENT");
-        icsBuilder.AppendLine("END:VCALENDAR");
-        
-        return icsBuilder.ToString();
     }
-    
-    private string FormatDateTime(DateTime dt)
-    {
-        return dt.ToUniversalTime().ToString("yyyyMMdd'T'HHmmss'Z'");
-    }
-    
-    private async Task SendCancellationEmail(string fromEmail, string toEmail, string subject, string htmlBody, string? icsContent, ILambdaContext context)
-    {
-        var boundary = $"----=_Part_{Guid.NewGuid():N}";
-        
-        var message = new StringBuilder();
-        message.AppendLine($"From: {fromEmail}");
-        message.AppendLine($"To: {toEmail}");
-        message.AppendLine($"Subject: {subject}");
-        message.AppendLine("MIME-Version: 1.0");
-        message.AppendLine($"Content-Type: multipart/mixed; boundary=\"{boundary}\"");
-        message.AppendLine();
-        message.AppendLine($"--{boundary}");
-        message.AppendLine("Content-Type: text/html; charset=UTF-8");
-        message.AppendLine("Content-Transfer-Encoding: 7bit");
-        message.AppendLine();
-        message.AppendLine(htmlBody);
-        message.AppendLine();
-        
-        if (!string.IsNullOrEmpty(icsContent))
-        {
-            message.AppendLine($"--{boundary}");
-            message.AppendLine("Content-Type: text/calendar; charset=UTF-8; method=CANCEL");
-            message.AppendLine("Content-Transfer-Encoding: 7bit");
-            message.AppendLine("Content-Disposition: attachment; filename=\"cancellation.ics\"");
-            message.AppendLine();
-            message.AppendLine(icsContent);
-            message.AppendLine();
-        }
-        
-        message.AppendLine($"--{boundary}--");
-        
-        var rawMessage = message.ToString();
-        
-        await _sesClient.SendRawEmailAsync(new SendRawEmailRequest
-        {
-            RawMessage = new RawMessage
-            {
-                Data = new MemoryStream(Encoding.UTF8.GetBytes(rawMessage))
-            }
-        });
-        
-        context.Logger.LogInformation($"Cancellation email sent to {toEmail}");
-    }}
+}
 
 public class EmailSecret
 {
