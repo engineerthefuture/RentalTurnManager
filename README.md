@@ -538,7 +538,7 @@ dotnet watch test --project src/RentalTurnManager.Tests
 
 ```bash
 # Test Lambda with SAM CLI
-sam local invoke EmailScannerLambda --event test-event.json
+sam local invoke EmailScannerLambda --event config/test-event.json
 
 # Or manually invoke deployed Lambda
 aws lambda invoke \
