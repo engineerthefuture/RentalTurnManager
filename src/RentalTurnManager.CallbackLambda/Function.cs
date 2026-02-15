@@ -703,45 +703,45 @@ public class Function
                 };
             }
             
-            // Check if cleaning is already assigned
+            // Check if cleaning is already assigned (use PascalCase keys to match S3 JSON)
             string? cleanerName = null;
             string? cleanerEmail = null;
             string? propertyName = null;
             DateTime? scheduledTime = null;
             
-            if (booking.TryGetValue("assignedCleanerName", out var nameElement) && nameElement.ValueKind == JsonValueKind.String)
+            if (booking.TryGetValue("AssignedCleanerName", out var nameElement) && nameElement.ValueKind == JsonValueKind.String)
             {
                 cleanerName = nameElement.GetString();
             }
-            if (booking.TryGetValue("assignedCleanerEmail", out var emailElement) && emailElement.ValueKind == JsonValueKind.String)
+            if (booking.TryGetValue("AssignedCleanerEmail", out var emailElement) && emailElement.ValueKind == JsonValueKind.String)
             {
                 cleanerEmail = emailElement.GetString();
             }
-            if (booking.TryGetValue("workflowPropertyId", out var propElement) && propElement.ValueKind == JsonValueKind.String)
+            if (booking.TryGetValue("WorkflowPropertyId", out var propElement) && propElement.ValueKind == JsonValueKind.String)
             {
                 propertyName = propElement.GetString();
             }
-            if (booking.TryGetValue("scheduledCleaningTime", out var timeElement) && timeElement.ValueKind == JsonValueKind.String)
+            if (booking.TryGetValue("ScheduledCleaningTime", out var timeElement) && timeElement.ValueKind == JsonValueKind.String)
             {
                 scheduledTime = DateTime.Parse(timeElement.GetString()!);
             }
             
             context.Logger.LogInformation($"Booking details - CleanerName: {cleanerName ?? "null"}, CleanerEmail: {cleanerEmail ?? "null"}, ScheduledTime: {scheduledTime?.ToString() ?? "null"}, PropertyName: {propertyName ?? "null"}");
             
-            // Update booking status to cancelled
-            booking["cleaningStatus"] = JsonDocument.Parse("{\"value\":\"cancelled\"}").RootElement.GetProperty("value");
-            booking["cancelledAt"] = JsonDocument.Parse($"{{\"value\":\"{DateTime.UtcNow:O}\"}}").RootElement.GetProperty("value");
+            // Update booking status to cancelled (use PascalCase to match BookingState model)
+            booking["CleaningStatus"] = JsonDocument.Parse("{\"value\":\"cancelled\"}").RootElement.GetProperty("value");
+            booking["CancelledAt"] = JsonDocument.Parse($"{{\"value\":\"{DateTime.UtcNow:O}\"}}").RootElement.GetProperty("value");
             
-            // Add cleanerId if provided and not already set
-            if (!string.IsNullOrEmpty(cleanerId) && (!booking.ContainsKey("assignedCleanerId") || booking["assignedCleanerId"].ValueKind == JsonValueKind.Null))
+            // Add cleanerId if provided and not already set (use PascalCase to match BookingState model)
+            if (!string.IsNullOrEmpty(cleanerId) && (!booking.ContainsKey("AssignedCleanerId") || booking["AssignedCleanerId"].ValueKind == JsonValueKind.Null))
             {
-                booking["assignedCleanerId"] = JsonDocument.Parse($"{{\"value\":\"{cleanerId}\"}}").RootElement.GetProperty("value");
+                booking["AssignedCleanerId"] = JsonDocument.Parse($"{{\"value\":\"{cleanerId}\"}}").RootElement.GetProperty("value");
             }
             
-            // Add propertyId if not already set
-            if (!booking.ContainsKey("workflowPropertyId") || booking["workflowPropertyId"].ValueKind == JsonValueKind.Null)
+            // Add propertyId if not already set (use PascalCase to match BookingState model)
+            if (!booking.ContainsKey("WorkflowPropertyId") || booking["WorkflowPropertyId"].ValueKind == JsonValueKind.Null)
             {
-                booking["workflowPropertyId"] = JsonDocument.Parse($"{{\"value\":\"{propertyId}\"}}").RootElement.GetProperty("value");
+                booking["WorkflowPropertyId"] = JsonDocument.Parse($"{{\"value\":\"{propertyId}\"}}").RootElement.GetProperty("value");
             }
             
             // Save updated booking back to S3
