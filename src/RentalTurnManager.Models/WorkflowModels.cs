@@ -15,12 +15,20 @@ namespace RentalTurnManager.Models;
 /// <summary>
 /// Input for Step Functions cleaner workflow
 /// </summary>
+public class TimeSlot
+{
+    public string Time { get; set; } = string.Empty;
+    public string IsoDateTime { get; set; } = string.Empty;
+}
+
 public class CleanerWorkflowInput
 {
     public Booking Booking { get; set; } = new();
     public PropertyConfiguration Property { get; set; } = new();
     public DateTime CleaningDateTime { get; set; }
     public string CleaningTime { get; set; } = string.Empty;
+    public List<TimeSlot> AlternativeTimeSlots { get; set; } = new();
+    public string TimeButtonsHtml { get; set; } = string.Empty;
     public int CurrentCleanerIndex { get; set; }
     public int AttemptCount { get; set; }
     public string? LastResponse { get; set; }

@@ -99,6 +99,8 @@
         "propertyAddress.$": "$.state.input.property.address",
         "cleaningDateTime.$": "$.state.input.cleaningDateTime",
         "cleaningTime.$": "$.state.input.cleaningTime",
+        "alternativeTimeSlots.$": "$.state.input.alternativeTimeSlots",
+        "timeButtonsHtml.$": "$.state.input.timeButtonsHtml",
         "cleaningDate.$": "States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0)",
         "numberOfGuests.$": "$.state.input.booking.numberOfGuests",
         "numberOfNights.$": "$.state.input.booking.numberOfDays",
@@ -126,7 +128,7 @@
               "BooleanEquals": true
             }
           ],
-          "Next": "CleanerConfirmed"
+          "Next": "ProcessCleanerResponse"
         }
       ],
       "Default": "FormatCleaningDate"
@@ -169,7 +171,7 @@
           },
           "Body": {
             "Html": {
-              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: {}</li><li>Address: {}</li><li>Guests: {}</li><li>Nights: {}</li></ul><p>Are you available on {} at {} to do a cleaning and laundry turnover at {}?</p><p style=\"margin: 30px 0;\"><a href=\"{}/respond?token={}&response=yes\" style=\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\">YES</a><a href=\"{}/respond?token={}&response=no\" style=\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\">NO</a></p><p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.cleaningTime, $.state.propertyAddress, $.state.numberOfGuests, $.state.numberOfNights, $.state.cleaningDate, $.state.cleaningTime, $.state.propertyAddress, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.ownerName)"
+              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: {}</li><li>Address: {}</li><li>Guests: {}</li><li>Nights: {}</li></ul><p>Are you available on {} at {} to do a cleaning and laundry turnover at {}?</p><p style=\"margin: 30px 0;\"><a href=\"{}/respond?token={}&response=yes\" style=\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\">YES</a><a href=\"{}/respond?token={}&response=no\" style=\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\">NO</a></p>{}<p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.cleaningTime, $.state.propertyAddress, $.state.numberOfGuests, $.state.numberOfNights, $.state.cleaningDate, $.state.cleaningTime, $.state.propertyAddress, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, States.Format($.state.timeButtonsHtml, $$.Task.Token), $.state.ownerName)"
             }
           }
         }
@@ -196,7 +198,7 @@
         {
           "Variable": "$.emailResult.response",
           "StringEquals": "yes",
-          "Next": "CleanerConfirmed"
+          "Next": "ProcessCleanerResponse"
         },
         {
           "Variable": "$.emailResult.response",
@@ -245,10 +247,15 @@
         {
           "Variable": "$.reminderResult.response",
           "StringEquals": "yes",
-          "Next": "CleanerConfirmed"
+          "Next": "ProcessCleanerResponse"
         }
       ],
       "Default": "IncrementCleanerIndex"
+    },
+    "ProcessCleanerResponse": {
+      "Type": "Pass",
+      "Comment": "Pass through to check if alternative time needs processing",
+      "Next": "CleanerConfirmed"
     },
     "CleanerConfirmed": {
       "Type": "Parallel",

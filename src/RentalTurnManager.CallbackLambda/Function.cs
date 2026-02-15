@@ -109,10 +109,13 @@ public class Function
                 };
             }
 
-            context.Logger.LogInformation($"Processing {response} response for task token. Token length: {taskToken.Length}");
+            // Get optional time parameter for alternative time slot selection
+            request.QueryStringParameters.TryGetValue("time", out var alternativeTime);
+
+            context.Logger.LogInformation($"Processing {response} response for task token. Token length: {taskToken.Length}. Alternative time: {alternativeTime ?? "none"}");
 
             // Send response to Step Functions
-            var taskResponse = new { response = response };
+            var taskResponse = new { response = response, alternativeTime = alternativeTime };
             try
             {
                 await _stepFunctionsClient.SendTaskSuccessAsync(new SendTaskSuccessRequest

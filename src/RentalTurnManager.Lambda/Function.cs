@@ -281,6 +281,56 @@ public class Function
                     // Convert to UTC for storage and transmission
                     var cleaningDateTimeUtc = TimeZoneInfo.ConvertTimeToUtc(cleaningDateTimeEastern, easternZone);
 
+                    // Calculate alternative time slots (30-minute increments)
+                    var alternativeTimeSlots = new List<TimeSlot>();
+                    if (!string.IsNullOrEmpty(property.Metadata.DefaultCheckIn) && 
+                        !string.IsNullOrEmpty(property.Metadata.DefaultCheckOut) &&
+                        !string.IsNullOrEmpty(property.Metadata.CleaningDuration))
+                    {
+                        if (DateTime.TryParse(property.Metadata.DefaultCheckIn, out var checkInTime) &&
+                            DateTime.TryParse(property.Metadata.DefaultCheckOut, out var checkOutTime))
+                        {
+                            // Parse cleaning duration (e.g., "2.5 hours")
+                            var durationMatch = System.Text.RegularExpressions.Regex.Match(
+                                property.Metadata.CleaningDuration, 
+                                @"([0-9.]+)\s*hours?");
+                            if (durationMatch.Success && double.TryParse(durationMatch.Groups[1].Value, out var durationHours))
+                            {
+                                // Start time is default cleaning time (checkOut + 1 hour)
+                                var startTime = cleaningDateTimeEastern;
+                                
+                                // Latest possible start time is checkIn - cleaningDuration
+                                var latestStartEastern = new DateTime(
+                                    cleaningDate.Year,
+                                    cleaningDate.Month,
+                                    cleaningDate.Day,
+                                    checkInTime.Hour,
+                                    checkInTime.Minute,
+                                    0,
+                                    DateTimeKind.Unspecified
+                                ).AddHours(-durationHours);
+                                
+                                // Get time increment from property config, default to 30 minutes
+                                var incrementMinutes = property.Metadata.AlternateTimeIncrementMinutes > 0 
+                                    ? property.Metadata.AlternateTimeIncrementMinutes 
+                                    : 30;
+                                
+                                // Generate time slots at specified intervals
+                                var currentSlot = startTime.AddMinutes(incrementMinutes); // Start from increment after default
+                                while (currentSlot <= latestStartEastern)
+                                {
+                                    var slotUtc = TimeZoneInfo.ConvertTimeToUtc(currentSlot, easternZone);
+                                    alternativeTimeSlots.Add(new TimeSlot
+                                    {
+                                        Time = currentSlot.ToString("h:mm tt"),
+                                        IsoDateTime = slotUtc.ToString("o")
+                                    });
+                                    currentSlot = currentSlot.AddMinutes(incrementMinutes);
+                                }
+                            }
+                        }
+                    }
+
                     // Get owner email from environment variable
                     var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL");
                     if (string.IsNullOrEmpty(ownerEmail))
@@ -296,6 +346,21 @@ public class Function
                     {
                         _logger.LogWarning("CALLBACK_API_URL environment variable not set");
                         callbackApiUrl = "";
+                    }
+
+                    // Generate HTML for alternative time slot buttons (will be filled with token by workflow)
+                    var timeButtonsHtml = string.Empty;
+                    if (alternativeTimeSlots.Count > 0)
+                    {
+                        var sb = new System.Text.StringBuilder();
+                        sb.Append("<p style=\"margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px;\"><strong style=\"display: block; margin-bottom: 10px;\">Or select an alternative time:</strong>");
+                        foreach (var slot in alternativeTimeSlots)
+                        {
+                            var encodedTime = System.Web.HttpUtility.UrlEncode(slot.IsoDateTime);
+                            sb.Append($"<a href=\"{callbackApiUrl}/respond?token={{0}}&response=yes&time={encodedTime}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{slot.Time}</a>");
+                        }
+                        sb.Append("</p>");
+                        timeButtonsHtml = sb.ToString();
                     }
 
                     // Ensure ownerName has a default value if missing
@@ -362,6 +427,8 @@ public class Function
                         Property = property,
                         CleaningDateTime = cleaningDateTimeUtc,
                         CleaningTime = cleaningDateTimeEastern.ToString("h:mm tt"),
+                        AlternativeTimeSlots = alternativeTimeSlots,
+                        TimeButtonsHtml = timeButtonsHtml,
                         CurrentCleanerIndex = 0,
                         AttemptCount = 0,
                         OwnerEmail = ownerEmail,
