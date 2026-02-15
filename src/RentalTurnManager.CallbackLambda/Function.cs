@@ -515,6 +515,13 @@ public class Function
                         // ignore and leave workflowPropertyIdValue null
                     }
 
+                    // Ensure workflowInput is present (defensive check for static analysis)
+                    if (workflowInput == null)
+                    {
+                        context.Logger.LogError("Workflow input unexpectedly null when preparing owner override");
+                        throw new Exception("Workflow context missing");
+                    }
+
                     // Update with override values (serialize primitives to JsonElement)
                     workflowInput["currentCleanerIndex"] = JsonDocument.Parse(selectedCleanerIndex.ToString()).RootElement;
                     workflowInput["attemptCount"] = JsonDocument.Parse("0").RootElement;
