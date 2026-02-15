@@ -6,7 +6,21 @@
       "Type": "Pass",
       "Comment": "Initialize workflow state",
       "Parameters": {
-        "input.$": "$",
+        "input": {
+          "booking.$": "$.booking",
+          "property.$": "$.property",
+          "cleaningDateTime.$": "$.cleaningDateTime",
+          "cleaningTime.$": "$.cleaningTime",
+          "alternativeTimeSlots.$": "$.alternativeTimeSlots",
+          "timeButtonsHtml.$": "$.timeButtonsHtml",
+          "currentCleanerIndex.$": "$.currentCleanerIndex",
+          "attemptCount.$": "$.attemptCount",
+          "ownerEmail.$": "$.ownerEmail",
+          "callbackApiUrl.$": "$.callbackApiUrl",
+          "bookingStateBucket.$": "$.bookingStateBucket",
+          "ownerToken.$": "$.ownerToken",
+          "ownerOverride.$": "$.ownerOverride"
+        },
         "cleanerConfirmed": false,
         "allCleanersExhausted": false
       },
