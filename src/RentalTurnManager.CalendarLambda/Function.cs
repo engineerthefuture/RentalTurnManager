@@ -109,6 +109,7 @@ public class Function
                 request.CleanerPhone,
                 request.CleaningDateTime ?? request.CleaningDate,
                 request.PropertyName,
+                request.OwnerName,
                 context
             );
         }
@@ -126,6 +127,7 @@ public class Function
         string cleanerPhone,
         string cleaningDate,
         string propertyName,
+        string ownerName,
         ILambdaContext context)
     {
         try
@@ -160,6 +162,12 @@ public class Function
                 if (string.IsNullOrEmpty(booking.WorkflowPropertyId))
                 {
                     booking.WorkflowPropertyId = propertyName;
+                }
+                
+                // Set OwnerName if provided
+                if (!string.IsNullOrEmpty(ownerName))
+                {
+                    booking.OwnerName = ownerName;
                 }
                 
                 // Parse the full cleaning DateTime (already in UTC from workflow)
@@ -433,4 +441,5 @@ public class BookingState
     public DateTime? CleanerConfirmedAt { get; set; }
     public DateTime? ScheduledCleaningTime { get; set; }
     public string? WorkflowPropertyId { get; set; }
+    public string? OwnerName { get; set; }
 }

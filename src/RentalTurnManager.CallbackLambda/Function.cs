@@ -707,6 +707,7 @@ public class Function
             string? cleanerName = null;
             string? cleanerEmail = null;
             string? propertyName = null;
+            string? ownerName = null;
             DateTime? scheduledTime = null;
             
             if (booking.TryGetValue("AssignedCleanerName", out var nameElement) && nameElement.ValueKind == JsonValueKind.String)
@@ -721,12 +722,16 @@ public class Function
             {
                 propertyName = propElement.GetString();
             }
+            if (booking.TryGetValue("OwnerName", out var ownerElement) && ownerElement.ValueKind == JsonValueKind.String)
+            {
+                ownerName = ownerElement.GetString();
+            }
             if (booking.TryGetValue("ScheduledCleaningTime", out var timeElement) && timeElement.ValueKind == JsonValueKind.String)
             {
                 scheduledTime = DateTime.Parse(timeElement.GetString()!);
             }
             
-            context.Logger.LogInformation($"Booking details - CleanerName: {cleanerName ?? "null"}, CleanerEmail: {cleanerEmail ?? "null"}, ScheduledTime: {scheduledTime?.ToString() ?? "null"}, PropertyName: {propertyName ?? "null"}");
+            context.Logger.LogInformation($"Booking details - CleanerName: {cleanerName ?? "null"}, CleanerEmail: {cleanerEmail ?? "null"}, ScheduledTime: {scheduledTime?.ToString() ?? "null"}, PropertyName: {propertyName ?? "null"}, OwnerName: {ownerName ?? "null"}");
             
             // Update booking status to cancelled (use PascalCase to match BookingState model)
             booking["CleaningStatus"] = JsonDocument.Parse("{\"value\":\"cancelled\"}").RootElement.GetProperty("value");
@@ -827,13 +832,12 @@ public class Function
                 var formattedDate = scheduledTime.HasValue 
                     ? scheduledTime.Value.ToString("MMMM dd, yyyy") 
                     : "Unknown Date";
-                var formattedTime = scheduledTime.HasValue 
-                    ? scheduledTime.Value.ToString("h:mm tt") 
-                    : "12:00 PM";
+                // Always show 12:00 PM as that's the standard cleaning time
+                var formattedTime = "12:00 PM";
                 
                 var ownerHtmlBody = $@"<html><body>
-<p>Hello,</p>
-<p>The cleaning for <strong>{WebUtility.HtmlEncode(propertyName ?? propertyId)}</strong> has been <strong style=""color: #dc3545;"">cancelled</strong>.</p>
+<p>Hello {WebUtility.HtmlEncode(ownerName ?? "Property Owner")},</p>
+<p>The cleaning for <strong>{WebUtility.HtmlEncode(propertyName ?? propertyId)}</strong> has been <strong style=""color: #dc3545;"">{"cancelled"}</strong>.</p>
 <p><strong>Cancelled Appointment:</strong></p>
 <ul>
 <li><strong>Property:</strong> {WebUtility.HtmlEncode(propertyName ?? propertyId)}</li>
@@ -842,7 +846,7 @@ public class Function
 <li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTime)}</li>
 </ul>
 <p>The cleaning appointment has been removed. The attached cancellation should remove it from your calendar automatically.</p>
-<p>Thank you,<br/>Property Management</p>
+<p>Thank you,<br/>{WebUtility.HtmlEncode(ownerName ?? "Property Management")}</p>
 </body></html>";
                     
                 var ownerRequest = new
