@@ -13,6 +13,7 @@
           "cleaningTime.$": "$.cleaningTime",
           "alternativeTimeSlots.$": "$.alternativeTimeSlots",
           "timeButtonsHtml.$": "$.timeButtonsHtml",
+          "escalationEmailHtml.$": "$.escalationEmailHtml",
           "currentCleanerIndex.$": "$.currentCleanerIndex",
           "attemptCount.$": "$.attemptCount",
           "ownerEmail.$": "$.ownerEmail",
