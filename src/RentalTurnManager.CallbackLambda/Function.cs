@@ -497,22 +497,39 @@ public class Function
 
                     try
                     {
-                        // WorkflowPropertyId may be stored inside the booking object
+                        // Workflow property and assigned cleaner may be stored inside the booking object
                         if (workflowInput != null && workflowInput.TryGetValue("booking", out var bookingElemForId))
                         {
                             var bookingForId = bookingElemForId.ValueKind == JsonValueKind.String
                                 ? JsonDocument.Parse(bookingElemForId.GetString()!).RootElement
                                 : bookingElemForId;
 
-                            if (bookingForId.ValueKind == JsonValueKind.Object && bookingForId.TryGetProperty("workflowPropertyId", out var wpElem) && wpElem.ValueKind == JsonValueKind.String)
+                            if (bookingForId.ValueKind == JsonValueKind.Object)
                             {
-                                workflowPropertyIdValue = wpElem.GetString();
+                                // support both snake/camel-case and PascalCase keys depending on serialization
+                                if (bookingForId.TryGetProperty("workflowPropertyId", out var wpElem) && wpElem.ValueKind == JsonValueKind.String)
+                                {
+                                    workflowPropertyIdValue = wpElem.GetString();
+                                }
+                                else if (bookingForId.TryGetProperty("WorkflowPropertyId", out var wpElem2) && wpElem2.ValueKind == JsonValueKind.String)
+                                {
+                                    workflowPropertyIdValue = wpElem2.GetString();
+                                }
+
+                                if (bookingForId.TryGetProperty("AssignedCleanerName", out var acnElem) && acnElem.ValueKind == JsonValueKind.String)
+                                {
+                                    assignedCleanerName = acnElem.GetString();
+                                }
+                                else if (bookingForId.TryGetProperty("assignedCleanerName", out var acnElem2) && acnElem2.ValueKind == JsonValueKind.String)
+                                {
+                                    assignedCleanerName = acnElem2.GetString();
+                                }
                             }
                         }
                     }
                     catch
                     {
-                        // ignore and leave workflowPropertyIdValue null
+                        // ignore and leave workflowPropertyIdValue/assignedCleanerName as-is
                     }
 
                     // Ensure workflowInput is present (defensive check for static analysis)
@@ -587,7 +604,7 @@ public class Function
         <div class='title'>Owner Override Successful</div>
         <div class='message'>You have {(action == "schedule" ? "scheduled" : "cancelled")} the cleaner.</div>
         <div class='detail'>Booking: {encodedBookingRef}</div>
-        <div class='detail'>Workflow Property ID: {encodedPropertyDisplay}</div>
+        <div class='detail'>Property: {encodedPropertyDisplay}</div>
         <div class='detail'>Assigned Cleaner: {encodedCleanerDisplay}</div>
         {(action == "schedule" ? "<div class='message' style='margin-top: 20px;'>The cleaner and owner will receive confirmation emails shortly.</div>" : "")}
         <div class='message' style='margin-top: 20px;'>You can close this window.</div>
