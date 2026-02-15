@@ -768,14 +768,27 @@ public class Function
             var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
             var calendarLambdaName = System.Environment.GetEnvironmentVariable("CALENDAR_LAMBDA_NAME") ?? "RentalTurnManager-CalendarLambda";
             
+            // Get Eastern timezone for time formatting (used in both cleaner and owner emails)
+            TimeZoneInfo easternZone;
+            try
+            {
+                easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                context.Logger.LogWarning("Eastern timezone not found, using UTC for time display");
+                easternZone = TimeZoneInfo.Utc;
+            }
+            
             // Send to cleaner if assigned
             if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName) && scheduledTime.HasValue)
             {
                 try
                 {
                     var formattedDate = scheduledTime.Value.ToString("MMMM dd, yyyy");
-                    // Always show 12:00 PM as that's the standard cleaning time
-                    var formattedTime = "12:00 PM";
+                    // Convert UTC time to Eastern Time for display
+                    var easternTime = TimeZoneInfo.ConvertTimeFromUtc(scheduledTime.Value, easternZone);
+                    var formattedTime = easternTime.ToString("h:mm tt");
                     
                     var cleanerHtmlBody = $@"<html><body>
 <p>Hello {WebUtility.HtmlEncode(cleanerName)},</p>
@@ -833,8 +846,10 @@ public class Function
                 var formattedDate = scheduledTime.HasValue 
                     ? scheduledTime.Value.ToString("MMMM dd, yyyy") 
                     : "Unknown Date";
-                // Always show 12:00 PM as that's the standard cleaning time
-                var formattedTime = "12:00 PM";
+                // Convert UTC time to Eastern Time for display
+                var formattedTime = scheduledTime.HasValue 
+                    ? TimeZoneInfo.ConvertTimeFromUtc(scheduledTime.Value, easternZone).ToString("h:mm tt")
+                    : "12:00 PM";
                 
                 var ownerHtmlBody = $@"<html><body>
 <p>Hello {WebUtility.HtmlEncode(ownerName ?? "Property Owner")},</p>
