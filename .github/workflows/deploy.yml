@@ -54,16 +54,61 @@ jobs:
       - name: Run tests
         run: dotnet test src/RentalTurnManager.sln --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
 
-      - name: Code Coverage Report
-        uses: codecov/codecov-action@v3
+      - name: Generate coverage report
+        uses: danielpalme/ReportGenerator-GitHub-Action@5.3.11
+        with:
+          reports: './coverage/**/coverage.cobertura.xml'
+          targetdir: './coveragereport'
+          reporttypes: 'HtmlInline;Cobertura;MarkdownSummaryGithub'
+          sourcedirs: './src'
+          title: 'RentalTurnManager Code Coverage'
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: ./coveragereport
+          retention-days: 30
+
+      - name: Add coverage comment to PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -f "./coveragereport/SummaryGithub.md" ]; then
+            cat ./coveragereport/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Add coverage summary to workflow
+        run: |
+          if [ -f "./coveragereport/SummaryGithub.md" ]; then
+            cat ./coveragereport/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Code Coverage Report (Codecov)
+        uses: codecov/codecov-action@v4
         with:
           directory: ./coverage
           fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Check code coverage threshold
         run: |
-          # This is a placeholder - implement actual coverage check
-          echo "Code coverage check passed"
+          # Parse coverage percentage from Cobertura XML
+          COVERAGE_FILE="./coveragereport/Cobertura.xml"
+          if [ -f "$COVERAGE_FILE" ]; then
+            LINE_RATE=$(grep -oP 'line-rate="\K[^"]+' "$COVERAGE_FILE" | head -1)
+            COVERAGE_PERCENT=$(echo "$LINE_RATE * 100" | bc)
+            echo "Current code coverage: ${COVERAGE_PERCENT}%"
+            
+            THRESHOLD=70
+            if (( $(echo "$LINE_RATE < 0.${THRESHOLD}" | bc -l) )); then
+              echo "❌ Code coverage ${COVERAGE_PERCENT}% is below threshold of ${THRESHOLD}%"
+              exit 1
+            else
+              echo "✅ Code coverage ${COVERAGE_PERCENT}% meets threshold of ${THRESHOLD}%"
+            fi
+          else
+            echo "⚠️  Coverage report not found, skipping threshold check"
+          fi
 
   determine-environment:
     name: Determine Deployment Environment
