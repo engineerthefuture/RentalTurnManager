@@ -284,6 +284,9 @@ public class Function
     {
         try
         {
+            // Values captured from the saved workflow context for display in the override response
+            string? workflowPropertyIdValue = null;
+            string? assignedCleanerName = null;
             // Validate required parameters
             if (!queryParams.TryGetValue("ownerToken", out var providedToken) ||
                 !queryParams.TryGetValue("action", out var action) ||
@@ -477,6 +480,41 @@ public class Function
 
                     context.Logger.LogInformation($"Found cleaner at index {selectedCleanerIndex}");
 
+                    // Capture displayable values from the workflow context/property data
+                    try
+                    {
+                        // Assigned cleaner name from the property cleaners array
+                        var cleanerElementForName = cleaners[selectedCleanerIndex];
+                        if (cleanerElementForName.ValueKind == JsonValueKind.Object && cleanerElementForName.TryGetProperty("name", out var nameElem) && nameElem.ValueKind == JsonValueKind.String)
+                        {
+                            assignedCleanerName = nameElem.GetString();
+                        }
+                    }
+                    catch
+                    {
+                        // ignore and leave assignedCleanerName null
+                    }
+
+                    try
+                    {
+                        // WorkflowPropertyId may be stored inside the booking object
+                        if (workflowInput != null && workflowInput.TryGetValue("booking", out var bookingElemForId))
+                        {
+                            var bookingForId = bookingElemForId.ValueKind == JsonValueKind.String
+                                ? JsonDocument.Parse(bookingElemForId.GetString()!).RootElement
+                                : bookingElemForId;
+
+                            if (bookingForId.ValueKind == JsonValueKind.Object && bookingForId.TryGetProperty("workflowPropertyId", out var wpElem) && wpElem.ValueKind == JsonValueKind.String)
+                            {
+                                workflowPropertyIdValue = wpElem.GetString();
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // ignore and leave workflowPropertyIdValue null
+                    }
+
                     // Update with override values (serialize primitives to JsonElement)
                     workflowInput["currentCleanerIndex"] = JsonDocument.Parse(selectedCleanerIndex.ToString()).RootElement;
                     workflowInput["attemptCount"] = JsonDocument.Parse("0").RootElement;
@@ -516,9 +554,9 @@ public class Function
             }
 
             var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
-            var encodedCleanerId = WebUtility.HtmlEncode(cleanerId);
             var encodedBookingRef = WebUtility.HtmlEncode(bookingRef);
-            var encodedPropertyId = WebUtility.HtmlEncode(propertyId);
+            var encodedPropertyDisplay = WebUtility.HtmlEncode(workflowPropertyIdValue ?? propertyId);
+            var encodedCleanerDisplay = WebUtility.HtmlEncode(assignedCleanerName ?? cleanerId);
 
             var successHtml = $@"
 <!DOCTYPE html>
@@ -542,8 +580,8 @@ public class Function
         <div class='title'>Owner Override Successful</div>
         <div class='message'>You have {(action == "schedule" ? "scheduled" : "cancelled")} the cleaner.</div>
         <div class='detail'>Booking: {encodedBookingRef}</div>
-        <div class='detail'>Property: {encodedPropertyId}</div>
-        <div class='detail'>Cleaner: {encodedCleanerId}</div>
+        <div class='detail'>Workflow Property ID: {encodedPropertyDisplay}</div>
+        <div class='detail'>Assigned Cleaner: {encodedCleanerDisplay}</div>
         {(action == "schedule" ? "<div class='message' style='margin-top: 20px;'>The cleaner and owner will receive confirmation emails shortly.</div>" : "")}
         <div class='message' style='margin-top: 20px;'>You can close this window.</div>
     </div>

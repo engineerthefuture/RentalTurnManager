@@ -8,7 +8,8 @@
       "Parameters": {
         "input.$": "$",
         "cleanerConfirmed": false,
-        "allCleanersExhausted": false
+        "allCleanersExhausted": false,
+        "cleaningTime.$": "$.cleaningTime"
       },
       "ResultPath": "$.state",
       "Next": "CheckOwnerOverride"
@@ -98,7 +99,7 @@
         "propertyName.$": "$.state.input.property.metadata.propertyName",
         "propertyAddress.$": "$.state.input.property.address",
         "cleaningDateTime.$": "$.state.input.cleaningDateTime",
-        "cleaningTime.$": "$.cleaningTime",
+        "cleaningTime.$": "$.state.cleaningTime",
         "alternativeTimeSlots.$": "$.alternativeTimeSlots",
         "timeButtonsHtml.$": "$.timeButtonsHtml",
         "cleaningDate.$": "States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0)",
