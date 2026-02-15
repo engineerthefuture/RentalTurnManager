@@ -35,6 +35,7 @@ public class Function
     private readonly IAmazonSecretsManager _secretsManagerClient;
     private readonly IAmazonS3 _s3Client;
     private readonly IAmazonLambda _lambdaClient;
+    private readonly string _defaultOwnerEmail;
 
     public Function()
     {
@@ -42,6 +43,8 @@ public class Function
         _secretsManagerClient = new AmazonSecretsManagerClient();
         _s3Client = new AmazonS3Client();
         _lambdaClient = new AmazonLambdaClient();
+        var ownerEnv = System.Environment.GetEnvironmentVariable("OWNER_EMAIL");
+        _defaultOwnerEmail = string.IsNullOrEmpty(ownerEnv) ? "support@example.com" : ownerEnv;
     }
 
     public Function(IAmazonStepFunctions stepFunctionsClient, IAmazonSecretsManager secretsManagerClient, IAmazonS3 s3Client)
@@ -50,6 +53,8 @@ public class Function
         _secretsManagerClient = secretsManagerClient;
         _s3Client = s3Client;
         _lambdaClient = new AmazonLambdaClient();
+        var ownerEnv = System.Environment.GetEnvironmentVariable("OWNER_EMAIL");
+        _defaultOwnerEmail = string.IsNullOrEmpty(ownerEnv) ? "support@example.com" : ownerEnv;
     }
 
     public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest request, ILambdaContext context)
@@ -129,7 +134,7 @@ public class Function
             {
                 context.Logger.LogError($"Invalid token error: {ex.Message}. This usually means the task has already completed, timed out, or the token is incorrect.");
                 
-                var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+                var ownerEmail = _defaultOwnerEmail;
                 var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
                 var encodedResponse = WebUtility.HtmlEncode(response.ToUpper());
                 
@@ -173,7 +178,7 @@ public class Function
             {
                 context.Logger.LogError($"Task timeout error: {ex.Message}");
                 
-                var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+                var ownerEmail = _defaultOwnerEmail;
                 var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
                 var encodedResponse = WebUtility.HtmlEncode(response.ToUpper());
                 
@@ -462,6 +467,23 @@ public class Function
                         propertyData = propertyElement;
                     }
 
+                    // If the workflowPropertyId wasn't stored in the booking, prefer the property metadata name
+                    try
+                    {
+                        if (string.IsNullOrEmpty(workflowPropertyIdValue) && propertyData.ValueKind == JsonValueKind.Object)
+                        {
+                            if (propertyData.TryGetProperty("metadata", out var metadataElem) && metadataElem.ValueKind == JsonValueKind.Object &&
+                                metadataElem.TryGetProperty("propertyName", out var pnameElem) && pnameElem.ValueKind == JsonValueKind.String)
+                            {
+                                workflowPropertyIdValue = pnameElem.GetString();
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // ignore
+                    }
+
                     if (!propertyData.TryGetProperty("cleaners", out var cleanersArray))
                     {
                         context.Logger.LogError("Cleaners array not found in property data");
@@ -577,9 +599,11 @@ public class Function
                 context.Logger.LogInformation($"Owner cancelled cleaning for booking {bookingRef}");
             }
 
-            var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+            if (string.IsNullOrEmpty(workflowPropertyIdValue)) workflowPropertyIdValue = propertyId;
+
+            var ownerEmail = _defaultOwnerEmail;
             var encodedBookingRef = WebUtility.HtmlEncode(bookingRef);
-            var encodedPropertyDisplay = WebUtility.HtmlEncode(workflowPropertyIdValue ?? propertyId);
+            var encodedPropertyDisplay = WebUtility.HtmlEncode(workflowPropertyIdValue);
             var encodedCleanerDisplay = WebUtility.HtmlEncode(assignedCleanerName ?? cleanerId);
 
             var successHtml = $@"
@@ -628,7 +652,7 @@ public class Function
 
     private APIGatewayProxyResponse CreateUnauthorizedResponse()
     {
-        var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+        var ownerEmail = _defaultOwnerEmail;
         var encodedEmail = WebUtility.HtmlEncode(ownerEmail);
 
         var errorHtml = $@"
@@ -830,7 +854,7 @@ public class Function
             context.Logger.LogInformation($"Marked booking {bookingRef} as cancelled in S3");
             
             // Send cancellation emails with calendar CANCEL via CalendarLambda
-            var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+            var ownerEmail = _defaultOwnerEmail;
             var calendarLambdaName = System.Environment.GetEnvironmentVariable("CALENDAR_LAMBDA_NAME") ?? "RentalTurnManager-CalendarLambda";
             
             // Get Eastern timezone for time formatting (used in both cleaner and owner emails)
