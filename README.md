@@ -13,6 +13,7 @@ Rental Turn Manager automates the process of scheduling property cleanings when 
 - **Smart Booking Tracking**: Uses S3 to track booking state and prevent duplicate processing. The Step Function now references the booking state bucket at the root of the input object, fixing previous workflow errors related to JSONPath.
 - **Change Detection**: Automatically detects booking modifications and re-triggers workflows
 - **Automated Cleaner Coordination**: Contacts cleaners in priority order via email with confirm/deny links. Each cleaner can also have a `phoneEmail` property (e.g., `1234567890@vtext.com` for Verizon, `1234567890@txt.att.net` for AT&T, etc.) to receive SMS text notifications via email. As of January 2026, the system now sends these notifications as BCC (not CC) for privacy.
+- **Alternative Time Scheduling**: When a cleaner can't make the default time, they can select from up to 5 alternative time slots provided in the email. The system automatically adjusts times based on configurable intervals and ensures slots don't conflict with the cleaning duration.
 - **Owner Override Capability**: Property owners can manually schedule or cancel cleanings using a secure token-based override system when all cleaners are unavailable
 - **Cleaning Cancellation**: Property owners can cancel scheduled cleanings via a cancel link in the owner notification email, which automatically sends cancellation notices with ICS calendar updates to both the cleaner and owner
 - **Enhanced Error Handling**: User-friendly HTML error pages for expired or used callback links with owner contact information and accessibility features (ARIA attributes, proper semantic HTML)
@@ -322,6 +323,8 @@ Both should contain JSON in this format:
         "bedrooms": 3,
         "bathrooms": 2,
         "cleaningDuration": "3 hours",
+        "marginMinutesAfterCheckOut": 60,
+        "alternateTimeIncrementMinutes": 30,
         "accessInstructions": "Lockbox code: 1234",
         "specialInstructions": "Clean refrigerator thoroughly"
       }
@@ -357,6 +360,30 @@ The optional `phoneEmail` property should be a valid email-to-SMS gateway addres
 - Sprint: `1234567890@messaging.sprintpcs.com`
 
 This enables real-time SMS notifications for cleaners in addition to standard email.
+
+#### Property Metadata
+
+The `metadata` object within each property configuration supports the following optional fields for alternative time scheduling:
+
+- **`marginMinutesAfterCheckOut`** (optional, default: 60): Minutes after checkout time to schedule default cleaning time. For example, if checkout is at 11:00 AM and margin is 60, default cleaning time is 12:00 PM.
+- **`alternateTimeIncrementMinutes`** (optional, default: 30): Interval between alternative time slots in minutes. The system generates up to 5 alternative times at this increment after the default time.
+
+**Example Configuration:**
+```json
+"metadata": {
+  "propertyName": "Beach House",
+  "cleaningDuration": "3 hours",
+  "marginMinutesAfterCheckOut": 60,
+  "alternateTimeIncrementMinutes": 30
+}
+```
+
+With this configuration:
+- Checkout: 11:00 AM
+- Default cleaning: 12:00 PM (11:00 + 60 minutes)
+- Alternative times: 12:30 PM, 1:00 PM, 1:30 PM, 2:00 PM, 2:30 PM (5 slots at 30-minute increments)
+
+**Note**: The system automatically ensures alternative times don't conflict with the checkout time plus cleaning duration. If a slot would overlap, it's skipped.
 
 **Note**: Store these as single-line JSON strings in the GitHub secrets. The deployment workflow will automatically select the appropriate configuration based on the environment (dev or prod) and write it to `config/properties.json`.
 
@@ -521,22 +548,31 @@ aws lambda invoke \
 
 ### Cleaner Coordination Workflow (Updated)
 
-1. **Initial Contact**: Step Functions sends email to highest-ranked cleaner with YES/NO buttons. If the cleaner has a `phoneEmail`, it is included as a BCC for SMS notification.
+1. **Initial Contact**: Step Functions sends email to highest-ranked cleaner with YES/NO buttons and up to 5 alternative time slot buttons. If the cleaner has a `phoneEmail`, it is included as a BCC for SMS notification.
 2. **Callback Wait**: Workflow pauses using task token, waiting for HTTP callback from cleaner.
 3. **Response Processing**:
-  - **YES**: Calendar Lambda generates ICS invites for cleaner and owner (12:00 PM EST on checkout day)
+  - **YES**: Calendar Lambda generates ICS invites for cleaner and owner at the default time (calculated from checkout time + configurable margin)
   - **NO**: Workflow contacts next cleaner in ranked list
-  - **Timeout (9 hours)**: Sends a reminder email to the cleaner (with YES/NO buttons), waits an additional 3 hours for a response
+  - **Alternative Time**: Cleaner selects one of the provided time slots, workflow updates the scheduled time and generates calendar invites with the new time
+  - **Timeout (9 hours)**: Sends a reminder email to the cleaner (with YES/NO buttons and alternative time slots), waits an additional 3 hours for a response
   - **Reminder Response**:
     - **YES**: Calendar Lambda generates ICS invites
     - **NO**: Workflow contacts next cleaner
+    - **Alternative Time**: Workflow updates time and generates invites
     - **Timeout (3 hours after reminder)**: Workflow contacts next cleaner
-4. **Calendar Invites**: 
+4. **Alternative Time Slots**: 
+  - Default time calculated from checkout + `marginMinutesAfterCheckOut` (default 60 minutes)
+  - Up to 5 slots generated at configurable intervals (`alternateTimeIncrementMinutes`, default 30 minutes)
+  - Automatically adjusts to avoid conflicts with cleaning duration
+  - Times displayed in Eastern Time (12:45 PM format) for readability
+  - Empty slots hidden from cleaner to avoid visual clutter
+5. **Calendar Invites**: 
   - Includes property address, guest details, cleaning duration
+  - Shows selected time (default or alternative) in Eastern Time
   - Adds cleaner as required participant, owner as optional participant
   - Proper timezone conversion (Eastern Time)
   - Sent via Amazon SES with raw MIME format
-5. **Escalation**: If all cleaners decline or timeout, sends escalation email to property owner with:
+6. **Escalation**: If all cleaners decline or timeout, sends escalation email to property owner with:
   - Complete booking details and attempted cleaner list
   - **Owner Override Buttons**: Pre-formatted links to manually schedule specific cleaners or cancel the cleaning
   - Secure token-based authentication (no login required, just click the link)
