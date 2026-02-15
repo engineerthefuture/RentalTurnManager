@@ -98,7 +98,7 @@
         "propertyName.$": "$.state.input.property.metadata.propertyName",
         "propertyAddress.$": "$.state.input.property.address",
         "cleaningDateTime.$": "$.state.input.cleaningDateTime",
-        "cleaningTime.$": "$.state.input.cleaningTime",
+        "cleaningTime.$": "$.cleaningTime",
         "alternativeTimeSlots.$": "$.state.input.alternativeTimeSlots",
         "timeButtonsHtml.$": "$.state.input.timeButtonsHtml",
         "cleaningDate.$": "States.ArrayGetItem(States.StringSplit($.state.input.cleaningDateTime, 'T'), 0)",

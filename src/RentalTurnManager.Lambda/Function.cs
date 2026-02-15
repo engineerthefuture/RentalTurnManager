@@ -311,21 +311,32 @@ public class Function
                                 ).AddHours(-durationHours);
                                 
                                 // Get time increment from property config, default to 30 minutes
-                                var incrementMinutes = property.Metadata.AlternateTimeIncrementMinutes > 0 
-                                    ? property.Metadata.AlternateTimeIncrementMinutes 
+                                var incrementMinutes = property.Metadata.AlternateTimeIncrementMinutes > 0
+                                    ? property.Metadata.AlternateTimeIncrementMinutes
                                     : 30;
-                                
-                                // Generate time slots at specified intervals
-                                var currentSlot = startTime.AddMinutes(incrementMinutes); // Start from increment after default
-                                while (currentSlot <= latestStartEastern)
+
+                                // If the configured increment doesn't fit in the available window,
+                                // step it down by 5 minutes until it does (minimum 5 minutes).
+                                var availableMinutes = (latestStartEastern - startTime).TotalMinutes;
+                                while (availableMinutes > 0 && incrementMinutes > 5 && availableMinutes < incrementMinutes)
                                 {
-                                    var slotUtc = TimeZoneInfo.ConvertTimeToUtc(currentSlot, easternZone);
-                                    alternativeTimeSlots.Add(new TimeSlot
+                                    incrementMinutes -= 5;
+                                }
+
+                                // Generate time slots at the (possibly adjusted) interval
+                                if (availableMinutes > 0 && incrementMinutes > 0)
+                                {
+                                    var currentSlot = startTime.AddMinutes(incrementMinutes); // Start from increment after default
+                                    while (currentSlot <= latestStartEastern)
                                     {
-                                        Time = currentSlot.ToString("h:mm tt"),
-                                        IsoDateTime = slotUtc.ToString("o")
-                                    });
-                                    currentSlot = currentSlot.AddMinutes(incrementMinutes);
+                                        var slotUtc = TimeZoneInfo.ConvertTimeToUtc(currentSlot, easternZone);
+                                        alternativeTimeSlots.Add(new TimeSlot
+                                        {
+                                            Time = currentSlot.ToString("h:mm tt"),
+                                            IsoDateTime = slotUtc.ToString("o")
+                                        });
+                                        currentSlot = currentSlot.AddMinutes(incrementMinutes);
+                                    }
                                 }
                             }
                         }
@@ -336,7 +347,7 @@ public class Function
                     if (string.IsNullOrEmpty(ownerEmail))
                     {
                         _logger.LogWarning("OWNER_EMAIL environment variable not set, using default");
-                        ownerEmail = "owner@example.com";
+                        ownerEmail = "support@example.com";
                     }
                     _logger.LogInformation($"Using owner email: {ownerEmail}");
 

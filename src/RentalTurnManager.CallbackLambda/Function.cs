@@ -515,7 +515,7 @@ public class Function
                 context.Logger.LogInformation($"Owner cancelled cleaning for booking {bookingRef}");
             }
 
-            var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
+            var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
             var encodedCleanerId = WebUtility.HtmlEncode(cleanerId);
             var encodedBookingRef = WebUtility.HtmlEncode(bookingRef);
             var encodedPropertyId = WebUtility.HtmlEncode(propertyId);
@@ -768,7 +768,7 @@ public class Function
             context.Logger.LogInformation($"Marked booking {bookingRef} as cancelled in S3");
             
             // Send cancellation emails with calendar CANCEL via CalendarLambda
-            var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
+            var ownerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
             var calendarLambdaName = System.Environment.GetEnvironmentVariable("CALENDAR_LAMBDA_NAME") ?? "RentalTurnManager-CalendarLambda";
             
             // Get Eastern timezone for time formatting (used in both cleaner and owner emails)
