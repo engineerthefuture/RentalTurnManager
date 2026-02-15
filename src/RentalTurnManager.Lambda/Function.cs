@@ -348,18 +348,14 @@ public class Function
                         callbackApiUrl = "";
                     }
 
-                    // Generate HTML for alternative time slot buttons (will be filled with token by workflow)
+                    // Generate HTML for alternative time slot buttons
+                    // Note: We'll add these via a separate email mechanism since Step Functions
+                    // doesn't support nested States.Format calls
                     var timeButtonsHtml = string.Empty;
                     if (alternativeTimeSlots.Count > 0)
                     {
                         var sb = new System.Text.StringBuilder();
-                        sb.Append("<p style=\"margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px;\"><strong style=\"display: block; margin-bottom: 10px;\">Or select an alternative time:</strong>");
-                        foreach (var slot in alternativeTimeSlots)
-                        {
-                            var encodedTime = System.Web.HttpUtility.UrlEncode(slot.IsoDateTime);
-                            sb.Append($"<a href=\"{callbackApiUrl}/respond?token={{0}}&response=yes&time={encodedTime}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{slot.Time}</a>");
-                        }
-                        sb.Append("</p>");
+                        sb.Append("<p style=\"margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px;\"><strong style=\"display: block; margin-bottom: 10px;\">Alternative times available - please contact the owner if the default time doesn't work.</strong></p>");
                         timeButtonsHtml = sb.ToString();
                     }
 
