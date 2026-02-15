@@ -764,7 +764,7 @@ Property Management";
                 }
                 catch (Exception ex)
                 {
-                    context.Logger.LogError(ex, "Failed to send cancellation email to cleaner");
+                    context.Logger.LogError($"Failed to send cancellation email to cleaner: {ex.Message}");
                     // Continue anyway - cancellation is recorded
                 }
             }
@@ -822,7 +822,7 @@ Property Management";
         }
         catch (Exception ex)
         {
-            context.Logger.LogError(ex, $"Error cancelling cleaning: {ex.Message}");
+            context.Logger.LogError($"Error cancelling cleaning: {ex.Message}");
             return new APIGatewayProxyResponse
             {
                 StatusCode = 500,
