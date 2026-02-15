@@ -256,8 +256,51 @@
       "Default": "IncrementCleanerIndex"
     },
     "ProcessCleanerResponse": {
+      "Type": "Choice",
+      "Comment": "Check if alternative time was selected",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.emailResult.alternativeTime",
+              "IsPresent": true
+            },
+            {
+              "Not": {
+                "Variable": "$.emailResult.alternativeTime",
+                "StringEquals": ""
+              }
+            }
+          ],
+          "Next": "UpdateCleaningTimeForAlternative"
+        }
+      ],
+      "Default": "CleanerConfirmed"
+    },
+    "UpdateCleaningTimeForAlternative": {
       "Type": "Pass",
-      "Comment": "Pass through to check if alternative time needs processing",
+      "Comment": "Update cleaning date/time to use the selected alternative time",
+      "Parameters": {
+        "state": {
+          "input.$": "$.state.input",
+          "currentCleaner.$": "$.state.currentCleaner",
+          "propertyName.$": "$.state.propertyName",
+          "propertyAddress.$": "$.state.propertyAddress",
+          "numberOfGuests.$": "$.state.numberOfGuests",
+          "numberOfNights.$": "$.state.numberOfNights",
+          "cleaningDateTime.$": "$.emailResult.alternativeTime",
+          "cleaningDate.$": "States.Format('{}-{}-{}', States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.emailResult.alternativeTime, 'T'), 0), '-'), 1), States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.emailResult.alternativeTime, 'T'), 0), '-'), 2), States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.emailResult.alternativeTime, 'T'), 0), '-'), 0))",
+          "cleaningTime.$": "States.Format('{}:{}', States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.emailResult.alternativeTime, 'T'), 1), ':'), 0), States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.emailResult.alternativeTime, 'T'), 1), ':'), 1))",
+          "cleaningDuration.$": "$.state.cleaningDuration",
+          "ownerName.$": "$.state.ownerName",
+          "cleanerConfirmed.$": "$.state.cleanerConfirmed",
+          "allCleanersExhausted.$": "$.state.allCleanersExhausted",
+          "checkData.$": "$.state.checkData",
+          "alternativeTimeSlots.$": "$.state.alternativeTimeSlots"
+        },
+        "bookingStateBucket.$": "$.bookingStateBucket"
+      },
+      "ResultPath": "$",
       "Next": "CleanerConfirmed"
     },
     "CleanerConfirmed": {
