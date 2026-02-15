@@ -46,6 +46,10 @@ public class PropertyMetadata
     public int Bedrooms { get; set; }
     public double Bathrooms { get; set; }
     public string CleaningDuration { get; set; } = string.Empty;
+    public string DefaultCheckIn { get; set; } = string.Empty;
+    public string DefaultCheckOut { get; set; } = string.Empty;
+    public int AlternateTimeIncrementMinutes { get; set; } = 30;
+    public int MarginMinutesAfterCheckOut { get; set; } = 60;
     public string AccessInstructions { get; set; } = string.Empty;
     public string SpecialInstructions { get; set; } = string.Empty;
     public string OwnerName { get; set; } = string.Empty;

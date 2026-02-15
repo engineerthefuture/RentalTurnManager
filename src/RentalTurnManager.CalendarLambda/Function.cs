@@ -49,6 +49,45 @@ public class Function
     {
         context.Logger.LogInformation($"Generating calendar {(request.IsCancellation ? "cancellation" : "invite")} email for {request.ToEmail}");
 
+        // Convert UTC time to Eastern time for display in email body
+        if (!string.IsNullOrEmpty(request.CleaningDateTime))
+        {
+            try
+            {
+                var utcDateTime = DateTime.Parse(request.CleaningDateTime);
+                var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+                var easternDateTime = TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, easternZone);
+                var easternTimeDisplay = easternDateTime.ToString("h:mm tt");
+                
+                // Replace the time in the HTML body with Eastern time
+                // Handle both <li>Time: ...</li> and plain text formats
+                var originalBody = request.HtmlBody;
+                request.HtmlBody = System.Text.RegularExpressions.Regex.Replace(
+                    request.HtmlBody,
+                    @"(<li>)?Time:\s*\d{1,2}:\d{2}(\s*[APap][Mm])?(</li>)?",
+                    match => {
+                        var hasLi = match.Value.Contains("<li>");
+                        var closeLi = match.Value.Contains("</li>");
+                        return $"{(hasLi ? "<li>" : "")}Time: {easternTimeDisplay}{(closeLi ? "</li>" : "")}";
+                    },
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                );
+                
+                if (originalBody != request.HtmlBody)
+                {
+                    context.Logger.LogInformation($"Converted UTC time to Eastern: {easternTimeDisplay}");
+                }
+                else
+                {
+                    context.Logger.LogWarning($"Time replacement pattern did not match in HTML body");
+                }
+            }
+            catch (Exception ex)
+            {
+                context.Logger.LogWarning($"Failed to convert time to Eastern: {ex.Message}");
+            }
+        }
+
         // Generate ICS content
         var icsContent = request.IsCancellation
             ? GenerateCancellationIcs(
