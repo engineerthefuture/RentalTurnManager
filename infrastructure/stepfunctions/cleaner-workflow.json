@@ -279,7 +279,44 @@
     },
     "UpdateCleaningTimeForAlternative": {
       "Type": "Pass",
-      "Comment": "Update cleaning date/time to use the selected alternative time",
+      "Comment": "Extract date and time parts from alternative time ISO string",
+      "Parameters": {
+        "state.$": "$.state",
+        "bookingStateBucket.$": "$.bookingStateBucket",
+        "emailResult.$": "$.emailResult",
+        "alternativeTime.$": "$.emailResult.alternativeTime",
+        "dateTimeParts.$": "States.StringSplit($.emailResult.alternativeTime, 'T')"
+      },
+      "Next": "FormatAlternativeDate"
+    },
+    "FormatAlternativeDate": {
+      "Type": "Pass",
+      "Comment": "Format the alternative date from YYYY-MM-DD to MM-DD-YYYY",
+      "Parameters": {
+        "state.$": "$.state",
+        "bookingStateBucket.$": "$.bookingStateBucket",
+        "alternativeTime.$": "$.alternativeTime",
+        "datePart.$": "States.ArrayGetItem($.dateTimeParts, 0)",
+        "timePart.$": "States.ArrayGetItem($.dateTimeParts, 1)",
+        "dateParts.$": "States.StringSplit(States.ArrayGetItem($.dateTimeParts, 0), '-')"
+      },
+      "Next": "FormatAlternativeTime"
+    },
+    "FormatAlternativeTime": {
+      "Type": "Pass",
+      "Comment": "Format the alternative time to HH:MM",
+      "Parameters": {
+        "state.$": "$.state",
+        "bookingStateBucket.$": "$.bookingStateBucket",
+        "alternativeTime.$": "$.alternativeTime",
+        "formattedDate.$": "States.Format('{}-{}-{}', States.ArrayGetItem($.dateParts, 1), States.ArrayGetItem($.dateParts, 2), States.ArrayGetItem($.dateParts, 0))",
+        "timeParts.$": "States.StringSplit($.timePart, ':')"
+      },
+      "Next": "ApplyAlternativeTime"
+    },
+    "ApplyAlternativeTime": {
+      "Type": "Pass",
+      "Comment": "Apply the formatted alternative date/time to state",
       "Parameters": {
         "state": {
           "input.$": "$.state.input",
@@ -288,9 +325,9 @@
           "propertyAddress.$": "$.state.propertyAddress",
           "numberOfGuests.$": "$.state.numberOfGuests",
           "numberOfNights.$": "$.state.numberOfNights",
-          "cleaningDateTime.$": "$.emailResult.alternativeTime",
-          "cleaningDate.$": "States.Format('{}-{}-{}', States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.emailResult.alternativeTime, 'T'), 0), '-'), 1), States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.emailResult.alternativeTime, 'T'), 0), '-'), 2), States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.emailResult.alternativeTime, 'T'), 0), '-'), 0))",
-          "cleaningTime.$": "States.Format('{}:{}', States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.emailResult.alternativeTime, 'T'), 1), ':'), 0), States.ArrayGetItem(States.StringSplit(States.ArrayGetItem(States.StringSplit($.emailResult.alternativeTime, 'T'), 1), ':'), 1))",
+          "cleaningDateTime.$": "$.alternativeTime",
+          "cleaningDate.$": "$.formattedDate",
+          "cleaningTime.$": "States.Format('{}:{}', States.ArrayGetItem($.timeParts, 0), States.ArrayGetItem($.timeParts, 1))",
           "cleaningDuration.$": "$.state.cleaningDuration",
           "ownerName.$": "$.state.ownerName",
           "cleanerConfirmed.$": "$.state.cleanerConfirmed",
@@ -300,7 +337,6 @@
         },
         "bookingStateBucket.$": "$.bookingStateBucket"
       },
-      "ResultPath": "$",
       "Next": "CleanerConfirmed"
     },
     "CleanerConfirmed": {
