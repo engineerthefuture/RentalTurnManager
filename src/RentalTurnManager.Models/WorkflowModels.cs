@@ -27,6 +27,7 @@ public class CleanerWorkflowInput
     public string CallbackApiUrl { get; set; } = string.Empty;
     public string BookingStateBucket { get; set; } = string.Empty;
     public string EscalationEmailHtml { get; set; } = string.Empty;
+    public string OwnerToken { get; set; } = string.Empty;
 }
 
 /// <summary>

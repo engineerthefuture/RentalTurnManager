@@ -47,21 +47,29 @@ public class Function
 
     public async Task<object> FunctionHandler(CalendarEmailRequest request, ILambdaContext context)
     {
-        context.Logger.LogInformation($"Generating calendar invite email for {request.ToEmail}");
+        context.Logger.LogInformation($"Generating calendar {(request.IsCancellation ? "cancellation" : "invite")} email for {request.ToEmail}");
 
         // Generate ICS content
-        var icsContent = GenerateIcsContent(
-            request.CleanerName,
-            request.CleanerEmail,
-            request.CleanerPhone,
-            request.OwnerName,
-            request.OwnerEmail,
-            request.PropertyName,
-            request.PropertyAddress,
-            request.CleaningDate,
-            request.CleaningDateTime,
-            request.CleaningDuration
-        );
+        var icsContent = request.IsCancellation
+            ? GenerateCancellationIcs(
+                request.PropertyName,
+                request.CleaningDateTime ?? request.CleaningDate,
+                request.CleanerName,
+                request.CleanerEmail,
+                request.OwnerEmail
+              )
+            : GenerateIcsContent(
+                request.CleanerName,
+                request.CleanerEmail,
+                request.CleanerPhone,
+                request.OwnerName,
+                request.OwnerEmail,
+                request.PropertyName,
+                request.PropertyAddress,
+                request.CleaningDate,
+                request.CleaningDateTime,
+                request.CleaningDuration
+              );
 
         // Create MIME message with ICS attachment
         var rawMessage = CreateRawEmailWithAttachment(
@@ -71,7 +79,8 @@ public class Function
             request.Subject,
             request.HtmlBody,
             icsContent,
-            $"cleaning-{request.CleaningDate}.ics"
+            $"{(request.IsCancellation ? "cancellation" : "cleaning")}-{request.CleaningDate}.ics",
+            request.IsCancellation ? "CANCEL" : "REQUEST"
         );
 
         // Send via SES
@@ -83,7 +92,7 @@ public class Function
             }
         });
 
-        context.Logger.LogInformation("Calendar invite email sent successfully");
+        context.Logger.LogInformation($"Calendar {(request.IsCancellation ? "cancellation" : "invite")} email sent successfully");
         
         // Update booking state with cleaner assignment if booking details provided
         if (!string.IsNullOrEmpty(request.Platform) && 
@@ -95,9 +104,12 @@ public class Function
                 request.BookingReference,
                 request.BookingStateBucket,
                 request.CleanerName,
+                request.CleanerId,
                 request.CleanerEmail,
                 request.CleanerPhone,
                 request.CleaningDateTime ?? request.CleaningDate,
+                request.PropertyName,
+                request.OwnerName,
                 context
             );
         }
@@ -110,9 +122,12 @@ public class Function
         string bookingReference,
         string bucketName,
         string cleanerName,
+        string cleanerId,
         string cleanerEmail,
         string cleanerPhone,
         string cleaningDate,
+        string propertyName,
+        string ownerName,
         ILambdaContext context)
     {
         try
@@ -140,7 +155,20 @@ public class Function
                 booking.AssignedCleanerName = cleanerName;
                 booking.AssignedCleanerEmail = cleanerEmail;
                 booking.AssignedCleanerPhone = cleanerPhone;
+                booking.AssignedCleanerId = cleanerId;
                 booking.CleanerConfirmedAt = DateTime.UtcNow;
+                
+                // Set WorkflowPropertyId if not already set
+                if (string.IsNullOrEmpty(booking.WorkflowPropertyId))
+                {
+                    booking.WorkflowPropertyId = propertyName;
+                }
+                
+                // Set OwnerName if provided
+                if (!string.IsNullOrEmpty(ownerName))
+                {
+                    booking.OwnerName = ownerName;
+                }
                 
                 // Parse the full cleaning DateTime (already in UTC from workflow)
                 if (DateTime.TryParse(cleaningDate, out var cleaningDateTime))
@@ -285,7 +313,7 @@ public class Function
         return dt.ToUniversalTime().ToString("yyyyMMddTHHmmssZ");
     }
 
-    private string CreateRawEmailWithAttachment(string from, string to, string cc, string subject, string htmlBody, string icsContent, string filename)
+    private string CreateRawEmailWithAttachment(string from, string to, string cc, string subject, string htmlBody, string icsContent, string filename, string method = "REQUEST")
     {
         var boundary = $"----=_Part_{Guid.NewGuid():N}";
 
@@ -307,7 +335,7 @@ public class Function
         message.AppendLine(htmlBody);
         message.AppendLine();
         message.AppendLine($"--{boundary}");
-        message.AppendLine("Content-Type: text/calendar; charset=UTF-8; method=REQUEST");
+        message.AppendLine($"Content-Type: text/calendar; charset=UTF-8; method={method}");
         message.AppendLine($"Content-Disposition: attachment; filename=\"{filename}\"");
         message.AppendLine("Content-Transfer-Encoding: 7bit");
         message.AppendLine();
@@ -316,6 +344,56 @@ public class Function
         message.AppendLine($"--{boundary}--");
 
         return message.ToString();
+    }
+
+    private string GenerateCancellationIcs(string propertyName, string cleaningDate, string cleanerName, string cleanerEmail, string ownerEmail)
+    {
+        // Parse the cleaning date - could be either DateTime string or date string
+        DateTime startDateTime;
+        if (DateTime.TryParse(cleaningDate, out var parsedDate))
+        {
+            startDateTime = parsedDate.ToUniversalTime();
+        }
+        else
+        {
+            // Fallback to today if parsing fails
+            startDateTime = DateTime.UtcNow;
+        }
+        
+        var endDateTime = startDateTime.AddHours(3);
+        var now = DateTime.UtcNow;
+        
+        // Generate a consistent UID based on property and date so it matches the original event
+        var uid = $"cleaning-{propertyName.Replace(" ", "-")}-{startDateTime:yyyyMMdd}@rentalturnmanager.com";
+        
+        var icsBuilder = new StringBuilder();
+        icsBuilder.AppendLine("BEGIN:VCALENDAR");
+        icsBuilder.AppendLine("VERSION:2.0");
+        icsBuilder.AppendLine("PRODID:-//RentalTurnManager//Calendar//EN");
+        icsBuilder.AppendLine("METHOD:CANCEL");
+        icsBuilder.AppendLine("BEGIN:VEVENT");
+        icsBuilder.AppendLine($"UID:{uid}");
+        icsBuilder.AppendLine($"DTSTAMP:{FormatDateTime(now)}");
+        icsBuilder.AppendLine($"DTSTART:{FormatDateTime(startDateTime)}");
+        icsBuilder.AppendLine($"DTEND:{FormatDateTime(endDateTime)}");
+        icsBuilder.AppendLine($"SUMMARY:CANCELLED: Cleaning - {propertyName}");
+        icsBuilder.AppendLine($"DESCRIPTION:This cleaning appointment has been cancelled.");
+        icsBuilder.AppendLine($"STATUS:CANCELLED");
+        icsBuilder.AppendLine($"SEQUENCE:1");
+        
+        // Add cleaner as attendee if provided
+        if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName))
+        {
+            icsBuilder.AppendLine($"ATTENDEE;CN={cleanerName}:mailto:{cleanerEmail}");
+        }
+        
+        // Add owner as attendee
+        icsBuilder.AppendLine($"ATTENDEE;CN=Owner:mailto:{ownerEmail}");
+        
+        icsBuilder.AppendLine("END:VEVENT");
+        icsBuilder.AppendLine("END:VCALENDAR");
+        
+        return icsBuilder.ToString();
     }
 }
 
@@ -327,6 +405,7 @@ public class CalendarEmailRequest
     public string Subject { get; set; } = string.Empty;
     public string HtmlBody { get; set; } = string.Empty;
     public string CleanerName { get; set; } = string.Empty;
+    public string CleanerId { get; set; } = string.Empty;
     public string CleanerEmail { get; set; } = string.Empty;
     public string CleanerPhone { get; set; } = string.Empty;
     public string OwnerName { get; set; } = string.Empty;
@@ -341,6 +420,9 @@ public class CalendarEmailRequest
     public string? Platform { get; set; }
     public string? BookingReference { get; set; }
     public string? BookingStateBucket { get; set; }
+    
+    // Cancellation flag
+    public bool IsCancellation { get; set; }
 }
 
 public class BookingState
@@ -355,6 +437,9 @@ public class BookingState
     public string? AssignedCleanerName { get; set; }
     public string? AssignedCleanerEmail { get; set; }
     public string? AssignedCleanerPhone { get; set; }
+    public string? AssignedCleanerId { get; set; }
     public DateTime? CleanerConfirmedAt { get; set; }
     public DateTime? ScheduledCleaningTime { get; set; }
+    public string? WorkflowPropertyId { get; set; }
+    public string? OwnerName { get; set; }
 }

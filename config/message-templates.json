@@ -10,7 +10,11 @@
     },
     "ownerNotification": {
       "subject": "Cleaning Scheduled for {PropertyName} on {Date}",
-      "body": "Hello,\n\nA cleaning has been scheduled for {PropertyName}:\n\n- Cleaner: {CleanerName}\n- Date: {Date}\n- Time: {Time}\n- Address: {Address}\n\nYou have been copied on the calendar invite.\n\nThank you,\n{OwnerName}"
+      "body": "Hello,\n\nA cleaning has been scheduled for {PropertyName}:\n\n- Cleaner: {CleanerName}\n- Date: {Date}\n- Time: {Time}\n- Address: {Address}\n\nYou have been copied on the calendar invite.\n\nIf you need to cancel this cleaning, click here: {CancelUrl}\n\nThank you,\n{OwnerName}"
+    },
+    "ownerCancellation": {
+      "subject": "Cleaning Cancelled for {PropertyName} on {Date}",
+      "body": "Hello {CleanerName},\n\nThe cleaning scheduled for {PropertyName} has been cancelled by the property owner.\n\nCancelled Appointment:\n- Property: {PropertyName}\n- Date: {Date}\n- Time: {Time}\n- Address: {Address}\n\nYou do not need to attend this cleaning.\n\nThank you,\n{OwnerName}"
     },
     "ownerEscalation": {
       "subject": "URGENT: Unable to Schedule Cleaning for {PropertyName} on {Date}",

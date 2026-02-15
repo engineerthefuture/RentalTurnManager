@@ -14,6 +14,7 @@ Rental Turn Manager automates the process of scheduling property cleanings when 
 - **Change Detection**: Automatically detects booking modifications and re-triggers workflows
 - **Automated Cleaner Coordination**: Contacts cleaners in priority order via email with confirm/deny links. Each cleaner can also have a `phoneEmail` property (e.g., `1234567890@vtext.com` for Verizon, `1234567890@txt.att.net` for AT&T, etc.) to receive SMS text notifications via email. As of January 2026, the system now sends these notifications as BCC (not CC) for privacy.
 - **Owner Override Capability**: Property owners can manually schedule or cancel cleanings using a secure token-based override system when all cleaners are unavailable
+- **Cleaning Cancellation**: Property owners can cancel scheduled cleanings via a cancel link in the owner notification email, which automatically sends cancellation notices with ICS calendar updates to both the cleaner and owner
 - **Enhanced Error Handling**: User-friendly HTML error pages for expired or used callback links with owner contact information and accessibility features (ARIA attributes, proper semantic HTML)
 - **Calendar Integration**: Sends ICS calendar invites with proper timezone handling to cleaners and owners
 - **Property Configuration**: Maintains property metadata, addresses, and cleaner preferences
@@ -219,6 +220,21 @@ When all cleaners are exhausted, the owner receives an escalation email with "Sc
 2. Lambda retrieves saved workflow context from S3
 3. Lambda restarts workflow with selected cleaner and `ownerOverride: true`
 4. Workflow skips cleaner request email and goes directly to confirmation emails
+
+### Cleaning Cancellation Flow
+
+When a cleaning is scheduled, the owner receives a notification email with a "Cancel this cleaning" link. When clicked:
+
+1. Owner clicks cancel link → Callback Lambda validates secure token
+2. Lambda retrieves booking from S3 and marks it as cancelled
+3. Lambda adds/updates `AssignedCleanerId` and `WorkflowPropertyId` fields in booking
+4. Lambda sends cancellation emails with calendar updates (ICS METHOD:CANCEL) to:
+   - **Cleaner**: Notifies them the appointment is cancelled with details
+   - **Owner**: Confirms the cancellation with cleaner and appointment details
+5. Calendar applications automatically remove the cancelled event
+6. Booking state is saved to S3 with `CleaningStatus: "cancelled"` and `CancelledAt` timestamp
+
+The cancel link includes the cleaner ID and property ID, allowing the system to send detailed cancellation notices even if the cleaner hasn't been fully assigned yet in the booking state.
 
 ## Setup
 

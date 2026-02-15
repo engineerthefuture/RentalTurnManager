@@ -268,6 +268,7 @@
                   "Subject.$": "States.Format('Cleaning Confirmed for {} on {}', $.state.propertyName, $.state.cleaningDate)",
                   "HtmlBody.$": "States.Format('<html><body><p>Hello {},</p><p>Thank you for confirming your availability!</p><p>Your cleaning appointment has been scheduled:</p><ul><li>Property: {}</li><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Please see the attached calendar invite.</p><p>Thank you,<br/>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.propertyAddress, $.state.ownerName)",
                   "CleanerName.$": "$.state.currentCleaner.name",
+                  "CleanerId.$": "$.state.currentCleaner.cleanerId",
                   "CleanerEmail.$": "$.state.currentCleaner.email",
                   "CleanerPhone.$": "$.state.currentCleaner.phone",
                   "OwnerName.$": "$.state.ownerName",
@@ -299,8 +300,9 @@
                   "ToEmail.$": "$.state.input.ownerEmail",
                   "CcEmail": "",
                   "Subject.$": "States.Format('Cleaning Scheduled for {} on {}', $.state.propertyName, $.state.cleaningDate)",
-                  "HtmlBody.$": "States.Format('<html><body><p>Hello {},</p><p>A cleaning has been scheduled for {}:</p><ul><li>Cleaner: {}</li><li>Email: {}</li><li>Phone: {}</li><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Please see the attached calendar invite with cleaner contact information.</p><p>Thank you,<br/>{}</p></body></html>', $.state.ownerName, $.state.propertyName, $.state.currentCleaner.name, $.state.currentCleaner.email, $.state.currentCleaner.phone, $.state.cleaningDate, $.state.propertyAddress, $.state.ownerName)",
+                  "HtmlBody.$": "States.Format('<html><body><p>Hello {},</p><p>A cleaning has been scheduled for {}:</p><ul><li>Cleaner: {}</li><li>Email: {}</li><li>Phone: {}</li><li>Date: {}</li><li>Time: 12:00 PM</li><li>Address: {}</li></ul><p>Please see the attached calendar invite with cleaner contact information.</p><p style=\"margin-top: 25px; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #dc3545; border-radius: 4px;\"><strong style=\"color: #495057;\">Need to cancel?</strong> <a href=\"{}/respond?cancelToken={}&bookingRef={}&platform={}&propertyId={}&cleanerId={}\" style=\"color: #c82333; text-decoration: underline; font-weight: 600;\">Click here to cancel this cleaning</a></p><p>Thank you,<br/>{}</p></body></html>', $.state.ownerName, $.state.propertyName, $.state.currentCleaner.name, $.state.currentCleaner.email, $.state.currentCleaner.phone, $.state.cleaningDate, $.state.propertyAddress, $.state.input.callbackApiUrl, $.state.input.ownerToken, $.state.input.booking.bookingReference, $.state.input.booking.platform, $.state.input.property.propertyId, $.state.currentCleaner.cleanerId, $.state.ownerName)",
                   "CleanerName.$": "$.state.currentCleaner.name",
+                  "CleanerId.$": "$.state.currentCleaner.cleanerId",
                   "CleanerEmail.$": "$.state.currentCleaner.email",
                   "CleanerPhone.$": "$.state.currentCleaner.phone",
                   "OwnerName.$": "$.state.ownerName",
@@ -335,7 +337,8 @@
           "ownerEmail.$": "$.state.input.ownerEmail",
           "callbackApiUrl.$": "$.state.input.callbackApiUrl",
           "bookingStateBucket.$": "$.state.input.bookingStateBucket",
-          "escalationEmailHtml.$": "$.state.input.escalationEmailHtml"
+          "escalationEmailHtml.$": "$.state.input.escalationEmailHtml",
+          "ownerToken.$": "$.state.input.ownerToken"
         },
         "cleanerConfirmed": false,
         "allCleanersExhausted": false

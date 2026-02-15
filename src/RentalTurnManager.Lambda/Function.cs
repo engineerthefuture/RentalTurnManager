@@ -350,7 +350,8 @@ public class Function
                         OwnerEmail = ownerEmail,
                         CallbackApiUrl = callbackApiUrl,
                         BookingStateBucket = bookingStateBucket,
-                        EscalationEmailHtml = escalationEmailHtml
+                        EscalationEmailHtml = escalationEmailHtml,
+                        OwnerToken = ownerToken
                     };
 
                     var executionArn = await stepFunctionService.StartCleanerWorkflowAsync(workflowInput);
