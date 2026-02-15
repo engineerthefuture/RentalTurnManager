@@ -348,14 +348,21 @@ public class Function
                         callbackApiUrl = "";
                     }
 
-                    // Generate HTML for alternative time slot buttons
-                    // Note: We'll add these via a separate email mechanism since Step Functions
-                    // doesn't support nested States.Format calls
+                    // Generate HTML for alternative time slots (non-clickable due to Step Functions limitations)
                     var timeButtonsHtml = string.Empty;
                     if (alternativeTimeSlots.Count > 0)
                     {
                         var sb = new System.Text.StringBuilder();
-                        sb.Append("<p style=\"margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px;\"><strong style=\"display: block; margin-bottom: 10px;\">Alternative times available - please contact the owner if the default time doesn't work.</strong></p>");
+                        sb.Append("<p style=\"margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px;\">");
+                        sb.Append("<strong style=\"display: block; margin-bottom: 10px;\">If the default time doesn't work, alternative times are available:</strong>");
+                        sb.Append("<ul style=\"margin: 10px 0; padding-left: 20px;\">");
+                        foreach (var slot in alternativeTimeSlots)
+                        {
+                            sb.Append($"<li style=\"margin: 5px 0;\">{slot.Time}</li>");
+                        }
+                        sb.Append("</ul>");
+                        sb.Append("<em style=\"font-size: 0.9em; color: #6c757d;\">Please reply to this email or contact the owner to request an alternative time.</em>");
+                        sb.Append("</p>");
                         timeButtonsHtml = sb.ToString();
                     }
 
