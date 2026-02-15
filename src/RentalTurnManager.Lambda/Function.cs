@@ -423,6 +423,12 @@ public class Function
                         callbackApiUrl
                     );
 
+                    // Pad alternative time slots array to always have 5 elements for workflow
+                    while (alternativeTimeSlots.Count < 5)
+                    {
+                        alternativeTimeSlots.Add(new TimeSlot { Time = "", IsoDateTime = "" });
+                    }
+
                     // Start Step Functions workflow
                     var workflowInput = new CleanerWorkflowInput
                     {
