@@ -28,7 +28,6 @@ public class CleanerWorkflowInput
     public DateTime CleaningDateTime { get; set; }
     public string CleaningTime { get; set; } = string.Empty;
     public List<TimeSlot> AlternativeTimeSlots { get; set; } = new();
-    public List<string> AlternativeButtons { get; set; } = new();
     public string TimeButtonsHtml { get; set; } = string.Empty;
     public int CurrentCleanerIndex { get; set; }
     public int AttemptCount { get; set; }
