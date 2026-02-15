@@ -37,6 +37,36 @@ public class Function
     private readonly IConfiguration _configuration;
     private readonly PropertiesConfiguration? _propertiesConfig;
 
+        // Compute a sensible increment (minutes) to target ~5 slots given available minutes.
+        // Made internal for unit testing.
+        public static int ComputeIncrementMinutes(double availableMinutes, int originalIncrement)
+        {
+            var incrementMinutes = originalIncrement;
+
+            if (availableMinutes > 0)
+            {
+                var slotsAtOriginal = (int)Math.Floor(availableMinutes / (double)originalIncrement);
+
+                if (slotsAtOriginal == 5)
+                {
+                    incrementMinutes = originalIncrement;
+                }
+                else
+                {
+                    var desired = (int)Math.Floor(availableMinutes / 5.0);
+                    if (desired < 5) desired = 5;
+
+                    // Round desired down to nearest multiple of 5
+                    desired = (desired / 5) * 5;
+                    if (desired < 5) desired = 5;
+
+                    incrementMinutes = desired;
+                }
+            }
+
+            return incrementMinutes;
+        }
+
     public Function()
     {
         // Build configuration
@@ -296,8 +326,16 @@ public class Function
                                 @"([0-9.]+)\s*hours?");
                             if (durationMatch.Success && double.TryParse(durationMatch.Groups[1].Value, out var durationHours))
                             {
-                                // Start time is default cleaning time (checkOut + 1 hour)
-                                var startTime = cleaningDateTimeEastern;
+                                // Start time is default cleaning time (checkOut + marginMinutesAfterCheckOut)
+                                var startTime = new DateTime(
+                                    cleaningDate.Year,
+                                    cleaningDate.Month,
+                                    cleaningDate.Day,
+                                    checkOutTime.Hour,
+                                    checkOutTime.Minute,
+                                    0,
+                                    DateTimeKind.Unspecified
+                                ).AddMinutes(property.Metadata.MarginMinutesAfterCheckOut);
                                 
                                 // Latest possible start time is checkIn - cleaningDuration
                                 var latestStartEastern = new DateTime(
@@ -310,17 +348,36 @@ public class Function
                                     DateTimeKind.Unspecified
                                 ).AddHours(-durationHours);
                                 
-                                // Get time increment from property config, default to 30 minutes
-                                var incrementMinutes = property.Metadata.AlternateTimeIncrementMinutes > 0
+                                // Choose a sensible increment so we end up with approximately 5 slots
+                                var originalIncrement = property.Metadata.AlternateTimeIncrementMinutes > 0
                                     ? property.Metadata.AlternateTimeIncrementMinutes
                                     : 30;
 
-                                // If the configured increment doesn't fit in the available window,
-                                // step it down by 5 minutes until it does (minimum 5 minutes).
                                 var availableMinutes = (latestStartEastern - startTime).TotalMinutes;
-                                while (availableMinutes > 0 && incrementMinutes > 5 && availableMinutes < incrementMinutes)
+                                var incrementMinutes = originalIncrement;
+
+                                if (availableMinutes > 0)
                                 {
-                                    incrementMinutes -= 5;
+                                    // How many slots would we get at the original increment?
+                                    var slotsAtOriginal = (int)Math.Floor(availableMinutes / (double)originalIncrement);
+
+                                    if (slotsAtOriginal == 5)
+                                    {
+                                        // original increment is perfect
+                                        incrementMinutes = originalIncrement;
+                                    }
+                                    else
+                                    {
+                                        // Derive an increment that yields ~5 slots: availableMinutes / 5
+                                        var desired = (int)Math.Floor(availableMinutes / 5.0);
+                                        if (desired < 5) desired = 5; // never below 5 minutes
+
+                                        // Round desired to nearest multiple of 5 for consistency
+                                        desired = (desired / 5) * 5;
+                                        if (desired < 5) desired = 5;
+
+                                        incrementMinutes = desired;
+                                    }
                                 }
 
                                 // Generate time slots at the (possibly adjusted) interval
