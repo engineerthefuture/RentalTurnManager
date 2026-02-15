@@ -774,7 +774,8 @@ public class Function
                 try
                 {
                     var formattedDate = scheduledTime.Value.ToString("MMMM dd, yyyy");
-                    var formattedTime = scheduledTime.Value.ToString("h:mm tt");
+                    // Always show 12:00 PM as that's the standard cleaning time
+                    var formattedTime = "12:00 PM";
                     
                     var cleanerHtmlBody = $@"<html><body>
 <p>Hello {WebUtility.HtmlEncode(cleanerName)},</p>
@@ -786,7 +787,7 @@ public class Function
 <li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTime)}</li>
 </ul>
 <p>You do not need to attend this cleaning. If you added this to your calendar, the attached cancellation should remove it automatically.</p>
-<p>Thank you,<br/>Property Management</p>
+<p>Thank you,<br/>{WebUtility.HtmlEncode(ownerName ?? "Property Management")}</p>
 </body></html>";
                     
                     var cleanerRequest = new
