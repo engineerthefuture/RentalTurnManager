@@ -520,7 +520,10 @@
           "ownerToken.$": "$.state.input.ownerToken"
         },
         "cleanerConfirmed": false,
-        "allCleanersExhausted": false
+        "allCleanersExhausted": false,
+        "cleaningTime.$": "$.state.input.cleaningTime",
+        "alternativeTimeSlots.$": "$.state.input.alternativeTimeSlots",
+        "timeButtonsHtml.$": "$.state.input.timeButtonsHtml"
       },
       "ResultPath": "$.state",
       "Next": "CheckCleanerList"
