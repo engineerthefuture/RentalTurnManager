@@ -19,7 +19,10 @@ using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using Amazon.S3;
 using Amazon.S3.Model;
+using Amazon.SimpleEmail;
+using Amazon.SimpleEmail.Model;
 using System.Net;
+using System.Text;
 using System.Text.Json;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
@@ -31,12 +34,14 @@ public class Function
     private readonly IAmazonStepFunctions _stepFunctionsClient;
     private readonly IAmazonSecretsManager _secretsManagerClient;
     private readonly IAmazonS3 _s3Client;
+    private readonly IAmazonSimpleEmailService _sesClient;
 
     public Function()
     {
         _stepFunctionsClient = new AmazonStepFunctionsClient();
         _secretsManagerClient = new AmazonSecretsManagerClient();
         _s3Client = new AmazonS3Client();
+        _sesClient = new AmazonSimpleEmailServiceClient();
     }
 
     public Function(IAmazonStepFunctions stepFunctionsClient, IAmazonSecretsManager secretsManagerClient, IAmazonS3 s3Client)
@@ -44,6 +49,7 @@ public class Function
         _stepFunctionsClient = stepFunctionsClient;
         _secretsManagerClient = secretsManagerClient;
         _s3Client = s3Client;
+        _sesClient = new AmazonSimpleEmailServiceClient();
     }
 
     public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest request, ILambdaContext context)
@@ -733,40 +739,70 @@ public class Function
             
             context.Logger.LogInformation($"Marked booking {bookingRef} as cancelled in S3");
             
-            // Send cancellation email to cleaner if assigned
+            // Send cancellation emails with calendar CANCEL to cleaner and owner
+            var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
+            var formattedDate = scheduledTime?.ToString("MMMM dd, yyyy") ?? "Unknown Date";
+            var formattedTime = scheduledTime?.ToString("h:mm tt") ?? "12:00 PM";
+            
+            // Generate calendar cancellation ICS
+            string? icsContent = null;
+            if (scheduledTime.HasValue)
+            {
+                icsContent = GenerateCancellationIcs(propertyName ?? propertyId, scheduledTime.Value, cleanerName, cleanerEmail, ownerEmail);
+            }
+            
+            // Send to cleaner if assigned
             if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName))
             {
                 try
                 {
-                    // Send email via SES
-                    var ownerEmail = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "owner@example.com";
-                    var formattedDate = scheduledTime?.ToString("MMMM dd, yyyy") ?? "Unknown Date";
-                    var formattedTime = scheduledTime?.ToString("h:mm tt") ?? "12:00 PM";
+                    var cleanerHtmlBody = $@"<html><body>
+<p>Hello {WebUtility.HtmlEncode(cleanerName)},</p>
+<p>The cleaning scheduled for <strong>{WebUtility.HtmlEncode(propertyName ?? propertyId)}</strong> has been <strong style=""color: #dc3545;"">cancelled</strong> by the property owner.</p>
+<p><strong>Cancelled Appointment:</strong></p>
+<ul>
+<li><strong>Property:</strong> {WebUtility.HtmlEncode(propertyName ?? propertyId)}</li>
+<li><strong>Date:</strong> {WebUtility.HtmlEncode(formattedDate)}</li>
+<li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTime)}</li>
+</ul>
+<p>You do not need to attend this cleaning. If you added this to your calendar, the attached cancellation should remove it automatically.</p>
+<p>Thank you,<br/>Property Management</p>
+</body></html>";
                     
-                    var emailBody = $@"Hello {cleanerName},
-
-The cleaning scheduled for {propertyName ?? propertyId} has been cancelled by the property owner.
-
-Cancelled Appointment:
-- Property: {propertyName ?? propertyId}
-- Date: {formattedDate}
-- Time: {formattedTime}
-
-You do not need to attend this cleaning.
-
-Thank you,
-Property Management";
-                    
-                    // Note: In production, this should use SES client to send email
-                    // For now, just log it
-                    context.Logger.LogInformation($"Would send cancellation email to {cleanerEmail}");
-                    context.Logger.LogInformation($"Email body: {emailBody}");
+                    await SendCancellationEmail(ownerEmail, cleanerEmail, $"Cleaning Cancelled for {propertyName ?? propertyId} on {formattedDate}", cleanerHtmlBody, icsContent, context);
+                    context.Logger.LogInformation($"Sent cancellation email to cleaner: {cleanerEmail}");
                 }
                 catch (Exception ex)
                 {
                     context.Logger.LogError($"Failed to send cancellation email to cleaner: {ex.Message}");
                     // Continue anyway - cancellation is recorded
                 }
+            }
+            
+            // Send to owner
+            try
+            {
+                var ownerHtmlBody = $@"<html><body>
+<p>Hello,</p>
+<p>The cleaning for <strong>{WebUtility.HtmlEncode(propertyName ?? propertyId)}</strong> has been <strong style=""color: #dc3545;"">cancelled</strong>.</p>
+<p><strong>Cancelled Appointment:</strong></p>
+<ul>
+<li><strong>Property:</strong> {WebUtility.HtmlEncode(propertyName ?? propertyId)}</li>
+<li><strong>Cleaner:</strong> {WebUtility.HtmlEncode(cleanerName ?? "(not yet assigned)")}</li>
+<li><strong>Date:</strong> {WebUtility.HtmlEncode(formattedDate)}</li>
+<li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTime)}</li>
+</ul>
+<p>The cleaning appointment has been removed. The attached cancellation should remove it from your calendar automatically.</p>
+<p>Thank you,<br/>Property Management</p>
+</body></html>";
+                
+                await SendCancellationEmail(ownerEmail, ownerEmail, $"Cleaning Cancelled for {propertyName ?? propertyId} on {formattedDate}", ownerHtmlBody, icsContent, context);
+                context.Logger.LogInformation($"Sent cancellation email to owner: {ownerEmail}");
+            }
+            catch (Exception ex)
+            {
+                context.Logger.LogError($"Failed to send cancellation email to owner: {ex.Message}");
+                // Continue anyway - cancellation is recorded
             }
             
             // Return success page
@@ -798,7 +834,7 @@ Property Management";
         <div class='detail'>Booking: {encodedBookingRef}</div>
         <div class='detail'>Property: {encodedPropertyId}</div>
         <div class='detail'>Cleaner: {encodedCleanerName}</div>
-        {(!string.IsNullOrEmpty(cleanerEmail) ? "<div class='message' style='margin-top: 20px;'>A cancellation notification has been sent to the cleaner.</div>" : "")}
+        <div class='message' style='margin-top: 20px;'>Cancellation notifications with calendar updates have been sent to the cleaner and owner.</div>
     </div>
 </body>
 </html>";
@@ -830,8 +866,94 @@ Property Management";
                 Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
             };
         }
+    }    
+    private string GenerateCancellationIcs(string propertyName, DateTime scheduledTime, string? cleanerName, string? cleanerEmail, string ownerEmail)
+    {
+        var startDateTime = scheduledTime;
+        var endDateTime = startDateTime.AddHours(3);
+        var now = DateTime.UtcNow;
+        
+        // Generate a consistent UID based on property and date so it matches the original event
+        var uid = $"cleaning-{propertyName.Replace(" ", "-")}-{scheduledTime:yyyyMMdd}@rentalturnmanager.com";
+        
+        var icsBuilder = new StringBuilder();
+        icsBuilder.AppendLine("BEGIN:VCALENDAR");
+        icsBuilder.AppendLine("VERSION:2.0");
+        icsBuilder.AppendLine("PRODID:-//RentalTurnManager//Calendar//EN");
+        icsBuilder.AppendLine("METHOD:CANCEL");
+        icsBuilder.AppendLine("BEGIN:VEVENT");
+        icsBuilder.AppendLine($"UID:{uid}");
+        icsBuilder.AppendLine($"DTSTAMP:{FormatDateTime(now)}");
+        icsBuilder.AppendLine($"DTSTART:{FormatDateTime(startDateTime)}");
+        icsBuilder.AppendLine($"DTEND:{FormatDateTime(endDateTime)}");
+        icsBuilder.AppendLine($"SUMMARY:CANCELLED: Cleaning - {propertyName}");
+        icsBuilder.AppendLine($"DESCRIPTION:This cleaning appointment has been cancelled.");
+        icsBuilder.AppendLine($"STATUS:CANCELLED");
+        icsBuilder.AppendLine($"SEQUENCE:1");
+        
+        // Add cleaner as attendee if provided
+        if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName))
+        {
+            icsBuilder.AppendLine($"ATTENDEE;CN={cleanerName}:mailto:{cleanerEmail}");
+        }
+        
+        // Add owner as attendee
+        icsBuilder.AppendLine($"ATTENDEE;CN=Owner:mailto:{ownerEmail}");
+        
+        icsBuilder.AppendLine("END:VEVENT");
+        icsBuilder.AppendLine("END:VCALENDAR");
+        
+        return icsBuilder.ToString();
     }
-}
+    
+    private string FormatDateTime(DateTime dt)
+    {
+        return dt.ToUniversalTime().ToString("yyyyMMdd'T'HHmmss'Z'");
+    }
+    
+    private async Task SendCancellationEmail(string fromEmail, string toEmail, string subject, string htmlBody, string? icsContent, ILambdaContext context)
+    {
+        var boundary = $"----=_Part_{Guid.NewGuid():N}";
+        
+        var message = new StringBuilder();
+        message.AppendLine($"From: {fromEmail}");
+        message.AppendLine($"To: {toEmail}");
+        message.AppendLine($"Subject: {subject}");
+        message.AppendLine("MIME-Version: 1.0");
+        message.AppendLine($"Content-Type: multipart/mixed; boundary=\"{boundary}\"");
+        message.AppendLine();
+        message.AppendLine($"--{boundary}");
+        message.AppendLine("Content-Type: text/html; charset=UTF-8");
+        message.AppendLine("Content-Transfer-Encoding: 7bit");
+        message.AppendLine();
+        message.AppendLine(htmlBody);
+        message.AppendLine();
+        
+        if (!string.IsNullOrEmpty(icsContent))
+        {
+            message.AppendLine($"--{boundary}");
+            message.AppendLine("Content-Type: text/calendar; charset=UTF-8; method=CANCEL");
+            message.AppendLine("Content-Transfer-Encoding: 7bit");
+            message.AppendLine("Content-Disposition: attachment; filename=\"cancellation.ics\"");
+            message.AppendLine();
+            message.AppendLine(icsContent);
+            message.AppendLine();
+        }
+        
+        message.AppendLine($"--{boundary}--");
+        
+        var rawMessage = message.ToString();
+        
+        await _sesClient.SendRawEmailAsync(new SendRawEmailRequest
+        {
+            RawMessage = new RawMessage
+            {
+                Data = new MemoryStream(Encoding.UTF8.GetBytes(rawMessage))
+            }
+        });
+        
+        context.Logger.LogInformation($"Cancellation email sent to {toEmail}");
+    }}
 
 public class EmailSecret
 {
