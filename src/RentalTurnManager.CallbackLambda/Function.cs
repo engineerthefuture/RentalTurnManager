@@ -770,6 +770,7 @@ public class Function
                 {
                     var cleanerRequest = new
                     {
+                        FromEmail = ownerEmail,
                         PropertyName = propertyName ?? propertyId,
                         CleanerName = cleanerName,
                         CleanerId = cleanerId,
@@ -806,6 +807,7 @@ public class Function
                     
                 var ownerRequest = new
                 {
+                    FromEmail = ownerEmail,
                     PropertyName = propertyName ?? propertyId,
                     CleanerName = cleanerName ?? "(not yet assigned)",
                     CleanerEmail = ownerEmail, // Send to owner's email
