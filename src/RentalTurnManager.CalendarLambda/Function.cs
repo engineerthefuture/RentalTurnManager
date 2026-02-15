@@ -60,14 +60,27 @@ public class Function
                 var easternTimeDisplay = easternDateTime.ToString("h:mm tt");
                 
                 // Replace the time in the HTML body with Eastern time
+                // Handle both <li>Time: ...</li> and plain text formats
+                var originalBody = request.HtmlBody;
                 request.HtmlBody = System.Text.RegularExpressions.Regex.Replace(
                     request.HtmlBody,
-                    @"<li>Time:\s*[^<]+</li>",
-                    $"<li>Time: {easternTimeDisplay}</li>",
+                    @"(<li>)?Time:\s*\d{1,2}:\d{2}(\s*[APap][Mm])?(</li>)?",
+                    match => {
+                        var hasLi = match.Value.Contains("<li>");
+                        var closeLi = match.Value.Contains("</li>");
+                        return $"{(hasLi ? "<li>" : "")}Time: {easternTimeDisplay}{(closeLi ? "</li>" : "")}";
+                    },
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase
                 );
                 
-                context.Logger.LogInformation($"Converted UTC time to Eastern: {easternTimeDisplay}");
+                if (originalBody != request.HtmlBody)
+                {
+                    context.Logger.LogInformation($"Converted UTC time to Eastern: {easternTimeDisplay}");
+                }
+                else
+                {
+                    context.Logger.LogWarning($"Time replacement pattern did not match in HTML body");
+                }
             }
             catch (Exception ex)
             {
