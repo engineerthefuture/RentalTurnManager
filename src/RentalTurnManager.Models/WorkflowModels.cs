@@ -20,6 +20,7 @@ public class CleanerWorkflowInput
     public Booking Booking { get; set; } = new();
     public PropertyConfiguration Property { get; set; } = new();
     public DateTime CleaningDateTime { get; set; }
+    public string CleaningTime { get; set; } = string.Empty;
     public int CurrentCleanerIndex { get; set; }
     public int AttemptCount { get; set; }
     public string? LastResponse { get; set; }

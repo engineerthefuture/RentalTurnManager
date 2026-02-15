@@ -843,10 +843,10 @@ public class Function
                     ? scheduledTime.Value.ToString("o") 
                     : DateTime.UtcNow.ToString("o");
                 
-                var formattedDate = scheduledTime.HasValue 
-                    ? scheduledTime.Value.ToString("MMMM dd, yyyy") 
-                    : "Unknown Date";
                 // Convert UTC time to Eastern Time for display
+                var formattedDate = scheduledTime.HasValue 
+                    ? TimeZoneInfo.ConvertTimeFromUtc(scheduledTime.Value, easternZone).ToString("MMMM dd, yyyy") 
+                    : "Unknown Date";
                 var formattedTime = scheduledTime.HasValue 
                     ? TimeZoneInfo.ConvertTimeFromUtc(scheduledTime.Value, easternZone).ToString("h:mm tt")
                     : "12:00 PM";

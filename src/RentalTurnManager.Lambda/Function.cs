@@ -249,16 +249,32 @@ public class Function
                         continue;
                     }
 
-                    // Calculate cleaning time (on checkout date at 12:00 PM Eastern Time)
+                    // Calculate cleaning time (on checkout date at defaultCheckOut + 1 hour)
                     var cleaningDate = booking.CheckOutDate;
                     var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
                     
-                    // Create DateTime at 12:00 PM on checkout date in Eastern Time
+                    // Parse defaultCheckOut time (e.g., "11:00 AM") and add 1 hour
+                    int cleaningHour = 12; // Default to 12:00 PM if parsing fails
+                    int cleaningMinute = 0;
+                    if (!string.IsNullOrEmpty(property.Metadata.DefaultCheckOut))
+                    {
+                        if (DateTime.TryParse(property.Metadata.DefaultCheckOut, out var checkOutTime))
+                        {
+                            // Add 1 hour to check-out time
+                            var cleaningTime = checkOutTime.AddHours(1);
+                            cleaningHour = cleaningTime.Hour;
+                            cleaningMinute = cleaningTime.Minute;
+                        }
+                    }
+                    
+                    // Create DateTime at calculated time on checkout date in Eastern Time
                     var cleaningDateTimeEastern = new DateTime(
                         cleaningDate.Year, 
                         cleaningDate.Month, 
                         cleaningDate.Day, 
-                        12, 0, 0, 
+                        cleaningHour, 
+                        cleaningMinute, 
+                        0, 
                         DateTimeKind.Unspecified
                     );
                     
@@ -345,6 +361,7 @@ public class Function
                         Booking = booking,
                         Property = property,
                         CleaningDateTime = cleaningDateTimeUtc,
+                        CleaningTime = cleaningDateTimeEastern.ToString("h:mm tt"),
                         CurrentCleanerIndex = 0,
                         AttemptCount = 0,
                         OwnerEmail = ownerEmail,
