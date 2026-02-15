@@ -769,7 +769,16 @@ public class Function
             var calendarLambdaName = System.Environment.GetEnvironmentVariable("CALENDAR_LAMBDA_NAME") ?? "RentalTurnManager-CalendarLambda";
             
             // Get Eastern timezone for time formatting (used in both cleaner and owner emails)
-            var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+            TimeZoneInfo easternZone;
+            try
+            {
+                easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                context.Logger.LogWarning("Eastern timezone not found, using UTC for time display");
+                easternZone = TimeZoneInfo.Utc;
+            }
             
             // Send to cleaner if assigned
             if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName) && scheduledTime.HasValue)
