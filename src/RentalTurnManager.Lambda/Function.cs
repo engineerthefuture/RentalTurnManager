@@ -253,15 +253,15 @@ public class Function
                     var cleaningDate = booking.CheckOutDate;
                     var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
                     
-                    // Parse defaultCheckOut time (e.g., "11:00 AM") and add 1 hour
+                    // Parse defaultCheckOut time (e.g., "11:00 AM") and add margin minutes
                     int cleaningHour = 12; // Default to 12:00 PM if parsing fails
                     int cleaningMinute = 0;
                     if (!string.IsNullOrEmpty(property.Metadata.DefaultCheckOut))
                     {
                         if (DateTime.TryParse(property.Metadata.DefaultCheckOut, out var checkOutTime))
                         {
-                            // Add 1 hour to check-out time
-                            var cleaningTime = checkOutTime.AddHours(1);
+                            // Add configured margin minutes to check-out time
+                            var cleaningTime = checkOutTime.AddMinutes(property.Metadata.MarginMinutesAfterCheckOut);
                             cleaningHour = cleaningTime.Hour;
                             cleaningMinute = cleaningTime.Minute;
                         }
