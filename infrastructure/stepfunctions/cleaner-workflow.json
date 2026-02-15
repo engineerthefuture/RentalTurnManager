@@ -155,6 +155,39 @@
         "cleaningDate.$": "States.Format('{}-{}-{}', States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 1), States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 2), States.ArrayGetItem(States.StringSplit($.state.cleaningDate, '-'), 0))"
       },
       "ResultPath": "$.state",
+      "Next": "PrepareAlternativeTimeButtons"
+    },
+    "PrepareAlternativeTimeButtons": {
+      "Type": "Pass",
+      "Comment": "Extract alternative time slots with defaults for empty slots",
+      "Parameters": {
+        "input.$": "$.state.input",
+        "currentCleaner.$": "$.state.currentCleaner",
+        "propertyName.$": "$.state.propertyName",
+        "propertyAddress.$": "$.state.propertyAddress",
+        "cleaningDateTime.$": "$.state.cleaningDateTime",
+        "cleaningTime.$": "$.state.cleaningTime",
+        "cleaningDate.$": "$.state.cleaningDate",
+        "alternativeTimeSlots.$": "$.state.alternativeTimeSlots",
+        "numberOfGuests.$": "$.state.numberOfGuests",
+        "numberOfNights.$": "$.state.numberOfNights",
+        "cleaningDuration.$": "$.state.cleaningDuration",
+        "ownerName.$": "$.state.ownerName",
+        "cleanerConfirmed.$": "$.state.cleanerConfirmed",
+        "allCleanersExhausted.$": "$.state.allCleanersExhausted",
+        "checkData.$": "$.state.checkData",
+        "alt0Time.$": "States.ArrayGetItem($.state.alternativeTimeSlots, 0).time",
+        "alt0Iso.$": "States.ArrayGetItem($.state.alternativeTimeSlots, 0).isoDateTime",
+        "alt1Time.$": "States.ArrayGetItem($.state.alternativeTimeSlots, 1).time",
+        "alt1Iso.$": "States.ArrayGetItem($.state.alternativeTimeSlots, 1).isoDateTime",
+        "alt2Time.$": "States.ArrayGetItem($.state.alternativeTimeSlots, 2).time",
+        "alt2Iso.$": "States.ArrayGetItem($.state.alternativeTimeSlots, 2).isoDateTime",
+        "alt3Time.$": "States.ArrayGetItem($.state.alternativeTimeSlots, 3).time",
+        "alt3Iso.$": "States.ArrayGetItem($.state.alternativeTimeSlots, 3).isoDateTime",
+        "alt4Time.$": "States.ArrayGetItem($.state.alternativeTimeSlots, 4).time",
+        "alt4Iso.$": "States.ArrayGetItem($.state.alternativeTimeSlots, 4).isoDateTime"
+      },
+      "ResultPath": "$.state",
       "Next": "SendCleanerRequest"
     },
     "SendCleanerRequest": {
@@ -174,7 +207,7 @@
           },
           "Body": {
             "Html": {
-              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: {}</li><li>Address: {}</li><li>Guests: {}</li><li>Nights: {}</li></ul><p>Are you available on {} at {} to do a cleaning and laundry turnover at {}?</p><p style=\"margin: 30px 0;\"><a href=\"{}/respond?token={}&response=yes\" style=\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\">YES</a><a href=\"{}/respond?token={}&response=no\" style=\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\">NO</a></p><p style=\"margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px;\"><strong style=\"display: block; margin-bottom: 10px;\">Or select an alternative time:</strong><a href=\"{}/respond?token={}&response=yes&time={}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{}</a><a href=\"{}/respond?token={}&response=yes&time={}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{}</a><a href=\"{}/respond?token={}&response=yes&time={}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{}</a><a href=\"{}/respond?token={}&response=yes&time={}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{}</a><a href=\"{}/respond?token={}&response=yes&time={}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{}</a></p><p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.cleaningTime, $.state.propertyAddress, $.state.numberOfGuests, $.state.numberOfNights, $.state.cleaningDate, $.state.cleaningTime, $.state.propertyAddress, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.alternativeTimeSlots[0].isoDateTime, $.state.alternativeTimeSlots[0].time, $.state.input.callbackApiUrl, $$.Task.Token, $.state.alternativeTimeSlots[1].isoDateTime, $.state.alternativeTimeSlots[1].time, $.state.input.callbackApiUrl, $$.Task.Token, $.state.alternativeTimeSlots[2].isoDateTime, $.state.alternativeTimeSlots[2].time, $.state.input.callbackApiUrl, $$.Task.Token, $.state.alternativeTimeSlots[3].isoDateTime, $.state.alternativeTimeSlots[3].time, $.state.input.callbackApiUrl, $$.Task.Token, $.state.alternativeTimeSlots[4].isoDateTime, $.state.alternativeTimeSlots[4].time, $.state.ownerName)"
+              "Data.$": "States.Format('<html><body><p>Hello {},</p><p>We have a new booking for <strong>{}</strong> and need a cleaning and laundry turnover.</p><p><strong>Details:</strong></p><ul><li>Date: {}</li><li>Time: {}</li><li>Address: {}</li><li>Guests: {}</li><li>Nights: {}</li></ul><p>Are you available on {} at {} to do a cleaning and laundry turnover at {}?</p><p style=\"margin: 30px 0;\"><a href=\"{}/respond?token={}&response=yes\" style=\"background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-right: 10px;\">YES</a><a href=\"{}/respond?token={}&response=no\" style=\"background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;\">NO</a></p><p style=\"margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px;\"><strong style=\"display: block; margin-bottom: 10px;\">Or select an alternative time:</strong><a href=\"{}/respond?token={}&response=yes&time={}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{}</a><a href=\"{}/respond?token={}&response=yes&time={}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{}</a><a href=\"{}/respond?token={}&response=yes&time={}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{}</a><a href=\"{}/respond?token={}&response=yes&time={}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{}</a><a href=\"{}/respond?token={}&response=yes&time={}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{}</a></p><p>Thank you,<br>{}</p></body></html>', $.state.currentCleaner.name, $.state.propertyName, $.state.cleaningDate, $.state.cleaningTime, $.state.propertyAddress, $.state.numberOfGuests, $.state.numberOfNights, $.state.cleaningDate, $.state.cleaningTime, $.state.propertyAddress, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.input.callbackApiUrl, $$.Task.Token, $.state.alt0Iso, $.state.alt0Time, $.state.input.callbackApiUrl, $$.Task.Token, $.state.alt1Iso, $.state.alt1Time, $.state.input.callbackApiUrl, $$.Task.Token, $.state.alt2Iso, $.state.alt2Time, $.state.input.callbackApiUrl, $$.Task.Token, $.state.alt3Iso, $.state.alt3Time, $.state.input.callbackApiUrl, $$.Task.Token, $.state.alt4Iso, $.state.alt4Time, $.state.ownerName)"
             }
           }
         }
