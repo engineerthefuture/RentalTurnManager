@@ -163,12 +163,23 @@ graph TD
     SendReq -->|Timeout| SendRem[Send Reminder<br/>3hr timeout]
     SendReq -->|Failure| IncIdx[Next Cleaner]
     
-    SendRem -->|Success| EvalResp
+    SendRem -->|Success| EvalRemResp{Response?}
     SendRem -->|Timeout| IncIdx
     SendRem -->|Failure| IncIdx
     
     EvalResp -->|Confirmed| Confirmed
     EvalResp -->|Declined| IncIdx
+    EvalResp -->|Alt Time| ProcessAlt[Process<br/>Alt Time]
+    
+    EvalRemResp -->|Confirmed| Confirmed
+    EvalRemResp -->|Declined| IncIdx
+    EvalRemResp -->|Alt Time| ProcessAlt
+    
+    ProcessAlt --> UpdateAlt[Update Time<br/>for Alternative]
+    UpdateAlt --> DetermineSlot{Determine<br/>Time Slot}
+    DetermineSlot --> FmtAltDate[Format<br/>Alt Date]
+    FmtAltDate --> ApplyAlt[Apply<br/>Alt Time]
+    ApplyAlt --> Confirmed
     
     IncIdx --> CmpIdx
     
@@ -191,6 +202,7 @@ graph TD
     style SendRem fill:#DDA0DD
     style Success fill:#90EE90
     style Failed fill:#FF6B6B
+    style ProcessAlt fill:#87CEEB
 ```
 
 ### Workflow States Explained
@@ -202,16 +214,23 @@ graph TD
 - **GetCurrentCleaner**: Extracts the current cleaner's information from the property configuration
 - **CheckForOwnerOverride**: If owner override, skip email request and go straight to confirmation
 - **FormatCleaningDate**: Reformats dates for display in emails (YYYY-MM-DD to MM-DD-YYYY)
-- **SendCleanerRequest**: Sends email to cleaner with YES/NO callback links, waits up to 9 hours for response
-- **SendReminderEmail**: If no response after 9 hours, sends reminder email and waits 3 more hours
-- **EvaluateReminderResponse**: Checks if cleaner confirmed or declined after reminder
+- **SendCleanerRequest**: Sends email to cleaner with YES/NO callback links and alternative time slot buttons, waits up to 9 hours for response
+- **SendReminderEmail**: If no response after 9 hours, sends reminder email with YES/NO and alternative time buttons, waits 3 more hours
+- **EvaluateResponse**: Checks if cleaner confirmed, declined, or selected an alternative time
+- **EvaluateReminderResponse**: Checks if cleaner confirmed, declined, or selected an alternative time after reminder
+- **ProcessCleanerResponse**: Routes to appropriate handler based on response type
+- **UpdateCleaningTimeForAlternative**: Extracts date/time parts from selected alternative time and prepares slot matching
+- **DetermineAlternativeTimeSlot**: Choice state that compares selected time against all 5 possible time slots to find the match
+- **UseTimeSlot0-4**: Pass states that extract the pre-formatted Eastern time for the matched slot
+- **FormatAlternativeDate**: Reformats the alternative date for display
+- **ApplyAlternativeTime**: Updates workflow state with the selected alternative time (properly formatted in Eastern Time)
 - **IncrementCleanerIndex**: Moves to the next cleaner in the list
 - **PrepareEscalation**: Prepares data for escalation email when all cleaners are exhausted
 - **SaveWorkflowContext**: Saves complete workflow state to S3 for potential owner override restart
 - **AllCleanersExhausted**: Sends escalation email to owner with manual scheduling options
 - **CleanerConfirmed**: Marks the workflow as having a confirmed cleaner
-- **SendCleanerConfirmation**: Sends confirmation email with calendar invite to the cleaner
-- **SendOwnerNotification**: Sends notification email with calendar invite to the property owner
+- **SendCleanerConfirmation**: Sends confirmation email with calendar invite to the cleaner (with selected time)
+- **SendOwnerNotification**: Sends notification email with calendar invite to the property owner (with selected time)
 
 ### Owner Override Flow
 
@@ -546,7 +565,7 @@ aws lambda invoke \
 6. **Workflow Trigger**: Starts Step Functions workflow with booking and property details
 
 
-### Cleaner Coordination Workflow (Updated)
+### Cleaner Coordination Workflow
 
 1. **Initial Contact**: Step Functions sends email to highest-ranked cleaner with YES/NO buttons and up to 5 alternative time slot buttons. If the cleaner has a `phoneEmail`, it is included as a BCC for SMS notification.
 2. **Callback Wait**: Workflow pauses using task token, waiting for HTTP callback from cleaner.
