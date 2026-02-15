@@ -423,10 +423,21 @@ public class Function
                         callbackApiUrl
                     );
 
-                    // Pad alternative time slots array to always have 5 elements for workflow
+                    // Build button HTML for actual time slots only (no empty buttons)
+                    var alternativeButtons = new List<string>();
+                    foreach (var slot in alternativeTimeSlots)
+                    {
+                        alternativeButtons.Add($"<a href=\"{{0}}/respond?token={{{{1}}}}&response=yes&time={{2}}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{slot.Time}</a>");
+                    }
+                    
+                    // Pad arrays to 5 elements for workflow (empty strings for unused slots)
                     while (alternativeTimeSlots.Count < 5)
                     {
                         alternativeTimeSlots.Add(new TimeSlot { Time = "", IsoDateTime = "" });
+                    }
+                    while (alternativeButtons.Count < 5)
+                    {
+                        alternativeButtons.Add("");
                     }
 
                     // Start Step Functions workflow
@@ -437,6 +448,7 @@ public class Function
                         CleaningDateTime = cleaningDateTimeUtc,
                         CleaningTime = cleaningDateTimeEastern.ToString("h:mm tt"),
                         AlternativeTimeSlots = alternativeTimeSlots,
+                        AlternativeButtons = alternativeButtons,
                         TimeButtonsHtml = timeButtonsHtml,
                         CurrentCleanerIndex = 0,
                         AttemptCount = 0,
