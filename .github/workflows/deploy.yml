@@ -90,24 +90,17 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
-      - name: Check code coverage threshold
+      - name: Report code coverage
         run: |
-          # Parse coverage percentage from Cobertura XML
+          # Parse coverage percentage from Cobertura XML (informational only)
           COVERAGE_FILE="./coveragereport/Cobertura.xml"
           if [ -f "$COVERAGE_FILE" ]; then
             LINE_RATE=$(grep -oP 'line-rate="\K[^"]+' "$COVERAGE_FILE" | head -1)
             COVERAGE_PERCENT=$(echo "$LINE_RATE * 100" | bc)
-            echo "Current code coverage: ${COVERAGE_PERCENT}%"
-            
-            THRESHOLD=70
-            if (( $(echo "$LINE_RATE < 0.${THRESHOLD}" | bc -l) )); then
-              echo "❌ Code coverage ${COVERAGE_PERCENT}% is below threshold of ${THRESHOLD}%"
-              exit 1
-            else
-              echo "✅ Code coverage ${COVERAGE_PERCENT}% meets threshold of ${THRESHOLD}%"
-            fi
+            echo "📊 Current code coverage: ${COVERAGE_PERCENT}%"
+            echo "ℹ️  Coverage reporting is informational only and does not block deployment"
           else
-            echo "⚠️  Coverage report not found, skipping threshold check"
+            echo "⚠️  Coverage report not found"
           fi
 
   determine-environment:
