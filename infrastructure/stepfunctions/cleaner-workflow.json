@@ -18,8 +18,7 @@
           "ownerEmail.$": "$.ownerEmail",
           "callbackApiUrl.$": "$.callbackApiUrl",
           "bookingStateBucket.$": "$.bookingStateBucket",
-          "ownerToken.$": "$.ownerToken",
-          "ownerOverride.$": "$.ownerOverride"
+          "ownerToken.$": "$.ownerToken"
         },
         "cleanerConfirmed": false,
         "allCleanersExhausted": false
