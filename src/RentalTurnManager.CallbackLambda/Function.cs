@@ -771,6 +771,7 @@ public class Function
                     var cleanerRequest = new
                     {
                         FromEmail = ownerEmail,
+                        ToEmail = cleanerEmail,
                         PropertyName = propertyName ?? propertyId,
                         CleanerName = cleanerName,
                         CleanerId = cleanerId,
@@ -808,6 +809,7 @@ public class Function
                 var ownerRequest = new
                 {
                     FromEmail = ownerEmail,
+                    ToEmail = ownerEmail,
                     PropertyName = propertyName ?? propertyId,
                     CleanerName = cleanerName ?? "(not yet assigned)",
                     CleanerEmail = ownerEmail, // Send to owner's email
@@ -834,7 +836,7 @@ public class Function
             
             // Return success page
             var encodedBookingRef = WebUtility.HtmlEncode(bookingRef);
-            var encodedPropertyId = WebUtility.HtmlEncode(propertyId);
+            var encodedPropertyName = WebUtility.HtmlEncode(propertyName ?? propertyId);
             var encodedCleanerName = WebUtility.HtmlEncode(cleanerName ?? "(not yet assigned)");
             
             var successHtml = $@"
@@ -859,7 +861,7 @@ public class Function
         <div class='title'>Cleaning Cancelled Successfully</div>
         <div class='message'>The cleaning has been cancelled.</div>
         <div class='detail'>Booking: {encodedBookingRef}</div>
-        <div class='detail'>Property: {encodedPropertyId}</div>
+        <div class='detail'>Property: {encodedPropertyName}</div>
         <div class='detail'>Cleaner: {encodedCleanerName}</div>
         <div class='message' style='margin-top: 20px;'>Cancellation notifications with calendar updates have been sent to the cleaner and owner.</div>
     </div>
