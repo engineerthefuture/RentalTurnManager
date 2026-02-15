@@ -448,7 +448,6 @@ public class Function
                         CleaningDateTime = cleaningDateTimeUtc,
                         CleaningTime = cleaningDateTimeEastern.ToString("h:mm tt"),
                         AlternativeTimeSlots = alternativeTimeSlots,
-                        AlternativeButtons = alternativeButtons,
                         TimeButtonsHtml = timeButtonsHtml,
                         CurrentCleanerIndex = 0,
                         AttemptCount = 0,
