@@ -279,13 +279,110 @@
     },
     "UpdateCleaningTimeForAlternative": {
       "Type": "Pass",
-      "Comment": "Extract date and time parts from alternative time ISO string",
+      "Comment": "Extract date parts and check which slot matches",
       "Parameters": {
         "state.$": "$.state",
         "bookingStateBucket.$": "$.bookingStateBucket",
         "emailResult.$": "$.emailResult",
         "alternativeTime.$": "$.emailResult.alternativeTime",
-        "dateTimeParts.$": "States.StringSplit($.emailResult.alternativeTime, 'T')"
+        "dateTimeParts.$": "States.StringSplit($.emailResult.alternativeTime, 'T')",
+        "slot0.$": "$.state.alternativeTimeSlots[0].isoDateTime",
+        "slot1.$": "$.state.alternativeTimeSlots[1].isoDateTime",
+        "slot2.$": "$.state.alternativeTimeSlots[2].isoDateTime",
+        "slot3.$": "$.state.alternativeTimeSlots[3].isoDateTime",
+        "slot4.$": "$.state.alternativeTimeSlots[4].isoDateTime",
+        "time0.$": "$.state.alternativeTimeSlots[0].time",
+        "time1.$": "$.state.alternativeTimeSlots[1].time",
+        "time2.$": "$.state.alternativeTimeSlots[2].time",
+        "time3.$": "$.state.alternativeTimeSlots[3].time",
+        "time4.$": "$.state.alternativeTimeSlots[4].time"
+      },
+      "Next": "DetermineAlternativeTimeSlot"
+    },
+    "DetermineAlternativeTimeSlot": {
+      "Type": "Choice",
+      "Comment": "Find which slot was selected",
+      "Choices": [
+        {
+          "Variable": "$.emailResult.alternativeTime",
+          "StringEqualsPath": "$.slot0",
+          "Next": "UseTimeSlot0"
+        },
+        {
+          "Variable": "$.emailResult.alternativeTime",
+          "StringEqualsPath": "$.slot1",
+          "Next": "UseTimeSlot1"
+        },
+        {
+          "Variable": "$.emailResult.alternativeTime",
+          "StringEqualsPath": "$.slot2",
+          "Next": "UseTimeSlot2"
+        },
+        {
+          "Variable": "$.emailResult.alternativeTime",
+          "StringEqualsPath": "$.slot3",
+          "Next": "UseTimeSlot3"
+        },
+        {
+          "Variable": "$.emailResult.alternativeTime",
+          "StringEqualsPath": "$.slot4",
+          "Next": "UseTimeSlot4"
+        }
+      ],
+      "Default": "FormatAlternativeDate"
+    },
+    "UseTimeSlot0": {
+      "Type": "Pass",
+      "Parameters": {
+        "matchedTime.$": "$.time0",
+        "state.$": "$.state",
+        "bookingStateBucket.$": "$.bookingStateBucket",
+        "alternativeTime.$": "$.alternativeTime",
+        "dateTimeParts.$": "$.dateTimeParts"
+      },
+      "Next": "FormatAlternativeDate"
+    },
+    "UseTimeSlot1": {
+      "Type": "Pass",
+      "Parameters": {
+        "matchedTime.$": "$.time1",
+        "state.$": "$.state",
+        "bookingStateBucket.$": "$.bookingStateBucket",
+        "alternativeTime.$": "$.alternativeTime",
+        "dateTimeParts.$": "$.dateTimeParts"
+      },
+      "Next": "FormatAlternativeDate"
+    },
+    "UseTimeSlot2": {
+      "Type": "Pass",
+      "Parameters": {
+        "matchedTime.$": "$.time2",
+        "state.$": "$.state",
+        "bookingStateBucket.$": "$.bookingStateBucket",
+        "alternativeTime.$": "$.alternativeTime",
+        "dateTimeParts.$": "$.dateTimeParts"
+      },
+      "Next": "FormatAlternativeDate"
+    },
+    "UseTimeSlot3": {
+      "Type": "Pass",
+      "Parameters": {
+        "matchedTime.$": "$.time3",
+        "state.$": "$.state",
+        "bookingStateBucket.$": "$.bookingStateBucket",
+        "alternativeTime.$": "$.alternativeTime",
+        "dateTimeParts.$": "$.dateTimeParts"
+      },
+      "Next": "FormatAlternativeDate"
+    },
+    "UseTimeSlot4": {
+      "Type": "Pass",
+      "Parameters": {
+        "matchedTime.$": "$.time4",
+        "state.$": "$.state",
+        "bookingStateBucket.$": "$.bookingStateBucket",
+        "alternativeTime.$": "$.alternativeTime",
+        "dateTimeParts.$": "$.dateTimeParts"
       },
       "Next": "FormatAlternativeDate"
     },
@@ -296,27 +393,15 @@
         "state.$": "$.state",
         "bookingStateBucket.$": "$.bookingStateBucket",
         "alternativeTime.$": "$.alternativeTime",
+        "matchedTime.$": "$.matchedTime",
         "datePart.$": "States.ArrayGetItem($.dateTimeParts, 0)",
-        "timePart.$": "States.ArrayGetItem($.dateTimeParts, 1)",
         "dateParts.$": "States.StringSplit(States.ArrayGetItem($.dateTimeParts, 0), '-')"
-      },
-      "Next": "FormatAlternativeTime"
-    },
-    "FormatAlternativeTime": {
-      "Type": "Pass",
-      "Comment": "Format the alternative time to HH:MM",
-      "Parameters": {
-        "state.$": "$.state",
-        "bookingStateBucket.$": "$.bookingStateBucket",
-        "alternativeTime.$": "$.alternativeTime",
-        "formattedDate.$": "States.Format('{}-{}-{}', States.ArrayGetItem($.dateParts, 1), States.ArrayGetItem($.dateParts, 2), States.ArrayGetItem($.dateParts, 0))",
-        "timeParts.$": "States.StringSplit($.timePart, ':')"
       },
       "Next": "ApplyAlternativeTime"
     },
     "ApplyAlternativeTime": {
       "Type": "Pass",
-      "Comment": "Apply the formatted alternative date/time to state",
+      "Comment": "Apply the formatted alternative date/time with Eastern time",
       "Parameters": {
         "state": {
           "input.$": "$.state.input",
@@ -326,8 +411,8 @@
           "numberOfGuests.$": "$.state.numberOfGuests",
           "numberOfNights.$": "$.state.numberOfNights",
           "cleaningDateTime.$": "$.alternativeTime",
-          "cleaningDate.$": "$.formattedDate",
-          "cleaningTime.$": "States.Format('{}:{}', States.ArrayGetItem($.timeParts, 0), States.ArrayGetItem($.timeParts, 1))",
+          "cleaningDate.$": "States.Format('{}-{}-{}', States.ArrayGetItem($.dateParts, 1), States.ArrayGetItem($.dateParts, 2), States.ArrayGetItem($.dateParts, 0))",
+          "cleaningTime.$": "$.matchedTime",
           "cleaningDuration.$": "$.state.cleaningDuration",
           "ownerName.$": "$.state.ownerName",
           "cleanerConfirmed.$": "$.state.cleanerConfirmed",
