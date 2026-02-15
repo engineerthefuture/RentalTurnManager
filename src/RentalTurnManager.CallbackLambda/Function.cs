@@ -661,6 +661,9 @@ public class Function
             };
         }
         
+        // Get cleanerId from query params (optional for backwards compatibility)
+        queryParams.TryGetValue("cleanerId", out var cleanerId);
+        
         context.Logger.LogInformation($"Token verified successfully for booking {bookingRef}");
         
         // Get booking state from S3 to retrieve cleaner information
@@ -723,6 +726,8 @@ public class Function
                 scheduledTime = DateTime.Parse(timeElement.GetString()!);
             }
             
+            context.Logger.LogInformation($"Booking details - CleanerName: {cleanerName ?? "null"}, CleanerEmail: {cleanerEmail ?? "null"}, ScheduledTime: {scheduledTime?.ToString() ?? "null"}, PropertyName: {propertyName ?? "null"}");
+            
             // Update booking status to cancelled
             booking["cleaningStatus"] = JsonDocument.Parse("{\"value\":\"cancelled\"}").RootElement.GetProperty("value");
             booking["cancelledAt"] = JsonDocument.Parse($"{{\"value\":\"{DateTime.UtcNow:O}\"}}").RootElement.GetProperty("value");
@@ -752,6 +757,7 @@ public class Function
                     {
                         PropertyName = propertyName ?? propertyId,
                         CleanerName = cleanerName,
+                        CleanerId = cleanerId,
                         CleanerEmail = cleanerEmail,
                         OwnerEmail = ownerEmail,
                         CleaningDate = scheduledTime.Value.ToString("o"),
@@ -775,20 +781,23 @@ public class Function
                 }
             }
             
-            // Send to owner
-            if (scheduledTime.HasValue)
+            // Send to owner - always send notification even if no scheduled time
+            try
             {
-                try
+                // Use scheduled time if available, otherwise use a reasonable default for the cancellation notice
+                var cleaningDate = scheduledTime.HasValue 
+                    ? scheduledTime.Value.ToString("o") 
+                    : DateTime.UtcNow.ToString("o");
+                    
+                var ownerRequest = new
                 {
-                    var ownerRequest = new
-                    {
-                        PropertyName = propertyName ?? propertyId,
-                        CleanerName = cleanerName ?? "(not yet assigned)",
-                        CleanerEmail = ownerEmail, // Send to owner's email
-                        OwnerEmail = ownerEmail,
-                        CleaningDate = scheduledTime.Value.ToString("o"),
-                        IsCancellation = true
-                    };
+                    PropertyName = propertyName ?? propertyId,
+                    CleanerName = cleanerName ?? "(not yet assigned)",
+                    CleanerEmail = ownerEmail, // Send to owner's email
+                    OwnerEmail = ownerEmail,
+                    CleaningDate = cleaningDate,
+                    IsCancellation = true
+                };
                     
                     var invokeRequest = new InvokeRequest
                     {
@@ -797,15 +806,14 @@ public class Function
                         Payload = JsonSerializer.Serialize(ownerRequest)
                     };
                     
-                    await _lambdaClient.InvokeAsync(invokeRequest);
-                    context.Logger.LogInformation($"Invoked CalendarLambda to send cancellation email to owner: {ownerEmail}");
+                    var response = await _lambdaClient.InvokeAsync(invokeRequest);
+                    context.Logger.LogInformation($"Invoked CalendarLambda to send cancellation email to owner: {ownerEmail}, StatusCode: {response.StatusCode}");
                 }
                 catch (Exception ex)
                 {
                     context.Logger.LogError($"Failed to invoke CalendarLambda for owner email: {ex.Message}");
                     // Continue anyway - cancellation is recorded
                 }
-            }
             
             // Return success page
             var encodedBookingRef = WebUtility.HtmlEncode(bookingRef);
