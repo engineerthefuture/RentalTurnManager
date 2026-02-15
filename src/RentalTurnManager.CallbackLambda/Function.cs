@@ -768,10 +768,28 @@ public class Function
             {
                 try
                 {
+                    var formattedDate = scheduledTime.Value.ToString("MMMM dd, yyyy");
+                    var formattedTime = scheduledTime.Value.ToString("h:mm tt");
+                    
+                    var cleanerHtmlBody = $@"<html><body>
+<p>Hello {WebUtility.HtmlEncode(cleanerName)},</p>
+<p>The cleaning scheduled for <strong>{WebUtility.HtmlEncode(propertyName ?? propertyId)}</strong> has been <strong style=""color: #dc3545;"">cancelled</strong> by the property owner.</p>
+<p><strong>Cancelled Appointment:</strong></p>
+<ul>
+<li><strong>Property:</strong> {WebUtility.HtmlEncode(propertyName ?? propertyId)}</li>
+<li><strong>Date:</strong> {WebUtility.HtmlEncode(formattedDate)}</li>
+<li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTime)}</li>
+</ul>
+<p>You do not need to attend this cleaning. If you added this to your calendar, the attached cancellation should remove it automatically.</p>
+<p>Thank you,<br/>Property Management</p>
+</body></html>";
+                    
                     var cleanerRequest = new
                     {
                         FromEmail = ownerEmail,
                         ToEmail = cleanerEmail,
+                        Subject = $"Cleaning Cancelled for {propertyName ?? propertyId} on {formattedDate}",
+                        HtmlBody = cleanerHtmlBody,
                         PropertyName = propertyName ?? propertyId,
                         CleanerName = cleanerName,
                         CleanerId = cleanerId,
@@ -805,11 +823,34 @@ public class Function
                 var cleaningDate = scheduledTime.HasValue 
                     ? scheduledTime.Value.ToString("o") 
                     : DateTime.UtcNow.ToString("o");
+                
+                var formattedDate = scheduledTime.HasValue 
+                    ? scheduledTime.Value.ToString("MMMM dd, yyyy") 
+                    : "Unknown Date";
+                var formattedTime = scheduledTime.HasValue 
+                    ? scheduledTime.Value.ToString("h:mm tt") 
+                    : "12:00 PM";
+                
+                var ownerHtmlBody = $@"<html><body>
+<p>Hello,</p>
+<p>The cleaning for <strong>{WebUtility.HtmlEncode(propertyName ?? propertyId)}</strong> has been <strong style=""color: #dc3545;"">cancelled</strong>.</p>
+<p><strong>Cancelled Appointment:</strong></p>
+<ul>
+<li><strong>Property:</strong> {WebUtility.HtmlEncode(propertyName ?? propertyId)}</li>
+<li><strong>Cleaner:</strong> {WebUtility.HtmlEncode(cleanerName ?? "(not yet assigned)")}</li>
+<li><strong>Date:</strong> {WebUtility.HtmlEncode(formattedDate)}</li>
+<li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTime)}</li>
+</ul>
+<p>The cleaning appointment has been removed. The attached cancellation should remove it from your calendar automatically.</p>
+<p>Thank you,<br/>Property Management</p>
+</body></html>";
                     
                 var ownerRequest = new
                 {
                     FromEmail = ownerEmail,
                     ToEmail = ownerEmail,
+                    Subject = $"Cleaning Cancelled for {propertyName ?? propertyId} on {formattedDate}",
+                    HtmlBody = ownerHtmlBody,
                     PropertyName = propertyName ?? propertyId,
                     CleanerName = cleanerName ?? "(not yet assigned)",
                     CleanerEmail = ownerEmail, // Send to owner's email
