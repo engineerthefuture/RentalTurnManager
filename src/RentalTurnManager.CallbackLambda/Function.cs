@@ -732,8 +732,23 @@ public class Function
             booking["cleaningStatus"] = JsonDocument.Parse("{\"value\":\"cancelled\"}").RootElement.GetProperty("value");
             booking["cancelledAt"] = JsonDocument.Parse($"{{\"value\":\"{DateTime.UtcNow:O}\"}}").RootElement.GetProperty("value");
             
+            // Add cleanerId if provided and not already set
+            if (!string.IsNullOrEmpty(cleanerId) && (!booking.ContainsKey("assignedCleanerId") || booking["assignedCleanerId"].ValueKind == JsonValueKind.Null))
+            {
+                booking["assignedCleanerId"] = JsonDocument.Parse($"{{\"value\":\"{cleanerId}\"}}").RootElement.GetProperty("value");
+            }
+            
+            // Add propertyId if not already set
+            if (!booking.ContainsKey("workflowPropertyId") || booking["workflowPropertyId"].ValueKind == JsonValueKind.Null)
+            {
+                booking["workflowPropertyId"] = JsonDocument.Parse($"{{\"value\":\"{propertyId}\"}}").RootElement.GetProperty("value");
+            }
+            
             // Save updated booking back to S3
-            var updatedJson = JsonSerializer.Serialize(booking);
+            var updatedJson = JsonSerializer.Serialize(booking, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
             await _s3Client.PutObjectAsync(new PutObjectRequest
             {
                 BucketName = bucketName,

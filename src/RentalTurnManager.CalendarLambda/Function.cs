@@ -104,9 +104,11 @@ public class Function
                 request.BookingReference,
                 request.BookingStateBucket,
                 request.CleanerName,
+                request.CleanerId,
                 request.CleanerEmail,
                 request.CleanerPhone,
                 request.CleaningDateTime ?? request.CleaningDate,
+                request.PropertyName,
                 context
             );
         }
@@ -119,9 +121,11 @@ public class Function
         string bookingReference,
         string bucketName,
         string cleanerName,
+        string cleanerId,
         string cleanerEmail,
         string cleanerPhone,
         string cleaningDate,
+        string propertyName,
         ILambdaContext context)
     {
         try
@@ -149,7 +153,14 @@ public class Function
                 booking.AssignedCleanerName = cleanerName;
                 booking.AssignedCleanerEmail = cleanerEmail;
                 booking.AssignedCleanerPhone = cleanerPhone;
+                booking.AssignedCleanerId = cleanerId;
                 booking.CleanerConfirmedAt = DateTime.UtcNow;
+                
+                // Set WorkflowPropertyId if not already set
+                if (string.IsNullOrEmpty(booking.WorkflowPropertyId))
+                {
+                    booking.WorkflowPropertyId = propertyName;
+                }
                 
                 // Parse the full cleaning DateTime (already in UTC from workflow)
                 if (DateTime.TryParse(cleaningDate, out var cleaningDateTime))
@@ -386,6 +397,7 @@ public class CalendarEmailRequest
     public string Subject { get; set; } = string.Empty;
     public string HtmlBody { get; set; } = string.Empty;
     public string CleanerName { get; set; } = string.Empty;
+    public string CleanerId { get; set; } = string.Empty;
     public string CleanerEmail { get; set; } = string.Empty;
     public string CleanerPhone { get; set; } = string.Empty;
     public string OwnerName { get; set; } = string.Empty;
@@ -417,6 +429,8 @@ public class BookingState
     public string? AssignedCleanerName { get; set; }
     public string? AssignedCleanerEmail { get; set; }
     public string? AssignedCleanerPhone { get; set; }
+    public string? AssignedCleanerId { get; set; }
     public DateTime? CleanerConfirmedAt { get; set; }
     public DateTime? ScheduledCleaningTime { get; set; }
+    public string? WorkflowPropertyId { get; set; }
 }
