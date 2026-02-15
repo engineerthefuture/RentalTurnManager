@@ -427,7 +427,14 @@ public class Function
                     var alternativeButtons = new List<string>();
                     foreach (var slot in alternativeTimeSlots)
                     {
-                        alternativeButtons.Add($"<a href=\"{{0}}/respond?token={{{{1}}}}&response=yes&time={{2}}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{slot.Time}</a>");
+                        if (!string.IsNullOrEmpty(slot.Time) && !string.IsNullOrEmpty(slot.IsoDateTime))
+                        {
+                            alternativeButtons.Add($"<a href=\"{{0}}/respond?token={{{{1}}}}&response=yes&time={slot.IsoDateTime}\" style=\"display: inline-block; background-color: #007bff; color: white; padding: 8px 20px; text-decoration: none; border-radius: 5px; margin: 5px;\">{slot.Time}</a>");
+                        }
+                        else
+                        {
+                            alternativeButtons.Add("");
+                        }
                     }
                     
                     // Pad arrays to 5 elements for workflow (empty strings for unused slots)
@@ -448,6 +455,7 @@ public class Function
                         CleaningDateTime = cleaningDateTimeUtc,
                         CleaningTime = cleaningDateTimeEastern.ToString("h:mm tt"),
                         AlternativeTimeSlots = alternativeTimeSlots,
+                        AlternativeButtons = alternativeButtons,
                         TimeButtonsHtml = timeButtonsHtml,
                         CurrentCleanerIndex = 0,
                         AttemptCount = 0,
