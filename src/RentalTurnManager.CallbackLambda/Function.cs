@@ -774,8 +774,10 @@ public class Function
                 try
                 {
                     var formattedDate = scheduledTime.Value.ToString("MMMM dd, yyyy");
-                    // Always show 12:00 PM as that's the standard cleaning time
-                    var formattedTime = "12:00 PM";
+                    // Convert UTC time to Eastern Time for display
+                    var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+                    var easternTime = TimeZoneInfo.ConvertTimeFromUtc(scheduledTime.Value, easternZone);
+                    var formattedTime = easternTime.ToString("h:mm tt");
                     
                     var cleanerHtmlBody = $@"<html><body>
 <p>Hello {WebUtility.HtmlEncode(cleanerName)},</p>
@@ -833,8 +835,11 @@ public class Function
                 var formattedDate = scheduledTime.HasValue 
                     ? scheduledTime.Value.ToString("MMMM dd, yyyy") 
                     : "Unknown Date";
-                // Always show 12:00 PM as that's the standard cleaning time
-                var formattedTime = "12:00 PM";
+                // Convert UTC time to Eastern Time for display
+                var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+                var formattedTime = scheduledTime.HasValue 
+                    ? TimeZoneInfo.ConvertTimeFromUtc(scheduledTime.Value, easternZone).ToString("h:mm tt")
+                    : "12:00 PM";
                 
                 var ownerHtmlBody = $@"<html><body>
 <p>Hello {WebUtility.HtmlEncode(ownerName ?? "Property Owner")},</p>
