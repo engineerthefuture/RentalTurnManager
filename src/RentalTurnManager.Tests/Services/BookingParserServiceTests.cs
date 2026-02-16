@@ -1,18 +1,6 @@
-/************************
- * Rental Turn Manager
- * BookingParserServiceTests.cs
- * 
- * Unit tests for BookingParserService. Tests parsing of booking information
- * from Airbnb, VRBO, and Booking.com emails including confirmation codes,
- * dates, guest counts, and property IDs.
- * 
- * Author: Brent Foster
- * Created: 01-11-2026
- ***********************/
-
+using System;
 using Xunit;
 using Moq;
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using RentalTurnManager.Core.Services;
 using RentalTurnManager.Models;
@@ -21,156 +9,320 @@ namespace RentalTurnManager.Tests.Services;
 
 public class BookingParserServiceTests
 {
-    private readonly Mock<ILogger<BookingParserService>> _mockLogger;
-    private readonly BookingParserService _service;
-
-    public BookingParserServiceTests()
+    [Fact]
+    public void ParseBooking_ReturnsNull_ForUnknownPlatform()
     {
-        _mockLogger = new Mock<ILogger<BookingParserService>>();
-        _service = new BookingParserService(_mockLogger.Object);
+        var logger = new Mock<ILogger<BookingParserService>>();
+        var svc = new BookingParserService(logger.Object);
+
+        var email = new EmailMessage
+        {
+            From = "no-reply@example.org",
+            Subject = "Monthly Newsletter",
+            Body = "Welcome to our newsletter"
+        };
+
+        var result = svc.ParseBooking(email);
+        Assert.Null(result);
     }
 
     [Fact]
-    public void ParseBooking_AirbnbEmail_ReturnsBooking()
+    public void ParseAirbnb_WithNumericDatesAndGuests_ParsesCorrectly()
     {
-        // Arrange
+        var logger = new Mock<ILogger<BookingParserService>>();
+        var svc = new BookingParserService(logger.Object);
+
         var email = new EmailMessage
         {
-            From = "automated@airbnb.com",
+            From = "noreply@airbnb.com",
             Subject = "Reservation confirmed",
-            Body = @"
-                Reservation Number: HM123456789
-                Guest: John Smith
-                Listing: 12345678
-                Check-in: 01/15/2026
-                Check-out: 01/18/2026
-                2 guests
-            "
+            Body = "Confirmation code: HM12345678\nListing #12345\ncheck-in: 01/15/2026\ncheck-out: 01/18/2026\nGuests: 2 adults, 1 child"
         };
 
-        // Act
-        var result = _service.ParseBooking(email);
+        var booking = svc.ParseBooking(email);
 
-        // Assert
-        result.Should().NotBeNull();
-        result!.Platform.Should().Be("airbnb");
-        result.BookingReference.Should().Be("HM123456789");
-        result.PropertyId.Should().Be("12345678");
-        result.CheckInDate.Should().Be(new DateTime(2026, 1, 15));
-        result.CheckOutDate.Should().Be(new DateTime(2026, 1, 18));
-        result.NumberOfGuests.Should().Be(2);
+        Assert.NotNull(booking);
+        Assert.Equal("airbnb", booking!.Platform);
+        Assert.Equal("HM12345678", booking.BookingReference);
+        Assert.Equal("12345", booking.PropertyId);
+        Assert.Equal(new DateTime(2026,1,15), booking.CheckInDate.Date);
+        Assert.Equal(new DateTime(2026,1,18), booking.CheckOutDate.Date);
+        Assert.Equal(3, booking.NumberOfGuests);
     }
 
     [Fact]
-    public void ParseBooking_VrboEmail_ReturnsBooking()
+    public void ParseAirbnb_CalculatesCheckoutFromNights()
     {
-        // Arrange
+        var logger = new Mock<ILogger<BookingParserService>>();
+        var svc = new BookingParserService(logger.Object);
+
         var email = new EmailMessage
         {
-            From = "noreply@vrbo.com",
-            Subject = "Reservation Confirmation",
-            Body = @"
-                Confirmation Number: 98765432
-                Property: 87654321
-                Arrival: January 20, 2026
-                Departure: January 23, 2026
-            "
+            From = "noreply@airbnb.com",
+            Subject = "Reservation confirmed",
+            Body = "Confirmation code: HMABCDEFG1\nListing #5555\ncheck-in: January 10, 2026\n3 nights"
         };
 
-        // Act
-        var result = _service.ParseBooking(email);
+        var booking = svc.ParseBooking(email);
 
-        // Assert
-        result.Should().NotBeNull();
-        result!.Platform.Should().Be("vrbo");
-        result.BookingReference.Should().Be("98765432");
-        result.PropertyId.Should().Be("87654321");
+        Assert.NotNull(booking);
+        Assert.Equal("5555", booking!.PropertyId);
+        Assert.Equal(new DateTime(2026,1,10), booking.CheckInDate.Date);
+        Assert.Equal(new DateTime(2026,1,13), booking.CheckOutDate.Date);
     }
 
     [Fact]
-    public void ParseBooking_BookingComEmail_ReturnsBooking()
+    public void ParseVrbo_FromSubjectRangeAndProperty_ParsesDatesAndProperty()
     {
-        // Arrange
+        var logger = new Mock<ILogger<BookingParserService>>();
+        var svc = new BookingParserService(logger.Object);
+
         var email = new EmailMessage
         {
-            From = "noreply@booking.com",
-            Subject = "Booking Confirmation",
-            Body = @"
-                Booking ID: 7654321098
-                Property: 11223344
-                Guest Name: Jane Doe
-                Check-in: Monday, 25 January 2026
-                Check-out: Thursday, 28 January 2026
-            "
+            From = "bookings@vrbo.com",
+            Subject = "Dec 31, 2025 - Jan 2, 2026 | Vrbo #4906384",
+            Body = "Reservation ID: HA-T65Q42\nGuests: 2 adults, 0 children"
         };
 
-        // Act
-        var result = _service.ParseBooking(email);
+        var booking = svc.ParseBooking(email);
 
-        // Assert
-        result.Should().NotBeNull();
-        result!.Platform.Should().Be("bookingcom");
-        result.BookingReference.Should().Be("7654321098");
-        result.GuestName.Should().Be("Jane Doe");
+        Assert.NotNull(booking);
+        Assert.Equal("vrbo", booking!.Platform);
+        Assert.Equal("HA-T65Q42", booking.BookingReference);
+        Assert.Equal("4906384", booking.PropertyId);
+        Assert.Equal(new DateTime(2025,12,31), booking.CheckInDate.Date);
+        Assert.Equal(new DateTime(2026,1,2), booking.CheckOutDate.Date);
+        Assert.Equal(2, booking.NumberOfGuests);
     }
 
     [Fact]
-    public void ParseBooking_InvalidEmail_ReturnsNull()
+    public void ParseBookingCom_BasicParsing_Works()
     {
-        // Arrange
+        var logger = new Mock<ILogger<BookingParserService>>();
+        var svc = new BookingParserService(logger.Object);
+
         var email = new EmailMessage
         {
-            From = "unknown@example.com",
-            Subject = "Some email",
-            Body = "Random content"
+            From = "confirmation@booking.com",
+            Subject = "Your reservation",
+            Body = "Booking number: 987654\nCheck-in: January 20, 2026\nCheck-out: January 23, 2026\nProperty: 77777\nGuest name: John Doe"
         };
 
-        // Act
-        var result = _service.ParseBooking(email);
+        var booking = svc.ParseBooking(email);
 
-        // Assert
-        result.Should().BeNull();
+        Assert.NotNull(booking);
+        Assert.Equal("bookingcom", booking!.Platform);
+        Assert.Equal("987654", booking.BookingReference);
+        Assert.Equal(new DateTime(2026,1,20), booking.CheckInDate.Date);
+        Assert.Equal(new DateTime(2026,1,23), booking.CheckOutDate.Date);
+        Assert.Equal("77777", booking.PropertyId);
+        Assert.Equal("John Doe", booking.GuestName);
     }
 
     [Fact]
-    public void ParseBooking_NonBookingEmail_ReturnsNull()
+    public void DeterminePlatform_InstantBookingSubject_IsAirbnb()
     {
-        // Arrange
+        var logger = new Mock<ILogger<BookingParserService>>();
+        var svc = new BookingParserService(logger.Object);
+
         var email = new EmailMessage
         {
-            From = "automated@airbnb.com",
-            Subject = "Your listing performance",
-            Body = "This is not a booking email"
+            From = "noreply@airbnb.com",
+            Subject = "Instant Booking from HostName",
+            Body = "check-in: March 5, 2026\ncheck-out: March 7, 2026"
         };
 
-        // Act
-        var result = _service.ParseBooking(email);
-
-        // Assert
-        result.Should().BeNull();
+        var booking = svc.ParseBooking(email);
+        Assert.NotNull(booking);
+        Assert.Equal("airbnb", booking!.Platform);
+        Assert.Equal(new DateTime(2026,3,5), booking.CheckInDate.Date);
+        Assert.Equal(new DateTime(2026,3,7), booking.CheckOutDate.Date);
     }
 
     [Fact]
-    public void ParseBooking_AirbnbEmailWithSubjectDateAndGuestMessage_ExtractsCorrectly()
+    public void ParseAirbnb_UsesHtmlBody_WhenPlainBodyEmpty()
     {
-        // Arrange - Tests that guest messages starting with "Hello" aren't extracted as property names
+        var logger = new Mock<ILogger<BookingParserService>>();
+        var svc = new BookingParserService(logger.Object);
+
         var email = new EmailMessage
         {
-            From = "automated@airbnb.com",
-            Subject = "Reservation confirmed - John Dickman arrives Feb 26",
-            Body = @"
-                Reservation confirmed
-                
-                Cozy Lake House Waterfront Paradise
-                
-                Hello there
-                
-                I'd love to book your cozy home on the lake for a stay with my family
-                
-                Confirmation code: HMQDDDMPRY
-                
-                Listing: 12345678
-                Check-in: 02/26/2026
+            From = "noreply@airbnb.com",
+            Subject = "Reservation confirmed",
+            Body = string.Empty,
+            HtmlBody = "<p>Confirmation code: HTML123</p><p>check-in: 04/10/2026</p><p>check-out: 04/12/2026</p>"
+        };
+
+        var booking = svc.ParseBooking(email);
+        Assert.NotNull(booking);
+        Assert.Equal("HTML123", booking!.BookingReference);
+        Assert.Equal(new DateTime(2026,4,10), booking.CheckInDate.Date);
+        Assert.Equal(new DateTime(2026,4,12), booking.CheckOutDate.Date);
+    }
+
+    [Fact]
+    public void ParseVrbo_WithSubjectDateRange_ParsesDatesAndPropertyId()
+    {
+        var logger = new Mock<ILogger<BookingParserService>>();
+        var svc = new BookingParserService(logger.Object);
+
+        var email = new EmailMessage
+        {
+            From = "bookings@vrbo.com",
+            Subject = "Feb 1, 2026 - Feb 3, 2026 | Vrbo #123456",
+            Body = "Reservation ID: VR-ABC-1\nGuests: 1 adult"
+        };
+
+        var booking = svc.ParseBooking(email);
+        Assert.NotNull(booking);
+        Assert.Equal("vrbo", booking!.Platform);
+        Assert.Equal(new DateTime(2026,2,1), booking.CheckInDate.Date);
+        Assert.Equal(new DateTime(2026,2,3), booking.CheckOutDate.Date);
+        Assert.Equal("123456", booking.PropertyId);
+    }
+}
+using System;
+using Xunit;
+using Moq;
+using Microsoft.Extensions.Logging;
+using RentalTurnManager.Core.Services;
+using RentalTurnManager.Models;
+
+namespace RentalTurnManager.Tests.Services;
+
+public class BookingParserServiceTests
+{
+    [Fact]
+    public void ParseBooking_ReturnsNull_ForUnknownPlatform()
+    {
+        var logger = new Mock<ILogger<BookingParserService>>();
+        var svc = new BookingParserService(logger.Object);
+
+        var email = new EmailMessage
+        {
+            From = "no-reply@example.org",
+            Subject = "Monthly Newsletter",
+            using System;
+            using Xunit;
+            using Moq;
+            using Microsoft.Extensions.Logging;
+            using RentalTurnManager.Core.Services;
+            using RentalTurnManager.Models;
+
+            namespace RentalTurnManager.Tests.Services;
+
+            public class BookingParserServiceTests
+            {
+                [Fact]
+                public void ParseBooking_ReturnsNull_ForUnknownPlatform()
+                {
+                    var logger = new Mock<ILogger<BookingParserService>>();
+                    var svc = new BookingParserService(logger.Object);
+
+                    var email = new EmailMessage
+                    {
+                        From = "no-reply@example.org",
+                        Subject = "Monthly Newsletter",
+                        Body = "Welcome to our newsletter"
+                    };
+
+                    var result = svc.ParseBooking(email);
+                    Assert.Null(result);
+                }
+
+                [Fact]
+                public void ParseAirbnb_WithNumericDatesAndGuests_ParsesCorrectly()
+                {
+                    var logger = new Mock<ILogger<BookingParserService>>();
+                    var svc = new BookingParserService(logger.Object);
+
+                    var email = new EmailMessage
+                    {
+                        From = "noreply@airbnb.com",
+                        Subject = "Reservation confirmed",
+                        Body = "Confirmation code: HM12345678\nListing #12345\ncheck-in: 01/15/2026\ncheck-out: 01/18/2026\nGuests: 2 adults, 1 child"
+                    };
+
+                    var booking = svc.ParseBooking(email);
+
+                    Assert.NotNull(booking);
+                    Assert.Equal("airbnb", booking!.Platform);
+                    Assert.Equal("HM12345678", booking.BookingReference);
+                    Assert.Equal("12345", booking.PropertyId);
+                    Assert.Equal(new DateTime(2026,1,15), booking.CheckInDate.Date);
+                    Assert.Equal(new DateTime(2026,1,18), booking.CheckOutDate.Date);
+                    Assert.Equal(3, booking.NumberOfGuests);
+                }
+
+                [Fact]
+                public void ParseAirbnb_CalculatesCheckoutFromNights()
+                {
+                    var logger = new Mock<ILogger<BookingParserService>>();
+                    var svc = new BookingParserService(logger.Object);
+
+                    var email = new EmailMessage
+                    {
+                        From = "noreply@airbnb.com",
+                        Subject = "Reservation confirmed",
+                        Body = "Confirmation code: HMABCDEFG1\nListing #5555\ncheck-in: January 10, 2026\n3 nights"
+                    };
+
+                    var booking = svc.ParseBooking(email);
+
+                    Assert.NotNull(booking);
+                    Assert.Equal("5555", booking!.PropertyId);
+                    Assert.Equal(new DateTime(2026,1,10), booking.CheckInDate.Date);
+                    Assert.Equal(new DateTime(2026,1,13), booking.CheckOutDate.Date);
+                }
+
+                [Fact]
+                public void ParseVrbo_FromSubjectRangeAndProperty_ParsesDatesAndProperty()
+                {
+                    var logger = new Mock<ILogger<BookingParserService>>();
+                    var svc = new BookingParserService(logger.Object);
+
+                    var email = new EmailMessage
+                    {
+                        From = "bookings@vrbo.com",
+                        Subject = "Dec 31, 2025 - Jan 2, 2026 | Vrbo #4906384",
+                        Body = "Reservation ID: HA-T65Q42\nGuests: 2 adults, 0 children"
+                    };
+
+                    var booking = svc.ParseBooking(email);
+
+                    Assert.NotNull(booking);
+                    Assert.Equal("vrbo", booking!.Platform);
+                    Assert.Equal("HA-T65Q42", booking.BookingReference);
+                    Assert.Equal("4906384", booking.PropertyId);
+                    Assert.Equal(new DateTime(2025,12,31), booking.CheckInDate.Date);
+                    Assert.Equal(new DateTime(2026,1,2), booking.CheckOutDate.Date);
+                    Assert.Equal(2, booking.NumberOfGuests);
+                }
+
+                [Fact]
+                public void ParseBookingCom_BasicParsing_Works()
+                {
+                    var logger = new Mock<ILogger<BookingParserService>>();
+                    var svc = new BookingParserService(logger.Object);
+
+                    var email = new EmailMessage
+                    {
+                        From = "confirmation@booking.com",
+                        Subject = "Your reservation",
+                        Body = "Booking number: 987654\nCheck-in: January 20, 2026\nCheck-out: January 23, 2026\nProperty: 77777\nGuest name: John Doe"
+                    };
+
+                    var booking = svc.ParseBooking(email);
+
+                    Assert.NotNull(booking);
+                    Assert.Equal("bookingcom", booking!.Platform);
+                    Assert.Equal("987654", booking.BookingReference);
+                    Assert.Equal(new DateTime(2026,1,20), booking.CheckInDate.Date);
+                    Assert.Equal(new DateTime(2026,1,23), booking.CheckOutDate.Date);
+                    Assert.Equal("77777", booking.PropertyId);
+                    Assert.Equal("John Doe", booking.GuestName);
+                }
+            }
                 Check-out: 02/28/2026
                 
                 4 adults
