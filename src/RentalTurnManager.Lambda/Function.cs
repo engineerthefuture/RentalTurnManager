@@ -361,6 +361,8 @@ public class Function
                                     // How many slots would we get at the original increment?
                                     var slotsAtOriginal = (int)Math.Floor(availableMinutes / (double)originalIncrement);
 
+                                    _logger.LogInformation("Alternate slots: availableMinutes={availableMinutes}, originalIncrement={originalIncrement}, slotsAtOriginal={slotsAtOriginal}", availableMinutes, originalIncrement, slotsAtOriginal);
+
                                     if (slotsAtOriginal == 5)
                                     {
                                         // original increment is perfect
@@ -372,12 +374,14 @@ public class Function
                                         var desired = (int)Math.Floor(availableMinutes / 5.0);
                                         if (desired < 5) desired = 5; // never below 5 minutes
 
-                                        // Round desired to nearest multiple of 5 for consistency
+                                        // Round desired down to nearest multiple of 5 for consistency
                                         desired = (desired / 5) * 5;
                                         if (desired < 5) desired = 5;
 
                                         incrementMinutes = desired;
                                     }
+
+                                    _logger.LogInformation("Chosen alternate increment: {incrementMinutes} minutes (desired calculation)", incrementMinutes);
                                 }
 
                                 // Generate time slots at the (possibly adjusted) interval
