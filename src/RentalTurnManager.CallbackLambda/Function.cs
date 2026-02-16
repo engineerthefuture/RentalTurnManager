@@ -290,7 +290,7 @@ public class Function
         try
         {
             // Values captured from the saved workflow context for display in the override response
-            string? workflowPropertyIdValue = null;
+            string? propertyDisplayName = null;
             string? assignedCleanerName = null;
             // Validate required parameters
             if (!queryParams.TryGetValue("ownerToken", out var providedToken) ||
@@ -470,12 +470,12 @@ public class Function
                     // If the workflowPropertyId wasn't stored in the booking, prefer the property metadata name
                     try
                     {
-                        if (string.IsNullOrEmpty(workflowPropertyIdValue) && propertyData.ValueKind == JsonValueKind.Object)
+                        if (string.IsNullOrEmpty(propertyDisplayName) && propertyData.ValueKind == JsonValueKind.Object)
                         {
                             if (propertyData.TryGetProperty("metadata", out var metadataElem) && metadataElem.ValueKind == JsonValueKind.Object &&
                                 metadataElem.TryGetProperty("propertyName", out var pnameElem) && pnameElem.ValueKind == JsonValueKind.String)
                             {
-                                workflowPropertyIdValue = pnameElem.GetString();
+                                propertyDisplayName = pnameElem.GetString();
                             }
                         }
                     }
@@ -531,11 +531,11 @@ public class Function
                                 // support both snake/camel-case and PascalCase keys depending on serialization
                                 if (bookingForId.TryGetProperty("workflowPropertyId", out var wpElem) && wpElem.ValueKind == JsonValueKind.String)
                                 {
-                                    workflowPropertyIdValue = wpElem.GetString();
+                                    propertyDisplayName = wpElem.GetString();
                                 }
                                 else if (bookingForId.TryGetProperty("WorkflowPropertyId", out var wpElem2) && wpElem2.ValueKind == JsonValueKind.String)
                                 {
-                                    workflowPropertyIdValue = wpElem2.GetString();
+                                    propertyDisplayName = wpElem2.GetString();
                                 }
 
                                 if (bookingForId.TryGetProperty("AssignedCleanerName", out var acnElem) && acnElem.ValueKind == JsonValueKind.String)
@@ -551,7 +551,7 @@ public class Function
                     }
                     catch
                     {
-                        // ignore and leave workflowPropertyIdValue/assignedCleanerName as-is
+                        // ignore and leave propertyDisplayName/assignedCleanerName as-is
                     }
 
                     // Ensure workflowInput is present (defensive check for static analysis)
@@ -599,11 +599,11 @@ public class Function
                 context.Logger.LogInformation($"Owner cancelled cleaning for booking {bookingRef}");
             }
 
-            if (string.IsNullOrEmpty(workflowPropertyIdValue)) workflowPropertyIdValue = propertyId;
+            if (string.IsNullOrEmpty(propertyDisplayName)) propertyDisplayName = propertyId;
 
             var ownerEmail = _defaultOwnerEmail;
             var encodedBookingRef = WebUtility.HtmlEncode(bookingRef);
-            var encodedPropertyDisplay = WebUtility.HtmlEncode(workflowPropertyIdValue);
+            var encodedPropertyDisplay = WebUtility.HtmlEncode(propertyDisplayName);
             var encodedCleanerDisplay = WebUtility.HtmlEncode(assignedCleanerName ?? cleanerId);
 
             var successHtml = $@"

@@ -1,4 +1,7 @@
 using Xunit;
+// Suppress nullable dereference warnings in tests where APIGatewayProxyRequest fields
+// are intentionally created without full nullability annotations.
+#pragma warning disable CS8602
 using Moq;
 using FluentAssertions;
 using Amazon.StepFunctions;
@@ -56,11 +59,17 @@ public class CallbackFunctionMoreTargetedTests
         var fn = new RentalTurnManager.CallbackLambda.Function(stepMock.Object, secretMock.Object, s3Mock.Object);
         var ctx = new TestLambdaContext();
 
-        System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", "secret-name");
-        System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", "bucket-name");
-        System.Environment.SetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN", "arn:state:machine");
+        var prevEmailSecret = System.Environment.GetEnvironmentVariable("EMAIL_SECRET_NAME");
+        var prevBookingBucket = System.Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET");
+        var prevStateMachineArn = System.Environment.GetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN");
 
-        var req = new APIGatewayProxyRequest
+        try
+        {
+            System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", "secret-name");
+            System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", "bucket-name");
+            System.Environment.SetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN", "arn:state:machine");
+
+            var req = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
             {
@@ -72,11 +81,18 @@ public class CallbackFunctionMoreTargetedTests
             }
         };
 
-        var res = await fn.FunctionHandler(req, ctx);
+            var res = await fn.FunctionHandler(req, ctx);
 
-        res.StatusCode.Should().Be(200);
-        res.Body.Should().Contain("Owner Override Successful");
-        stepMock.Verify(x => x.StartExecutionAsync(It.IsAny<StartExecutionRequest>(), default), Times.Once);
+            res.StatusCode.Should().Be(200);
+            res.Body.Should().Contain("Owner Override Successful");
+            stepMock.Verify(x => x.StartExecutionAsync(It.IsAny<StartExecutionRequest>(), default), Times.Once);
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", prevEmailSecret);
+            System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", prevBookingBucket);
+            System.Environment.SetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN", prevStateMachineArn);
+        }
     }
 
     [Fact]
@@ -120,12 +136,19 @@ public class CallbackFunctionMoreTargetedTests
         var fi = typeof(RentalTurnManager.CallbackLambda.Function).GetField("_lambdaClient", BindingFlags.Instance | BindingFlags.NonPublic);
         fi.SetValue(fn, lambdaMock.Object);
 
-        System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", "secret-name");
-        System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", "bucket-name");
-        System.Environment.SetEnvironmentVariable("CALENDAR_LAMBDA_NAME", "CalendarLambda");
-        System.Environment.SetEnvironmentVariable("OWNER_EMAIL", "owner@example.com");
+        var prevEmailSecret2 = System.Environment.GetEnvironmentVariable("EMAIL_SECRET_NAME");
+        var prevBookingBucket2 = System.Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET");
+        var prevCalendarLambda = System.Environment.GetEnvironmentVariable("CALENDAR_LAMBDA_NAME");
+        var prevOwnerEmail = System.Environment.GetEnvironmentVariable("OWNER_EMAIL");
 
-        var req = new APIGatewayProxyRequest
+        try
+        {
+            System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", "secret-name");
+            System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", "bucket-name");
+            System.Environment.SetEnvironmentVariable("CALENDAR_LAMBDA_NAME", "CalendarLambda");
+            System.Environment.SetEnvironmentVariable("OWNER_EMAIL", "owner@example.com");
+
+            var req = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
             {
@@ -137,11 +160,19 @@ public class CallbackFunctionMoreTargetedTests
             }
         };
 
-        var res = await fn.FunctionHandler(req, ctx);
+            var res = await fn.FunctionHandler(req, ctx);
 
-        res.StatusCode.Should().Be(200);
-        res.Body.Should().Contain("Cleaning Cancelled Successfully");
-        s3Mock.Verify(x => x.PutObjectAsync(It.IsAny<PutObjectRequest>(), default), Times.Once);
-        lambdaMock.Verify(x => x.InvokeAsync(It.IsAny<InvokeRequest>(), default), Times.AtLeastOnce);
+            res.StatusCode.Should().Be(200);
+            res.Body.Should().Contain("Cleaning Cancelled Successfully");
+            s3Mock.Verify(x => x.PutObjectAsync(It.IsAny<PutObjectRequest>(), default), Times.Once);
+            lambdaMock.Verify(x => x.InvokeAsync(It.IsAny<InvokeRequest>(), default), Times.AtLeastOnce);
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", prevEmailSecret2);
+            System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", prevBookingBucket2);
+            System.Environment.SetEnvironmentVariable("CALENDAR_LAMBDA_NAME", prevCalendarLambda);
+            System.Environment.SetEnvironmentVariable("OWNER_EMAIL", prevOwnerEmail);
+        }
     }
 }
