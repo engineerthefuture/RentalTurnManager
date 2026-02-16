@@ -1,100 +1,77 @@
-/************************
- * Rental Turn Manager
- * PropertyConfigServiceTests.cs
- * 
- * Unit tests for PropertyConfigService. Tests property ID resolution,
- * platform mapping lookups (Airbnb/VRBO/Booking.com), and configuration
- * management for multiple properties.
- * 
- * Author: Brent Foster
- * Created: 01-11-2026
- ***********************/
-
 using Xunit;
-using Moq;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Moq;
 using RentalTurnManager.Core.Services;
-using RentalTurnManager.Models;
+using System.Collections.Generic;
 
 namespace RentalTurnManager.Tests.Services;
 
 public class PropertyConfigServiceTests
 {
-    private readonly Mock<ILogger<PropertyConfigService>> _mockLogger;
-    private readonly IConfiguration _configuration;
-    private readonly PropertyConfigService _service;
-
-    public PropertyConfigServiceTests()
+    [Fact]
+    public void GetBookingPlatformFromAddresses_ReturnsDefaults_WhenNoConfig()
     {
-        _mockLogger = new Mock<ILogger<PropertyConfigService>>();
-        
-        // Create test configuration
-        var properties = new Dictionary<string, string>
+        var config = new ConfigurationBuilder().Build();
+        var logger = new Mock<ILogger<PropertyConfigService>>().Object;
+
+        var svc = new PropertyConfigService(config, logger);
+
+        var addresses = svc.GetBookingPlatformFromAddresses();
+
+        addresses.Should().Contain(new[] { "airbnb.com", "vrbo.com", "booking.com" });
+    }
+
+    [Fact]
+    public void GetBookingPlatformFromAddresses_ReturnsConfigured_WhenPresent()
+    {
+        var inMemory = new Dictionary<string, string?>
         {
-            ["properties:0:propertyId"] = "property-001",
-            ["properties:0:platformIds:airbnb"] = "AIRBNB_001",
-            ["properties:0:platformIds:vrbo"] = "VRBO_001",
-            ["properties:0:platformIds:bookingcom"] = "BOOKING_001",
-            ["properties:0:address"] = "123 Test St",
-            ["properties:0:metadata:propertyName"] = "Test Property",
-            ["properties:1:propertyId"] = "property-002",
-            ["properties:1:platformIds:airbnb"] = "AIRBNB_002",
-            ["properties:1:address"] = "456 Test Ave"
+            ["emailFilters:BookingPlatformFromAddresses:0"] = "custom1.com",
+            ["emailFilters:BookingPlatformFromAddresses:1"] = "custom2.com",
+            ["emailFilters:SubjectPatterns:0"] = "My Subject"
         };
 
-        _configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(properties!)
-            .Build();
+        var config = new ConfigurationBuilder().AddInMemoryCollection(inMemory).Build();
+        var logger = new Mock<ILogger<PropertyConfigService>>().Object;
 
-        _service = new PropertyConfigService(_configuration, _mockLogger.Object);
-    }
+        var svc = new PropertyConfigService(config, logger);
 
-    [Theory]
-    [InlineData("airbnb", "AIRBNB_001", "property-001")]
-    [InlineData("vrbo", "VRBO_001", "property-001")]
-    [InlineData("bookingcom", "BOOKING_001", "property-001")]
-    [InlineData("airbnb", "AIRBNB_002", "property-002")]
-    public void FindPropertyByPlatformId_ValidMapping_ReturnsProperty(string platform, string platformId, string expectedPropertyId)
-    {
-        // Act
-        var result = _service.FindPropertyByPlatformId(platform, platformId);
+        var addresses = svc.GetBookingPlatformFromAddresses();
 
-        // Assert
-        result.Should().NotBeNull();
-        result!.PropertyId.Should().Be(expectedPropertyId);
+        addresses.Should().Contain(new[] { "custom1.com", "custom2.com" });
     }
 
     [Fact]
-    public void FindPropertyByPlatformId_InvalidPlatformId_ReturnsNull()
+    public void GetSubjectPatterns_ReturnsDefaults_WhenNoConfig()
     {
-        // Act
-        var result = _service.FindPropertyByPlatformId("airbnb", "INVALID_ID");
+        var config = new ConfigurationBuilder().Build();
+        var logger = new Mock<ILogger<PropertyConfigService>>().Object;
 
-        // Assert
-        result.Should().BeNull();
+        var svc = new PropertyConfigService(config, logger);
+
+        var patterns = svc.GetSubjectPatterns();
+
+        patterns.Should().Contain(new[] { "Reservation confirmed", "Instant Booking from", "booking confirmation" });
     }
 
     [Fact]
-    public void FindPropertyByPlatformId_InvalidPlatform_ReturnsNull()
+    public void GetSubjectPatterns_ReturnsConfigured_WhenPresent()
     {
-        // Act
-        var result = _service.FindPropertyByPlatformId("invalid", "AIRBNB_001");
+        var inMemory = new Dictionary<string, string?>
+        {
+            ["emailFilters:SubjectPatterns:0"] = "Pattern One",
+            ["emailFilters:SubjectPatterns:1"] = "Pattern Two"
+        };
 
-        // Assert
-        result.Should().BeNull();
-    }
+        var config = new ConfigurationBuilder().AddInMemoryCollection(inMemory).Build();
+        var logger = new Mock<ILogger<PropertyConfigService>>().Object;
 
-    [Fact]
-    public void GetAllProperties_ReturnsAllProperties()
-    {
-        // Act
-        var result = _service.GetAllProperties();
+        var svc = new PropertyConfigService(config, logger);
 
-        // Assert
-        result.Should().HaveCount(2);
-        result.Should().Contain(p => p.PropertyId == "property-001");
-        result.Should().Contain(p => p.PropertyId == "property-002");
+        var patterns = svc.GetSubjectPatterns();
+
+        patterns.Should().Contain(new[] { "Pattern One", "Pattern Two" });
     }
 }

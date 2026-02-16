@@ -25,11 +25,13 @@ namespace RentalTurnManager.Core.Services;
 public class EmailScannerService : IEmailScannerService
 {
     private readonly ILogger<EmailScannerService> _logger;
+    private readonly IImapClientFactory _clientFactory;
     private const string ProcessedLabel = "RentalTurnManager/Processed";
 
-    public EmailScannerService(ILogger<EmailScannerService> logger)
+    public EmailScannerService(ILogger<EmailScannerService> logger, IImapClientFactory? clientFactory = null)
     {
         _logger = logger;
+        _clientFactory = clientFactory ?? new ImapClientFactory();
     }
 
     public async Task<List<EmailMessage>> ScanForBookingEmailsAsync(EmailCredentials credentials, bool forceRescan = false, List<string>? platformFromAddresses = null, List<string>? subjectPatterns = null)
@@ -42,7 +44,7 @@ public class EmailScannerService : IEmailScannerService
 
         try
         {
-            using var client = new ImapClient();
+            using var client = _clientFactory.CreateClient();
             
             _logger.LogInformation($"Connecting to IMAP server {credentials.Host}:{credentials.Port} (SSL: {credentials.UseSsl})");
             await client.ConnectAsync(credentials.Host, credentials.Port, credentials.UseSsl);
@@ -200,8 +202,8 @@ public class EmailScannerService : IEmailScannerService
     {
         try
         {
-            using var client = new ImapClient();
-            
+            using var client = _clientFactory.CreateClient();
+
             await client.ConnectAsync(credentials.Host, credentials.Port, credentials.UseSsl);
             await client.AuthenticateAsync(credentials.Username, credentials.Password);
 

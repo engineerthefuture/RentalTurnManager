@@ -55,11 +55,17 @@ public class CallbackFunctionTargetedTests
         var fn = new RentalTurnManager.CallbackLambda.Function(stepMock.Object, secretMock.Object, s3Mock.Object);
         var ctx = new TestLambdaContext();
 
-        System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", "secret-name");
-        System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", "bucket-name");
-        System.Environment.SetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN", "arn:state:machine");
+        var prevEmail = System.Environment.GetEnvironmentVariable("EMAIL_SECRET_NAME");
+        var prevBucket = System.Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET");
+        var prevStateArn = System.Environment.GetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN");
 
-        var req = new APIGatewayProxyRequest
+        try
+        {
+            System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", "secret-name");
+            System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", "bucket-name");
+            System.Environment.SetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN", "arn:state:machine");
+
+            var req = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
             {
@@ -71,11 +77,18 @@ public class CallbackFunctionTargetedTests
             }
         };
 
-        var res = await fn.FunctionHandler(req, ctx);
+            var res = await fn.FunctionHandler(req, ctx);
 
-        res.StatusCode.Should().Be(200);
-        res.Body.Should().Contain("Owner Override Successful");
-        stepMock.Verify(x => x.StartExecutionAsync(It.IsAny<StartExecutionRequest>(), default), Times.Once);
+            res.StatusCode.Should().Be(200);
+            res.Body.Should().Contain("Owner Override Successful");
+            stepMock.Verify(x => x.StartExecutionAsync(It.IsAny<StartExecutionRequest>(), default), Times.Once);
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", prevEmail);
+            System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", prevBucket);
+            System.Environment.SetEnvironmentVariable("CLEANER_WORKFLOW_STATE_MACHINE_ARN", prevStateArn);
+        }
     }
 
     [Fact]
@@ -96,10 +109,15 @@ public class CallbackFunctionTargetedTests
         var fn = new RentalTurnManager.CallbackLambda.Function(stepMock.Object, secretMock.Object, s3Mock.Object);
         var ctx = new TestLambdaContext();
 
-        System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", "secret-name");
-        System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", "bucket-name");
+        var prevEmail2 = System.Environment.GetEnvironmentVariable("EMAIL_SECRET_NAME");
+        var prevBucket2 = System.Environment.GetEnvironmentVariable("BOOKING_STATE_BUCKET");
 
-        var req = new APIGatewayProxyRequest
+        try
+        {
+            System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", "secret-name");
+            System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", "bucket-name");
+
+            var req = new APIGatewayProxyRequest
         {
             QueryStringParameters = new Dictionary<string, string>
             {
@@ -110,9 +128,15 @@ public class CallbackFunctionTargetedTests
             }
         };
 
-        var res = await fn.FunctionHandler(req, ctx);
+            var res = await fn.FunctionHandler(req, ctx);
 
-        res.StatusCode.Should().Be(404);
-        res.Body.Should().Contain("Booking not found");
+            res.StatusCode.Should().Be(404);
+            res.Body.Should().Contain("Booking not found");
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("EMAIL_SECRET_NAME", prevEmail2);
+            System.Environment.SetEnvironmentVariable("BOOKING_STATE_BUCKET", prevBucket2);
+        }
     }
 }

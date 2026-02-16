@@ -1,4 +1,7 @@
 using Xunit;
+// Suppress nullable dereference warnings in tests where APIGatewayProxyRequest fields
+// are intentionally created without full nullability annotations.
+#pragma warning disable CS8602
 using Moq;
 using FluentAssertions;
 using Amazon.StepFunctions;

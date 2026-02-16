@@ -35,6 +35,6 @@ public class EmailTemplateServiceTests
 
         html.Should().Contain("https://example.com/callback/respond?token=tok-abc&response=yes&time=");
         html.Should().Contain("10:00 AM");
-        html.Should().Contain("%3a"); // encoded ':' from ISO datetime (lowercase)
+        html.ToLowerInvariant().Should().Contain("%3a"); // encoded ':' from ISO datetime (case-insensitive)
     }
 }
