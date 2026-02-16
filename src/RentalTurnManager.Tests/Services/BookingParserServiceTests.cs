@@ -225,4 +225,288 @@ public class BookingParserServiceTests
         result.CheckInDate.Should().Be(new DateTime(2026, 4, 3));
         result.CheckOutDate.Should().Be(new DateTime(2026, 4, 6));
         result.NumberOfGuests.Should().Be(3);
-    }}
+    }
+
+    [Fact]
+    public void ParseBooking_Airbnb_SubjectArrives_ParsesCheckIn()
+    {
+        // Arrange - subject contains 'arrives Mar 3' without year
+        var email = new EmailMessage
+        {
+            From = "notify@example.com",
+            Subject = "Reservation confirmed - Alice arrives Mar 3",
+            Body = @"
+                Confirmation code: HMARRIVE123
+                Listing: 22233344
+            "
+        };
+
+        // Act
+        var result = _service.ParseBooking(email);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Platform.Should().Be("airbnb");
+        result.BookingReference.Should().Be("HMARRIVE123");
+        // Expect year to be current year (2026)
+        result.CheckInDate.Should().Be(new DateTime(DateTime.Now.Year, 3, 3));
+    }
+
+    [Fact]
+    public void ParseBooking_Airbnb_NumericCheckIn_WithNights_CalculatesCheckOut()
+    {
+        // Arrange - numeric check-in and nights but no explicit check-out
+        var email = new EmailMessage
+        {
+            From = "automated@airbnb.com",
+            Subject = "Reservation confirmed",
+            Body = @"
+                Reservation Number: HMNIGHT123
+                Listing: 33344455
+                Check-in: 03/10/2026
+                2 nights
+            "
+        };
+
+        // Act
+        var result = _service.ParseBooking(email);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.CheckInDate.Should().Be(new DateTime(2026, 3, 10));
+        result.CheckOutDate.Should().Be(new DateTime(2026, 3, 12));
+    }
+
+    [Fact]
+    public void ParseBooking_DetectsAirbnb_FromConfirmationCodeInContent()
+    {
+        // Arrange - From doesn't include airbnb but content has Airbnb-style code
+        var email = new EmailMessage
+        {
+            From = "alerts@something.com",
+            Subject = "Reservation confirmed - New confirmation",
+            Body = @"
+                confirmation code: HMACODE9999
+                Listing: 99988877
+                Check-in: 05/01/2026
+            "
+        };
+
+        // Act
+        var result = _service.ParseBooking(email);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Platform.Should().Be("airbnb");
+        result.BookingReference.Should().Be("HMACODE9999");
+    }
+
+    [Fact]
+    public void ParseBooking_IncompleteAirbnb_ReturnsNull()
+    {
+        // Arrange - confirmation code present but missing listing and check-in
+        var email = new EmailMessage
+        {
+            From = "automated@airbnb.com",
+            Subject = "Reservation confirmed",
+            Body = @"
+                Confirmation code: HMNOINFO123
+            "
+        };
+
+        // Act
+        var result = _service.ParseBooking(email);
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseBooking_Airbnb_CheckIn_WordMonthParsesWithoutYear()
+    {
+        // Arrange - content contains "Check-in: Wed, Dec 3" style (no year)
+        var email = new EmailMessage
+        {
+            From = "automated@airbnb.com",
+            Subject = "Reservation confirmed",
+            Body = @"
+                Confirmation code: HMWORDMON123
+                Listing: 44455566
+                Check-in: Wed, Dec 3
+                4 nights
+            "
+        };
+
+        // Act
+        var result = _service.ParseBooking(email);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Platform.Should().Be("airbnb");
+        result.BookingReference.Should().Be("HMWORDMON123");
+        // Check-in year should be current year or next depending on date resolution, assert month/day
+        result.CheckInDate.Month.Should().Be(12);
+        result.CheckInDate.Day.Should().Be(3);
+        result.CheckOutDate.Should().Be(result.CheckInDate.AddDays(4));
+    }
+
+    [Fact]
+    public void ParseBooking_BookingCom_NamedDateFormats_ParsesDates()
+    {
+        // Arrange - booking.com style long date strings
+        var email = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "Booking Confirmation",
+            Body = @"
+                Booking ID: 99887766
+                Property: 55443322
+                Guest Name: Mary Major
+                Check-in: Thursday, 3 December 2026
+                Check-out: Sunday, 6 December 2026
+            "
+        };
+
+        // Act
+        var result = _service.ParseBooking(email);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Platform.Should().Be("bookingcom");
+        result.BookingReference.Should().Be("99887766");
+        result.CheckInDate.Should().Be(new DateTime(2026, 12, 3));
+        result.CheckOutDate.Should().Be(new DateTime(2026, 12, 6));
+    }
+
+    [Fact]
+    public void ParseBooking_Airbnb_AdultsAndChildrenSeparated_SumsCorrectly()
+    {
+        // Arrange - adults and children appear separately (fallback path)
+        var email = new EmailMessage
+        {
+            From = "automated@airbnb.com",
+            Subject = "Reservation confirmed",
+            Body = @"
+                Confirmation code: HMSPLIT123
+                Listing: 77788899
+                Check-in: 07/10/2026
+                2 adults
+                1 kid
+            "
+        };
+
+        // Act
+        var result = _service.ParseBooking(email);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Platform.Should().Be("airbnb");
+        result.BookingReference.Should().Be("HMSPLIT123");
+        result.PropertyId.Should().Be("77788899");
+        result.NumberOfGuests.Should().Be(3);
+    }
+
+    [Fact]
+    public void ParseBooking_Vrbo_UnitIdFallback_UsesUnitIdWhenNoProperty()
+    {
+        // Arrange - no Property but Unit present (fallback branch)
+        var email = new EmailMessage
+        {
+            From = "noreply@vrbo.com",
+            Subject = "Reservation Confirmation",
+            Body = @"
+                Reservation ID: HA-9ABCDEF
+                Unit: unit_1234567
+                Arrival: March 5, 2026
+                Departure: March 8, 2026
+            "
+        };
+
+        // Act
+        var result = _service.ParseBooking(email);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Platform.Should().Be("vrbo");
+        result.BookingReference.Should().Be("HA-9ABCDEF");
+        result.PropertyId.Should().Be("unit_1234567");
+    }
+
+        [Fact]
+        public void ParseBooking_Airbnb_SubjectCodeAndListingUrl_ReturnsBooking()
+        {
+            // Arrange - confirmation code in subject and listing URL in body
+            var email = new EmailMessage
+            {
+                From = "no-reply@notifications.example.com",
+                Subject = "Reservation confirmed - HMQABC1234",
+                Body = @"
+                    Your reservation is confirmed
+                    See listing: https://www.airbnb.com/rooms/12345678
+                    Check-in: 03/10/2026
+                    Check-out: 03/12/2026
+                "
+            };
+
+            // Act
+            var result = _service.ParseBooking(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("airbnb");
+            result.BookingReference.Should().Be("HMQABC1234");
+            result.PropertyId.Should().Be("12345678");
+            result.CheckInDate.Should().Be(new DateTime(2026, 3, 10));
+        }
+
+        [Fact]
+        public void ParseBooking_Airbnb_GuestBreakdown_AdultsAndChildren_SumsCorrectly()
+        {
+            // Arrange - explicit adults and children breakdown
+            var email = new EmailMessage
+            {
+                From = "automated@airbnb.com",
+                Subject = "Reservation confirmed",
+                Body = @"
+                    Listing: 55566677
+                    Check-in: 04/01/2026
+                    Check-out: 04/04/2026
+                    Guests: 2 adults, 1 children
+                "
+            };
+
+            // Act
+            var result = _service.ParseBooking(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.PropertyId.Should().Be("55566677");
+            result.NumberOfGuests.Should().Be(3);
+        }
+
+        [Fact]
+        public void ParseBooking_Vrbo_UnitIdFallback_ExtractsUnitAsPropertyId()
+        {
+            // Arrange - no Property: line, but Unit is present
+            var email = new EmailMessage
+            {
+                From = "noreply@vrbo.com",
+                Subject = "Your booking is confirmed",
+                Body = @"
+                    Reservation ID: 11223344
+                    Unit unit_9999999
+                    Arrival: May 5, 2026
+                    Departure: May 8, 2026
+                "
+            };
+
+            // Act
+            var result = _service.ParseBooking(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("vrbo");
+            result.PropertyId.Should().Be("unit_9999999");
+        }
+
+        }

@@ -143,7 +143,7 @@ public class CallbackFunctionTests
     {
         // Arrange
         // Ensure fallback default is used for this test
-        Environment.SetEnvironmentVariable("OWNER_EMAIL", null);
+        Environment.SetEnvironmentVariable("OWNER_EMAIL", "support@example.com");
         var function = new Function(_mockStepFunctions.Object, _mockSecretsManager.Object, _mockS3.Object);
         var request = new APIGatewayProxyRequest
         {
