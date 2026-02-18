@@ -441,6 +441,10 @@ Resources:
                 Resource: !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings/*'
               - Effect: Allow
                 Action:
+                  - s3:ListBucket
+                Resource: !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings'
+              - Effect: Allow
+                Action:
                   - lambda:InvokeFunction
                 Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NamespacePrefix}-${Environment}-lambda-${AppName}-Calendar'
 
