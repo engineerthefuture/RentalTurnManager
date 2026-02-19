@@ -36,7 +36,7 @@ sequenceDiagram
   participant CL as Calendar Lambda
   participant Owner as Property Owner
 
-  EB->>ML: Trigger (every 15 min)
+  EB->>ML: Trigger (every 20 min)
   ML->>IMAP: Scan for booking emails
   IMAP-->>ML: Return booking emails
 
@@ -120,7 +120,8 @@ RentalTurnManager/
 │   ├── RentalTurnManager.Core/            # Core business logic and services
 │   │   └── Services/                      # Email scanner, booking parser, state management
 │   ├── RentalTurnManager.Models/          # Data models and DTOs
-│   └── RentalTurnManager.Tests/           # Unit tests with xUnit
+│   ├── RentalTurnManager.Tests/           # Unit tests with xUnit
+│   └── RentalTurnManager.sln              # Solution file for the Visual Studio/.NET projects
 ├── infrastructure/
 │   ├── cloudformation/
 │   │   ├── main.yaml                      # CloudFormation template (all resources)
@@ -295,7 +296,7 @@ Add the following **variables**:
 - `NAMESPACE_PREFIX`: Resource name prefix (default: `bf`)
 - `OWNER_NAME`: Property owner name (default: `Property Owner`)
 - `IMAP_PORT`: IMAP port (default: `993`)
-- `SCHEDULE_INTERVAL`: Lambda schedule (default: `rate(15 minutes)`)
+- `SCHEDULE_INTERVAL`: Lambda schedule (default: `rate(20 minutes)`)
 - `APP_NAME`: Application name (default: `RentalTurnManager`)
 - `APP_DESCRIPTION`: Application description (default: `Rental property turnover management system`)
 
@@ -551,7 +552,7 @@ aws lambda invoke \
 
 ### Email Processing Workflow
 
-1. **Scheduled Execution**: EventBridge triggers Main Lambda on configured interval (default: every 15 minutes)
+1. **Scheduled Execution**: EventBridge triggers Main Lambda on configured interval (default: every 20 minutes)
 2. **Email Scanning**: Lambda connects to IMAP inbox and retrieves all booking emails (not just unread)
 3. **Booking Parsing**: 
    - Extracts confirmation codes (e.g., `HMFMAQS9MB` for Airbnb)
@@ -721,23 +722,23 @@ View execution history in AWS Console:
 
 ## Cost Estimation
 
-Approximate monthly costs (based on 1 property, checking every 15 minutes):
+Approximate monthly costs (based on 1 property, checking every 20 minutes):
 
 | Service | Usage | Monthly Cost |
 |---------|-------|--------------|
-| Lambda (Main) | ~2,880 invocations/month @ 1s avg | $0.60 |
+| Lambda (Main) | ~2,160 invocations/month @ 1s avg | $0.00 (at $0.20 per 1M requests) |
 | Lambda (Calendar) | ~20 invocations/month @ 0.5s avg | $0.01 |
 | Lambda (Callback) | ~20 invocations/month @ 0.2s avg | $0.01 |
-| Step Functions | ~20 executions, 100 state transitions | $2.50 |
+| Step Functions | ~20 executions, 100 state transitions | $0.00 (at $0.025 per 1,000 state transitions) |
 | S3 | Storage + requests | $0.10 |
 | Secrets Manager | 1 secret | $0.40 |
 | SES | ~100 emails/month | $0.00 (free tier) |
-| CloudWatch Logs | ~5 GB/month | $2.50 |
+| CloudWatch Logs | ~3.75 GB/month | $1.88 (at $0.50 per GB/month) |
 | API Gateway | ~20 requests/month | $0.00 (free tier) |
 
-**Estimated Total**: $6-8/month per property
+**Estimated Total**: Free for 1 property (stays within AWS free tier)
 
-**Scaling**: Add ~$3-5/month for each additional property.
+**Scaling**: Add ~$2-4/month for each additional property.
 
 ## Contributing
 
