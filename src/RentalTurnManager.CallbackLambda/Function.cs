@@ -24,6 +24,7 @@ using Amazon.Lambda.Model;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
@@ -123,10 +124,15 @@ public class Function
             var taskResponse = new { response = response, alternativeTime = alternativeTime };
             try
             {
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                };
+
                 await _stepFunctionsClient.SendTaskSuccessAsync(new SendTaskSuccessRequest
                 {
                     TaskToken = taskToken,
-                    Output = JsonSerializer.Serialize(taskResponse)
+                    Output = JsonSerializer.Serialize(taskResponse, jsonOptions)
                 });
                 context.Logger.LogInformation($"Successfully sent task success for {response} response");
             }

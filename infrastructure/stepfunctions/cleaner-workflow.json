@@ -261,18 +261,8 @@
       "Comment": "Check if alternative time was selected",
       "Choices": [
         {
-          "And": [
-            {
-              "Variable": "$.emailResult.alternativeTime",
-              "IsPresent": true
-            },
-            {
-              "Not": {
-                "Variable": "$.emailResult.alternativeTime",
-                "StringEquals": ""
-              }
-            }
-          ],
+          "Variable": "$.emailResult.alternativeTime",
+          "StringMatches": "*T*",
           "Next": "UpdateCleaningTimeForAlternative"
         }
       ],
