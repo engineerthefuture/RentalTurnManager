@@ -267,10 +267,8 @@
               "IsPresent": true
             },
             {
-              "Not": {
-                "Variable": "$.emailResult.alternativeTime",
-                "StringEquals": ""
-              }
+              "Variable": "$.emailResult.alternativeTime",
+              "StringMatches": "*T*"
             }
           ],
           "Next": "UpdateCleaningTimeForAlternative"
