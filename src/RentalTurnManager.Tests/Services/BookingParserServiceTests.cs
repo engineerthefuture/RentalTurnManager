@@ -509,4 +509,135 @@ public class BookingParserServiceTests
             result.PropertyId.Should().Be("unit_9999999");
         }
 
+        [Fact]
+        public void ParseCancellation_VrboEmail_WithPropertyIdAndReservation_ReturnsBooking()
+        {
+            // Arrange - VRBO cancellation email matching the example in the issue
+            var email = new EmailMessage
+            {
+                From = "noreply@vrbo.com",
+                Subject = "Booking canceled by traveler: Aug 8, 2026 - Aug 15, 2026 (Property ID 4706321) Reservation HA-W2T49E",
+                Body = "Your booking has been cancelled by the traveler."
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("vrbo");
+            result.BookingReference.Should().Be("HA-W2T49E");
+            result.PropertyId.Should().Be("4706321");
+            result.CheckInDate.Should().Be(new DateTime(2026, 8, 8));
+            result.CheckOutDate.Should().Be(new DateTime(2026, 8, 15));
         }
+
+        [Fact]
+        public void ParseCancellation_VrboEmail_SameYearDateRange_ReturnsBooking()
+        {
+            // Arrange - VRBO cancellation with "Month Day - Month Day, Year" format
+            var email = new EmailMessage
+            {
+                From = "sender@messages.homeaway.com",
+                Subject = "Booking canceled by traveler: Apr 3 - Apr 6, 2026 (Property ID 4906384) Reservation HA-25496K",
+                Body = string.Empty
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("vrbo");
+            result.BookingReference.Should().Be("HA-25496K");
+            result.PropertyId.Should().Be("4906384");
+            result.CheckInDate.Should().Be(new DateTime(2026, 4, 3));
+            result.CheckOutDate.Should().Be(new DateTime(2026, 4, 6));
+        }
+
+        [Fact]
+        public void ParseCancellation_AirbnbEmail_WithConfirmationCode_ReturnsBooking()
+        {
+            // Arrange
+            var email = new EmailMessage
+            {
+                From = "automated@airbnb.com",
+                Subject = "Reservation canceled",
+                Body = @"
+                    Your reservation has been canceled.
+                    Confirmation code: HMQDDDMPRY
+                    Listing: 12345678
+                "
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("airbnb");
+            result.BookingReference.Should().Be("HMQDDDMPRY");
+            result.PropertyId.Should().Be("12345678");
+        }
+
+        [Fact]
+        public void ParseCancellation_BookingComEmail_WithBookingId_ReturnsBooking()
+        {
+            // Arrange
+            var email = new EmailMessage
+            {
+                From = "noreply@booking.com",
+                Subject = "Booking cancelled",
+                Body = @"
+                    Booking ID: 9988776655
+                    Property: 11223344
+                    The booking has been cancelled.
+                "
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("bookingcom");
+            result.BookingReference.Should().Be("9988776655");
+            result.PropertyId.Should().Be("11223344");
+        }
+
+        [Fact]
+        public void ParseCancellation_UnknownPlatform_ReturnsNull()
+        {
+            // Arrange
+            var email = new EmailMessage
+            {
+                From = "unknown@example.com",
+                Subject = "Booking canceled",
+                Body = "No platform-specific content"
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().BeNull();
+        }
+
+        [Fact]
+        public void ParseCancellation_VrboEmail_NoBookingReference_ReturnsNull()
+        {
+            // Arrange - VRBO cancellation with no recognizable reservation ID
+            var email = new EmailMessage
+            {
+                From = "noreply@vrbo.com",
+                Subject = "Booking canceled by traveler",
+                Body = "No reservation ID in this email."
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().BeNull();
+        }
+    }

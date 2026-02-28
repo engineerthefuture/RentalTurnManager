@@ -20,6 +20,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RentalTurnManager.Core.Services;
 using RentalTurnManager.Models;
+using System.Net;
 using System.Text.Json;
 
 // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
@@ -156,6 +157,7 @@ public class Function
         services.AddAWSService<IAmazonStepFunctions>();
         services.AddAWSService<IAmazonSimpleEmailService>();
         services.AddAWSService<Amazon.S3.IAmazonS3>();
+        services.AddAWSService<Amazon.Lambda.IAmazonLambda>();
 
         // Add application services
         services.AddSingleton<ISecretsService, SecretsService>();
@@ -549,7 +551,73 @@ public class Function
                 }
             }
 
-            _logger.LogInformation($"Email scan complete. Processed {response.BookingsProcessed} bookings, started {response.WorkflowsStarted} workflows");
+            // Scan for and process booking cancellation emails
+            var cancellationSubjectPatterns = _propertiesConfig.EmailFilters?.CancellationSubjectPatterns
+                ?? new List<string> { "canceled by traveler", "Booking canceled", "Reservation canceled", "Booking cancelled", "Reservation cancelled" };
+            _logger.LogInformation($"Scanning for cancellation emails with patterns: {string.Join(", ", cancellationSubjectPatterns)}");
+
+            var cancellationEmails = await emailScanner.ScanForBookingEmailsAsync(emailCredentials, input.ForceRescan, fromAddresses, cancellationSubjectPatterns);
+            _logger.LogInformation($"Found {cancellationEmails.Count} cancellation emails");
+
+            foreach (var cancelEmail in cancellationEmails)
+            {
+                try
+                {
+                    var cancellation = bookingParser.ParseCancellation(cancelEmail);
+                    if (cancellation == null)
+                    {
+                        _logger.LogWarning($"Could not parse cancellation from email: {cancelEmail.Subject}");
+                        continue;
+                    }
+
+                    _logger.LogInformation($"Processing cancellation: {cancellation.Platform} - {cancellation.BookingReference}");
+
+                    // Look up the existing booking in S3
+                    var existingBooking = await bookingStateService.GetBookingAsync(cancellation.Platform, cancellation.BookingReference);
+                    if (existingBooking == null)
+                    {
+                        _logger.LogWarning($"Booking not found in S3 for cancellation: {cancellation.Platform}/{cancellation.BookingReference}");
+                        await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, cancelEmail);
+                        continue;
+                    }
+
+                    // Find the property config using the platform-specific ID
+                    var normalizedCancelPlatform = cancellation.Platform.ToLower() switch
+                    {
+                        "airbnb" => "airbnb",
+                        "vrbo" => "vrbo",
+                        "bookingcom" or "booking.com" => "bookingcom",
+                        _ => cancellation.Platform.ToLower()
+                    };
+
+                    var cancelProperty = _propertiesConfig.Properties?.FirstOrDefault(p =>
+                        p.PlatformIds.TryGetValue(normalizedCancelPlatform, out var id) &&
+                        id.Equals(existingBooking.PropertyId, StringComparison.OrdinalIgnoreCase));
+
+                    var ownerEmailForCancel = Environment.GetEnvironmentVariable("OWNER_EMAIL") ?? "support@example.com";
+                    var calendarLambdaName = Environment.GetEnvironmentVariable("CALENDAR_LAMBDA_NAME") ?? "RentalTurnManager-CalendarLambda";
+                    var lambdaClient = _serviceProvider.GetRequiredService<Amazon.Lambda.IAmazonLambda>();
+
+                    await ProcessBookingCancellationAsync(
+                        existingBooking,
+                        cancelProperty,
+                        ownerEmailForCancel,
+                        calendarLambdaName,
+                        lambdaClient);
+
+                    response.CancellationsProcessed++;
+                    await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, cancelEmail);
+                    _logger.LogInformation($"Processed cancellation for booking: {cancellation.Platform} - {cancellation.BookingReference}");
+                }
+                catch (Exception ex)
+                {
+                    var error = $"Error processing cancellation email '{cancelEmail.Subject}': {ex.Message}";
+                    _logger.LogError(ex, error);
+                    response.Errors.Add(error);
+                }
+            }
+
+            _logger.LogInformation($"Email scan complete. Processed {response.BookingsProcessed} bookings, started {response.WorkflowsStarted} workflows, processed {response.CancellationsProcessed} cancellations");
             response.Success = true;
         }
         catch (Exception ex)
@@ -560,6 +628,135 @@ public class Function
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Sends cancellation emails (with calendar CANCEL) to the cleaner and owner when a booking cancellation is received.
+    /// </summary>
+    private async Task ProcessBookingCancellationAsync(
+        Booking booking,
+        PropertyConfiguration? property,
+        string ownerEmail,
+        string calendarLambdaName,
+        Amazon.Lambda.IAmazonLambda lambdaClient)
+    {
+        var propertyName = booking.WorkflowPropertyId
+            ?? property?.Metadata.PropertyName
+            ?? booking.PropertyId;
+        var ownerName = property?.Metadata.OwnerName ?? "Property Management";
+
+        TimeZoneInfo easternZone;
+        try { easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); }
+        catch (TimeZoneNotFoundException) { easternZone = TimeZoneInfo.Utc; }
+
+        // Send cancellation email to cleaner (if a cleaner has been assigned)
+        if (!string.IsNullOrEmpty(booking.AssignedCleanerEmail) &&
+            !string.IsNullOrEmpty(booking.AssignedCleanerName) &&
+            booking.ScheduledCleaningTime.HasValue)
+        {
+            try
+            {
+                var easternTime = TimeZoneInfo.ConvertTimeFromUtc(booking.ScheduledCleaningTime.Value, easternZone);
+                var formattedDate = easternTime.ToString("MMMM dd, yyyy");
+                var formattedTime = easternTime.ToString("h:mm tt");
+
+                var cleanerHtmlBody = $@"<html><body>
+<p>Hello {WebUtility.HtmlEncode(booking.AssignedCleanerName)},</p>
+<p>The cleaning scheduled for <strong>{WebUtility.HtmlEncode(propertyName)}</strong> has been <strong style=""color: #dc3545;"">cancelled</strong> because the booking was cancelled by the traveler.</p>
+<p><strong>Cancelled Appointment:</strong></p>
+<ul>
+<li><strong>Property:</strong> {WebUtility.HtmlEncode(propertyName)}</li>
+<li><strong>Date:</strong> {WebUtility.HtmlEncode(formattedDate)}</li>
+<li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTime)}</li>
+</ul>
+<p>You do not need to attend this cleaning. If you added this to your calendar, the attached cancellation should remove it automatically.</p>
+<p>Thank you,<br/>{WebUtility.HtmlEncode(ownerName)}</p>
+</body></html>";
+
+                var cleanerRequest = new
+                {
+                    FromEmail = ownerEmail,
+                    ToEmail = booking.AssignedCleanerEmail,
+                    Subject = $"Cleaning Cancelled for {propertyName} on {formattedDate}",
+                    HtmlBody = cleanerHtmlBody,
+                    PropertyName = propertyName,
+                    CleanerName = booking.AssignedCleanerName,
+                    CleanerId = string.Empty,
+                    CleanerEmail = booking.AssignedCleanerEmail,
+                    OwnerEmail = ownerEmail,
+                    CleaningDate = booking.ScheduledCleaningTime.Value.ToString("o"),
+                    IsCancellation = true
+                };
+
+                await lambdaClient.InvokeAsync(new Amazon.Lambda.Model.InvokeRequest
+                {
+                    FunctionName = calendarLambdaName,
+                    InvocationType = Amazon.Lambda.InvocationType.RequestResponse,
+                    Payload = JsonSerializer.Serialize(cleanerRequest)
+                });
+                _logger.LogInformation($"Sent cancellation email to cleaner: {booking.AssignedCleanerEmail}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to send cancellation email to cleaner: {ex.Message}");
+            }
+        }
+
+        // Send cancellation email to owner
+        try
+        {
+            var cleaningDateForOwner = booking.ScheduledCleaningTime.HasValue
+                ? booking.ScheduledCleaningTime.Value.ToString("o")
+                : DateTime.UtcNow.ToString("o");
+            var formattedDateOwner = booking.ScheduledCleaningTime.HasValue
+                ? TimeZoneInfo.ConvertTimeFromUtc(booking.ScheduledCleaningTime.Value, easternZone).ToString("MMMM dd, yyyy")
+                : "Unknown Date";
+            var formattedTimeOwner = booking.ScheduledCleaningTime.HasValue
+                ? TimeZoneInfo.ConvertTimeFromUtc(booking.ScheduledCleaningTime.Value, easternZone).ToString("h:mm tt")
+                : "12:00 PM";
+
+            var ownerHtmlBody = $@"<html><body>
+<p>Hello {WebUtility.HtmlEncode(ownerName)},</p>
+<p>The booking for <strong>{WebUtility.HtmlEncode(propertyName)}</strong> has been <strong style=""color: #dc3545;"">cancelled by the traveler</strong>.</p>
+<p>The scheduled cleaning has been automatically cancelled.</p>
+<p><strong>Cancelled Appointment:</strong></p>
+<ul>
+<li><strong>Property:</strong> {WebUtility.HtmlEncode(propertyName)}</li>
+<li><strong>Cleaner:</strong> {WebUtility.HtmlEncode(booking.AssignedCleanerName ?? "(not yet assigned)")}</li>
+<li><strong>Date:</strong> {WebUtility.HtmlEncode(formattedDateOwner)}</li>
+<li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTimeOwner)}</li>
+</ul>
+<p>The cleaning appointment has been removed. The attached cancellation should remove it from your calendar automatically.</p>
+<p>Thank you,<br/>{WebUtility.HtmlEncode(ownerName)}</p>
+</body></html>";
+
+            var ownerRequest = new
+            {
+                FromEmail = ownerEmail,
+                ToEmail = ownerEmail,
+                Subject = $"Cleaning Cancelled for {propertyName} on {formattedDateOwner}",
+                HtmlBody = ownerHtmlBody,
+                PropertyName = propertyName,
+                CleanerName = booking.AssignedCleanerName ?? "(not yet assigned)",
+                CleanerId = string.Empty,
+                CleanerEmail = ownerEmail,
+                OwnerEmail = ownerEmail,
+                CleaningDate = cleaningDateForOwner,
+                IsCancellation = true
+            };
+
+            await lambdaClient.InvokeAsync(new Amazon.Lambda.Model.InvokeRequest
+            {
+                FunctionName = calendarLambdaName,
+                InvocationType = Amazon.Lambda.InvocationType.RequestResponse,
+                Payload = JsonSerializer.Serialize(ownerRequest)
+            });
+            _logger.LogInformation($"Sent cancellation email to owner: {ownerEmail}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to send cancellation email to owner: {ex.Message}");
+        }
     }
 
     /// <summary>

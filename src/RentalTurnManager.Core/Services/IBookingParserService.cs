@@ -20,4 +20,5 @@ namespace RentalTurnManager.Core.Services;
 public interface IBookingParserService
 {
     Booking? ParseBooking(EmailMessage email);
+    Booking? ParseCancellation(EmailMessage email);
 }

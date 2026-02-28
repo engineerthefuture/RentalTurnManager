@@ -16,6 +16,7 @@
     <PackageReference Include="Amazon.Lambda.Core" Version="2.2.0" />
     <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.1" />
     <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.3" />
+    <PackageReference Include="AWSSDK.Lambda" Version="4.0.2.2" />
     <PackageReference Include="AWSSDK.SecretsManager" Version="4.0.3" />
     <PackageReference Include="AWSSDK.StepFunctions" Version="4.0.2.9" />
     <PackageReference Include="AWSSDK.SimpleEmail" Version="4.0.2.13" />

@@ -43,5 +43,6 @@ public class LambdaResponse
     public bool Success { get; set; }
     public int BookingsProcessed { get; set; }
     public int WorkflowsStarted { get; set; }
+    public int CancellationsProcessed { get; set; }
     public List<string> Errors { get; set; } = new();
 }
