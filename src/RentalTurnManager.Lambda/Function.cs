@@ -581,6 +581,14 @@ public class Function
                         continue;
                     }
 
+                    // Skip if this cancellation has already been processed (idempotency guard)
+                    if (existingBooking.IsCancelled)
+                    {
+                        _logger.LogInformation($"Cancellation already processed for booking {cancellation.Platform}/{cancellation.BookingReference} at {existingBooking.CancellationProcessedAt:u}. Skipping.");
+                        await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, cancelEmail);
+                        continue;
+                    }
+
                     // Find the property config using the platform-specific ID
                     var normalizedCancelPlatform = cancellation.Platform.ToLower() switch
                     {
@@ -604,6 +612,11 @@ public class Function
                         ownerEmailForCancel,
                         calendarLambdaName,
                         lambdaClient);
+
+                    // Mark the booking as cancelled in S3 so future runs skip it
+                    existingBooking.IsCancelled = true;
+                    existingBooking.CancellationProcessedAt = DateTime.UtcNow;
+                    await bookingStateService.SaveBookingAsync(existingBooking);
 
                     response.CancellationsProcessed++;
                     await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, cancelEmail);

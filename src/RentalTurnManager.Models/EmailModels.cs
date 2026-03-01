@@ -40,6 +40,18 @@ public class Booking
     public string? WorkflowCallbackApiUrl { get; set; }
     public string? WorkflowBookingStateBucket { get; set; }
     
+    // Cancellation tracking
+    /// <summary>
+    /// True when a cancellation email for this booking has already been processed.
+    /// Used to prevent duplicate cancellation handling across Lambda invocations.
+    /// </summary>
+    public bool IsCancelled { get; set; }
+
+    /// <summary>
+    /// UTC timestamp of when the cancellation was first processed, for audit purposes.
+    /// </summary>
+    public DateTime? CancellationProcessedAt { get; set; }
+
     /// <summary>
     /// Number of days in the booking (CheckOut - CheckIn)
     /// </summary>
