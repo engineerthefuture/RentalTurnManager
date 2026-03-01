@@ -670,25 +670,34 @@ public class Function
         try { easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); }
         catch (TimeZoneNotFoundException) { easternZone = TimeZoneInfo.Utc; }
 
+        // Prefer the confirmed cleaning time; fall back to checkout date (the expected cleaning day)
+        // when no cleaner had been assigned/confirmed yet.
+        var effectiveCleaningTime = booking.ScheduledCleaningTime
+            ?? (booking.CheckOutDate != default ? booking.CheckOutDate : (DateTime?)null);
+
+        var effectiveEasternTime = effectiveCleaningTime.HasValue
+            ? TimeZoneInfo.ConvertTimeFromUtc(effectiveCleaningTime.Value, easternZone)
+            : (DateTime?)null;
+        var effectiveFormattedDate = effectiveEasternTime?.ToString("MMMM dd, yyyy") ?? "Unknown Date";
+        var effectiveFormattedTime = booking.ScheduledCleaningTime.HasValue
+            ? TimeZoneInfo.ConvertTimeFromUtc(booking.ScheduledCleaningTime.Value, easternZone).ToString("h:mm tt")
+            : "10:00 AM"; // checkout time; cleaning starts after checkout
+        var effectiveCleaningDateIso = effectiveCleaningTime?.ToString("o") ?? DateTime.UtcNow.ToString("o");
+
         // Send cancellation email to cleaner (if a cleaner has been assigned)
         if (!string.IsNullOrEmpty(booking.AssignedCleanerEmail) &&
-            !string.IsNullOrEmpty(booking.AssignedCleanerName) &&
-            booking.ScheduledCleaningTime.HasValue)
+            !string.IsNullOrEmpty(booking.AssignedCleanerName))
         {
             try
             {
-                var easternTime = TimeZoneInfo.ConvertTimeFromUtc(booking.ScheduledCleaningTime.Value, easternZone);
-                var formattedDate = easternTime.ToString("MMMM dd, yyyy");
-                var formattedTime = easternTime.ToString("h:mm tt");
-
                 var cleanerHtmlBody = $@"<html><body>
 <p>Hello {WebUtility.HtmlEncode(booking.AssignedCleanerName)},</p>
 <p>The cleaning scheduled for <strong>{WebUtility.HtmlEncode(propertyName)}</strong> has been <strong style=""color: #dc3545;"">cancelled</strong> because the booking was cancelled by the traveler.</p>
 <p><strong>Cancelled Appointment:</strong></p>
 <ul>
 <li><strong>Property:</strong> {WebUtility.HtmlEncode(propertyName)}</li>
-<li><strong>Date:</strong> {WebUtility.HtmlEncode(formattedDate)}</li>
-<li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTime)}</li>
+<li><strong>Date:</strong> {WebUtility.HtmlEncode(effectiveFormattedDate)}</li>
+<li><strong>Time:</strong> {WebUtility.HtmlEncode(effectiveFormattedTime)}</li>
 </ul>
 <p>You do not need to attend this cleaning. If you added this to your calendar, the attached cancellation should remove it automatically.</p>
 <p>Thank you,<br/>{WebUtility.HtmlEncode(ownerName)}</p>
@@ -698,14 +707,14 @@ public class Function
                 {
                     FromEmail = ownerEmail,
                     ToEmail = booking.AssignedCleanerEmail,
-                    Subject = $"Cleaning Cancelled for {propertyName} on {formattedDate}",
+                    Subject = $"Cleaning Cancelled for {propertyName} on {effectiveFormattedDate}",
                     HtmlBody = cleanerHtmlBody,
                     PropertyName = propertyName,
                     CleanerName = booking.AssignedCleanerName,
                     CleanerId = string.Empty,
                     CleanerEmail = booking.AssignedCleanerEmail,
                     OwnerEmail = ownerEmail,
-                    CleaningDate = booking.ScheduledCleaningTime.Value.ToString("o"),
+                    CleaningDate = effectiveCleaningDateIso,
                     IsCancellation = true
                 };
 
@@ -726,15 +735,6 @@ public class Function
         // Send cancellation email to owner
         try
         {
-            var cleaningDateForOwner = booking.ScheduledCleaningTime.HasValue
-                ? booking.ScheduledCleaningTime.Value.ToString("o")
-                : DateTime.UtcNow.ToString("o");
-            var formattedDateOwner = booking.ScheduledCleaningTime.HasValue
-                ? TimeZoneInfo.ConvertTimeFromUtc(booking.ScheduledCleaningTime.Value, easternZone).ToString("MMMM dd, yyyy")
-                : "Unknown Date";
-            var formattedTimeOwner = booking.ScheduledCleaningTime.HasValue
-                ? TimeZoneInfo.ConvertTimeFromUtc(booking.ScheduledCleaningTime.Value, easternZone).ToString("h:mm tt")
-                : "12:00 PM";
 
             var ownerHtmlBody = $@"<html><body>
 <p>Hello {WebUtility.HtmlEncode(ownerName)},</p>
@@ -744,8 +744,8 @@ public class Function
 <ul>
 <li><strong>Property:</strong> {WebUtility.HtmlEncode(propertyName)}</li>
 <li><strong>Cleaner:</strong> {WebUtility.HtmlEncode(booking.AssignedCleanerName ?? "(not yet assigned)")}</li>
-<li><strong>Date:</strong> {WebUtility.HtmlEncode(formattedDateOwner)}</li>
-<li><strong>Time:</strong> {WebUtility.HtmlEncode(formattedTimeOwner)}</li>
+<li><strong>Date:</strong> {WebUtility.HtmlEncode(effectiveFormattedDate)}</li>
+<li><strong>Time:</strong> {WebUtility.HtmlEncode(effectiveFormattedTime)}</li>
 </ul>
 <p>The cleaning appointment has been removed. The attached cancellation should remove it from your calendar automatically.</p>
 <p>Thank you,<br/>{WebUtility.HtmlEncode(ownerName)}</p>
@@ -755,14 +755,14 @@ public class Function
             {
                 FromEmail = ownerEmail,
                 ToEmail = ownerEmail,
-                Subject = $"Cleaning Cancelled for {propertyName} on {formattedDateOwner}",
+                Subject = $"Cleaning Cancelled for {propertyName} on {effectiveFormattedDate}",
                 HtmlBody = ownerHtmlBody,
                 PropertyName = propertyName,
                 CleanerName = booking.AssignedCleanerName ?? "(not yet assigned)",
                 CleanerId = string.Empty,
                 CleanerEmail = ownerEmail,
                 OwnerEmail = ownerEmail,
-                CleaningDate = cleaningDateForOwner,
+                CleaningDate = effectiveCleaningDateIso,
                 IsCancellation = true
             };
 
