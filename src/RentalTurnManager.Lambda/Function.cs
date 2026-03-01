@@ -760,7 +760,7 @@ public class Function
                 PropertyName = propertyName,
                 CleanerName = booking.AssignedCleanerName ?? "(not yet assigned)",
                 CleanerId = string.Empty,
-                CleanerEmail = ownerEmail,
+                CleanerEmail = booking.AssignedCleanerEmail ?? ownerEmail,
                 OwnerEmail = ownerEmail,
                 CleaningDate = effectiveCleaningDateIso,
                 IsCancellation = true
