@@ -203,6 +203,10 @@ Resources:
                 Resource: '*'
               - Effect: Allow
                 Action:
+                  - lambda:InvokeFunction
+                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NamespacePrefix}-${Environment}-lambda-${AppName}-Calendar'
+              - Effect: Allow
+                Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
