@@ -228,6 +228,47 @@ public class FunctionCancellationTests
             Times.Once);
     }
 
+    /// <summary>
+    /// When the owner notification lambda invoke fails, ProcessBookingCancellationAsync returns false.
+    /// The booking must NOT be saved as IsCancelled and the email must NOT be marked processed,
+    /// so the next Lambda run retries the cancellation.
+    /// </summary>
+    [Fact]
+    public async Task FunctionHandler_CancellationOwnerEmailFails_DoesNotMarkBookingCancelled()
+    {
+        // Arrange – return a booking that has not yet been cancelled
+        _mockBookingStateService
+            .Setup(x => x.GetBookingAsync(_parsedCancellation.Platform, _parsedCancellation.BookingReference))
+            .ReturnsAsync(CloneBooking(_storedBooking));
+
+        // Force the calendar lambda invoke to throw (simulates IAM denial / timeout)
+        _mockLambdaClient
+            .Setup(x => x.InvokeAsync(It.IsAny<InvokeRequest>(), default))
+            .ThrowsAsync(new Amazon.Lambda.AmazonLambdaException("not authorized to perform: lambda:InvokeFunction"));
+
+        var context = new TestLambdaContext { AwsRequestId = "test-owner-email-fail" };
+
+        // Act
+        var result = await _function.FunctionHandler(new LambdaRequest(), context);
+
+        // Assert – overall handler succeeds but the cancellation was not counted
+        result.Success.Should().BeTrue();
+        result.CancellationsProcessed.Should().Be(0,
+            "cancellation should not be counted when the owner notification failed");
+
+        // The booking must NOT be saved as cancelled so the next run retries
+        _mockBookingStateService.Verify(
+            x => x.SaveBookingAsync(It.IsAny<Booking>()),
+            Times.Never,
+            "Booking must not be marked IsCancelled when email delivery failed");
+
+        // The email must NOT be marked processed — it must be retried next run
+        _mockEmailScanner.Verify(
+            x => x.MarkEmailAsProcessedAsync(It.IsAny<EmailCredentials>(), _cancelEmail),
+            Times.Never,
+            "Cancellation email must not be marked processed when owner notification failed");
+    }
+
     // Simple deep-copy helper to avoid mutation across tests
     private static Booking CloneBooking(Booking b) => new()
     {

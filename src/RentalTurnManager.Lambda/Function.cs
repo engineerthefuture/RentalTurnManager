@@ -606,20 +606,26 @@ public class Function
                     var calendarLambdaName = Environment.GetEnvironmentVariable("CALENDAR_LAMBDA_NAME") ?? "RentalTurnManager-CalendarLambda";
                     var lambdaClient = _serviceProvider.GetRequiredService<Amazon.Lambda.IAmazonLambda>();
 
-                    await ProcessBookingCancellationAsync(
+                    var cancellationSucceeded = await ProcessBookingCancellationAsync(
                         existingBooking,
                         cancelProperty,
                         ownerEmailForCancel,
                         calendarLambdaName,
                         lambdaClient);
 
-                    // Mark the booking as cancelled in S3 so future runs skip it
-                    existingBooking.IsCancelled = true;
-                    existingBooking.CancellationProcessedAt = DateTime.UtcNow;
-                    await bookingStateService.SaveBookingAsync(existingBooking);
-
-                    response.CancellationsProcessed++;
-                    await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, cancelEmail);
+                    if (cancellationSucceeded)
+                    {
+                        // Mark the booking as cancelled in S3 so future runs skip it
+                        existingBooking.IsCancelled = true;
+                        existingBooking.CancellationProcessedAt = DateTime.UtcNow;
+                        await bookingStateService.SaveBookingAsync(existingBooking);
+                        response.CancellationsProcessed++;
+                        await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, cancelEmail);
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Cancellation notifications failed for {cancellation.Platform}/{cancellation.BookingReference}. Booking will not be marked as cancelled so it retries on the next run.");
+                    }
                     _logger.LogInformation($"Processed cancellation for booking: {cancellation.Platform} - {cancellation.BookingReference}");
                 }
                 catch (Exception ex)
@@ -645,8 +651,10 @@ public class Function
 
     /// <summary>
     /// Sends cancellation emails (with calendar CANCEL) to the cleaner and owner when a booking cancellation is received.
+    /// Returns true when the owner notification was sent successfully; false otherwise.
+    /// The cleaner notification is best-effort and does not affect the return value.
     /// </summary>
-    private async Task ProcessBookingCancellationAsync(
+    private async Task<bool> ProcessBookingCancellationAsync(
         Booking booking,
         PropertyConfiguration? property,
         string ownerEmail,
@@ -765,10 +773,12 @@ public class Function
                 Payload = JsonSerializer.Serialize(ownerRequest)
             });
             _logger.LogInformation($"Sent cancellation email to owner: {ownerEmail}");
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, $"Failed to send cancellation email to owner: {ex.Message}");
+            return false;
         }
     }
 
