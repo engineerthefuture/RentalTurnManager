@@ -203,6 +203,10 @@ Resources:
                 Resource: '*'
               - Effect: Allow
                 Action:
+                  - lambda:InvokeFunction
+                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NamespacePrefix}-${Environment}-lambda-${AppName}-Calendar'
+              - Effect: Allow
+                Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
@@ -240,6 +244,7 @@ Resources:
           BOOKING_STATE_BUCKET: !Ref BookingStateBucket
           NAMESPACE_PREFIX: !Ref NamespacePrefix
           APP_NAME: !Ref AppName
+          CALENDAR_LAMBDA_NAME: !Sub '${NamespacePrefix}-${Environment}-lambda-${AppName}-Calendar'
       Code:
         S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
         S3Key: !Sub '${AppName}/lambda/lambda-deployment.zip'

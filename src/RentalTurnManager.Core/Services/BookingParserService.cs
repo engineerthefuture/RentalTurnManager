@@ -64,7 +64,7 @@ public class BookingParserService : IBookingParserService
         // First try to determine from From address
         if (from.Contains("airbnb.com"))
             return "airbnb";
-        if (from.Contains("vrbo.com"))
+        if (from.Contains("vrbo.com") || from.Contains("homeaway"))
             return "vrbo";
         if (from.Contains("booking.com"))
             return "bookingcom";
@@ -94,6 +94,144 @@ public class BookingParserService : IBookingParserService
         }
 
         return string.Empty;
+    }
+
+    public Booking? ParseCancellation(EmailMessage email)
+    {
+        try
+        {
+            var platform = DeterminePlatform(email);
+            if (string.IsNullOrEmpty(platform))
+            {
+                _logger.LogWarning($"Could not determine platform for cancellation email: {email.Subject}");
+                return null;
+            }
+
+            return platform.ToLower() switch
+            {
+                "airbnb" => ParseAirbnbCancellation(email),
+                "vrbo" => ParseVrboCancellation(email),
+                "bookingcom" => ParseBookingComCancellation(email),
+                _ => null
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error parsing cancellation from email: {email.Subject}");
+            return null;
+        }
+    }
+
+    private Booking? ParseVrboCancellation(EmailMessage email)
+    {
+        var subject = email.Subject ?? "";
+        var content = (email.HtmlBody ?? "") + " " + (email.Body ?? "");
+
+        var booking = new Booking { Platform = "vrbo" };
+
+        // Extract Property ID from subject: "(Property ID 4706321)" or "Property ID 4706321"
+        var propertyMatch = Regex.Match(subject, @"\(Property\s+ID\s+(\d+)\)", RegexOptions.IgnoreCase);
+        if (!propertyMatch.Success)
+            propertyMatch = Regex.Match(subject, @"Property\s+ID\s+(\d+)", RegexOptions.IgnoreCase);
+        if (!propertyMatch.Success)
+            propertyMatch = Regex.Match(content, @"Property[:\s#>]+(\d+)", RegexOptions.IgnoreCase);
+        if (propertyMatch.Success)
+            booking.PropertyId = propertyMatch.Groups[1].Value;
+
+        // Extract Reservation ID from subject or content: "Reservation HA-W2T49E"
+        var refMatch = Regex.Match(subject, @"Reservation\s+([A-Z]{2}-[A-Z0-9]{4,})", RegexOptions.IgnoreCase);
+        if (!refMatch.Success)
+            refMatch = Regex.Match(content, @"(?:Reservation\s+ID|Confirmation\s+Number)[:\s>]+([A-Z]{2}-[A-Z0-9]{6,}|\d{8,})", RegexOptions.IgnoreCase);
+        if (refMatch.Success)
+            booking.BookingReference = refMatch.Groups[1].Value.ToUpper();
+
+        // Extract date range from subject: "Aug 8, 2026 - Aug 15, 2026"
+        var subjectDateMatch = Regex.Match(subject, @"(\w+\s+\d{1,2}),?\s+(\d{4})\s*-\s*(\w+\s+\d{1,2}),?\s+(\d{4})", RegexOptions.IgnoreCase);
+        if (subjectDateMatch.Success)
+        {
+            if (DateTime.TryParse($"{subjectDateMatch.Groups[1].Value}, {subjectDateMatch.Groups[2].Value}", out var checkIn))
+                booking.CheckInDate = checkIn;
+            if (DateTime.TryParse($"{subjectDateMatch.Groups[3].Value}, {subjectDateMatch.Groups[4].Value}", out var checkOut))
+                booking.CheckOutDate = checkOut;
+        }
+        else
+        {
+            // Try "Aug 8 - Aug 15, 2026" (same year)
+            var singleYearMatch = Regex.Match(subject, @"(\w+\s+\d{1,2})\s*-\s*(\w+\s+\d{1,2}),\s+(\d{4})", RegexOptions.IgnoreCase);
+            if (singleYearMatch.Success)
+            {
+                var year = singleYearMatch.Groups[3].Value;
+                if (DateTime.TryParse($"{singleYearMatch.Groups[1].Value}, {year}", out var checkIn))
+                    booking.CheckInDate = checkIn;
+                if (DateTime.TryParse($"{singleYearMatch.Groups[2].Value}, {year}", out var checkOut))
+                    booking.CheckOutDate = checkOut;
+            }
+        }
+
+        if (string.IsNullOrEmpty(booking.BookingReference))
+        {
+            _logger.LogWarning($"Could not extract booking reference from VRBO cancellation email: {subject}");
+            return null;
+        }
+
+        _logger.LogInformation($"Parsed VRBO cancellation - PropertyId: '{booking.PropertyId}', Reference: '{booking.BookingReference}'");
+        return booking;
+    }
+
+    private Booking? ParseAirbnbCancellation(EmailMessage email)
+    {
+        var subject = email.Subject ?? "";
+        var content = (email.HtmlBody ?? "") + " " + (email.Body ?? "");
+
+        var booking = new Booking { Platform = "airbnb" };
+
+        // Extract confirmation code (HM-style)
+        var refMatch = Regex.Match(content, @"(?:confirmation|reservation)\s*code[:\s>]+([A-Z0-9]{8,12})\b", RegexOptions.IgnoreCase);
+        if (!refMatch.Success)
+            refMatch = Regex.Match(content, @"\b(HM[A-Z0-9]{8,10})\b", RegexOptions.IgnoreCase);
+        if (!refMatch.Success)
+            refMatch = Regex.Match(subject, @"\b(HM[A-Z0-9]{8,10})\b", RegexOptions.IgnoreCase);
+        if (refMatch.Success)
+            booking.BookingReference = refMatch.Groups[1].Value.ToUpper();
+
+        // Extract listing/property ID
+        var listingMatch = Regex.Match(content, @"(?:listing|rooms?)[/:\s#]+(\d+)", RegexOptions.IgnoreCase);
+        if (listingMatch.Success)
+            booking.PropertyId = listingMatch.Groups[1].Value;
+
+        if (string.IsNullOrEmpty(booking.BookingReference))
+        {
+            _logger.LogWarning($"Could not extract booking reference from Airbnb cancellation email: {subject}");
+            return null;
+        }
+
+        _logger.LogInformation($"Parsed Airbnb cancellation - PropertyId: '{booking.PropertyId}', Reference: '{booking.BookingReference}'");
+        return booking;
+    }
+
+    private Booking? ParseBookingComCancellation(EmailMessage email)
+    {
+        var subject = email.Subject ?? "";
+        var content = (email.HtmlBody ?? "") + " " + (email.Body ?? "");
+
+        var booking = new Booking { Platform = "bookingcom" };
+
+        var refMatch = Regex.Match(content, @"(?:booking|reservation)\s*(?:number|ID)[:\s#]+([0-9]+)", RegexOptions.IgnoreCase);
+        if (refMatch.Success)
+            booking.BookingReference = refMatch.Groups[1].Value;
+
+        var propertyMatch = Regex.Match(content, @"property[:\s]+([0-9]+)", RegexOptions.IgnoreCase);
+        if (propertyMatch.Success)
+            booking.PropertyId = propertyMatch.Groups[1].Value;
+
+        if (string.IsNullOrEmpty(booking.BookingReference))
+        {
+            _logger.LogWarning($"Could not extract booking reference from Booking.com cancellation email: {subject}");
+            return null;
+        }
+
+        _logger.LogInformation($"Parsed Booking.com cancellation - PropertyId: '{booking.PropertyId}', Reference: '{booking.BookingReference}'");
+        return booking;
     }
 
     private Booking? ParseAirbnbBooking(EmailMessage email)

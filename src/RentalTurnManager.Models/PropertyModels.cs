@@ -82,4 +82,13 @@ public class EmailFilterConfiguration
         "Instant Booking from",
         "booking confirmation"
     };
+
+    public List<string> CancellationSubjectPatterns { get; set; } = new()
+    {
+        "canceled by traveler",
+        "Booking canceled",
+        "Reservation canceled",
+        "Booking cancelled",
+        "Reservation cancelled"
+    };
 }

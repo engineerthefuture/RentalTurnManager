@@ -5,6 +5,8 @@ on:
     branches:
       - main
       - dev
+      - 'copilot/**'
+      - 'copilot-*'
     tags:
       - 'v*'
     paths-ignore:
@@ -117,6 +119,8 @@ jobs:
             echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref }}" == "refs/heads/main" ]] || [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             echo "environment=prod" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/heads/copilot/* ]] || [[ "${{ github.ref }}" == refs/heads/copilot-* ]]; then
+            echo "environment=dev" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref }}" == "refs/heads/dev" ]]; then
             echo "environment=dev" >> $GITHUB_OUTPUT
           else
