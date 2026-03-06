@@ -385,7 +385,77 @@ public class BookingParserService : IBookingParserService
             }
         }
 
-        // Extract guest name - check subject first ("Angel Tristan arrives Dec 3")
+        // Try to parse checkout date directly if not found yet
+        // Handle format: "Checkout\n[Day of week]\nMonth Day, Year" or "checkout: Month Day, Year"
+        if (booking.CheckOutDate == default)
+        {
+            // First try the inline format with colon
+            var checkOutMatch = Regex.Match(content, @"check[\s-]*out[:\s>]+(?:\w+,?\s+)?(\w+\s+\d{1,2},?\s+\d{4})", RegexOptions.IgnoreCase);
+            if (checkOutMatch.Success)
+            {
+                if (DateTime.TryParse(checkOutMatch.Groups[1].Value, out var checkOut))
+                {
+                    booking.CheckOutDate = checkOut;
+                    _logger.LogInformation($"Extracted checkout date (inline format): {booking.CheckOutDate:yyyy-MM-dd}");
+                }
+            }
+            else
+            {
+                // Try format with day of week on separate line: "Checkout\nMonday\nMarch 9, 2026"
+                // This pattern allows for whitespace/newlines between checkout and the date
+                var checkOutMultilineMatch = Regex.Match(content, @"check[\s-]*out[\s\r\n<>]+(?:\w+[\s\r\n<>]+)?(\w+\s+\d{1,2},\s+\d{4})", RegexOptions.IgnoreCase);
+                if (checkOutMultilineMatch.Success)
+                {
+                    if (DateTime.TryParse(checkOutMultilineMatch.Groups[1].Value, out var checkOut))
+                    {
+                        booking.CheckOutDate = checkOut;
+                        _logger.LogInformation($"Extracted checkout date (multiline format): {booking.CheckOutDate:yyyy-MM-dd}");
+                    }
+                }
+            }
+        }
+
+        // Try Airbnb two-column plain text layout (no year on dates):
+        // "Check-in     Checkout"
+        // "Fri, Mar 6   Mon, Mar 9"
+        if (booking.CheckInDate == default || booking.CheckOutDate == default)
+        {
+            var twoColMatch = Regex.Match(content,
+                @"check[\s-]*in\s+check[\s-]*out[\s\S]{0,50}?((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+\w+\s+\d{1,2})\s+((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+\w+\s+\d{1,2})",
+                RegexOptions.IgnoreCase);
+            if (twoColMatch.Success)
+            {
+                var currentYear = DateTime.Now.Year;
+                var checkInAbbrev = twoColMatch.Groups[1].Value;
+                var checkOutAbbrev = twoColMatch.Groups[2].Value;
+
+                if (booking.CheckInDate == default)
+                {
+                    var cleanCheckIn = Regex.Replace(checkInAbbrev, @"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*", "", RegexOptions.IgnoreCase);
+                    if (DateTime.TryParse($"{cleanCheckIn}, {currentYear}", out var ci))
+                    {
+                        if (ci < DateTime.Now.AddDays(-30)) ci = ci.AddYears(1);
+                        booking.CheckInDate = ci;
+                        _logger.LogInformation($"Extracted check-in from two-column format: {booking.CheckInDate:yyyy-MM-dd}");
+                    }
+                }
+
+                if (booking.CheckOutDate == default && booking.CheckInDate != default)
+                {
+                    var cleanCheckOut = Regex.Replace(checkOutAbbrev, @"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*", "", RegexOptions.IgnoreCase);
+                    var checkOutYear = booking.CheckInDate.Year;
+                    if (DateTime.TryParse($"{cleanCheckOut}, {checkOutYear}", out var co))
+                    {
+                        // If checkout is before check-in it must be the following year (e.g. Dec 30 → Jan 3)
+                        if (co < booking.CheckInDate) co = co.AddYears(1);
+                        booking.CheckOutDate = co;
+                        _logger.LogInformation($"Extracted checkout from two-column format: {booking.CheckOutDate:yyyy-MM-dd}");
+                    }
+                }
+            }
+        }
+
+        // Extract guest name - check subject first ("Angel Guester arrives Dec 3")
         var subjectGuestMatch = Regex.Match(subject, @"([A-Z][a-z]+\s+[A-Z][a-z]+)\s+arrives", RegexOptions.IgnoreCase);
         if (subjectGuestMatch.Success)
         {
