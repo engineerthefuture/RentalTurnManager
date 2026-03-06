@@ -640,4 +640,49 @@ public class BookingParserServiceTests
             // Assert
             result.Should().BeNull();
         }
+
+        [Fact]
+        public void ParseBooking_Airbnb_TwoColumnPlainTextLayout_ParsesCheckOutDate()
+        {
+            // Arrange - simulates the Airbnb host confirmation email plain-text body format:
+            //   "Check-in     Checkout"
+            //   "Fri, Mar 6   Mon, Mar 9"
+            // The checkout date has no year and must be inferred from the check-in year.
+            var email = new EmailMessage
+            {
+                From = "automated@airbnb.com",
+                Subject = "Reservation confirmed - Ty Lindberg arrives Mar 6",
+                Body = @"
+NEW BOOKING CONFIRMED! TY ARRIVES MAR 6.
+
+https://www.airbnb.com/rooms/1477018601970190586
+
+Check-in     Checkout
+             
+Fri, Mar 6   Mon, Mar 9
+             
+3:00 PM      11:00 AM
+
+GUESTS
+
+4 adults
+
+CONFIRMATION CODE
+HMTYTZ48P9
+"
+            };
+
+            // Act
+            var result = _service.ParseBooking(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("airbnb");
+            result.BookingReference.Should().Be("HMTYTZ48P9");
+            result.PropertyId.Should().Be("1477018601970190586");
+            result.GuestName.Should().Be("Ty Lindberg");
+            result.CheckInDate.Should().Be(new DateTime(2026, 3, 6));
+            result.CheckOutDate.Should().Be(new DateTime(2026, 3, 9));
+            result.NumberOfGuests.Should().Be(4);
+        }
     }
