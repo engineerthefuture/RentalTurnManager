@@ -785,7 +785,7 @@ public class Function
                 _logger.LogError("CalendarLambda owner cancellation invoke returned FunctionError: {FunctionError}", ownerInvokeResponse.FunctionError);
                 throw new Exception($"CalendarLambda owner cancellation invoke failed with FunctionError: {ownerInvokeResponse.FunctionError}");
             }
-            _logger.LogInformation($"Sent cancellation email to owner: {ownerEmail}");
+            _logger.LogInformation($"Sent cancellation email to owner email address.");
             return true;
         }
         catch (Exception ex)
