@@ -269,6 +269,74 @@ public class FunctionCancellationTests
             "Cancellation email must not be marked processed when owner notification failed");
     }
 
+    /// <summary>
+    /// If a cancellation arrives before booking state exists in S3, the email should remain
+    /// unprocessed so a later run can retry once the booking is persisted.
+    /// </summary>
+    [Fact]
+    public async Task FunctionHandler_CancellationBookingMissing_LeavesEmailUnprocessedForRetry()
+    {
+        // Arrange
+        _mockBookingStateService
+            .Setup(x => x.GetBookingAsync(_parsedCancellation.Platform, _parsedCancellation.BookingReference))
+            .ReturnsAsync((Booking?)null);
+
+        var context = new TestLambdaContext { AwsRequestId = "test-missing-booking" };
+
+        // Act
+        var result = await _function.FunctionHandler(new LambdaRequest(), context);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.CancellationsProcessed.Should().Be(0);
+
+        _mockBookingStateService.Verify(
+            x => x.SaveBookingAsync(It.IsAny<Booking>()),
+            Times.Never,
+            "No booking state should be written when cancellation booking is missing");
+
+        _mockEmailScanner.Verify(
+            x => x.MarkEmailAsProcessedAsync(It.IsAny<EmailCredentials>(), _cancelEmail),
+            Times.Never,
+            "Cancellation email should remain unprocessed so it can be retried");
+    }
+
+    /// <summary>
+    /// If CalendarLambda invoke returns FunctionError, it should be treated as failure
+    /// and cancellation should be retried on the next run.
+    /// </summary>
+    [Fact]
+    public async Task FunctionHandler_CancellationOwnerInvokeFunctionError_DoesNotMarkBookingCancelled()
+    {
+        // Arrange
+        _mockBookingStateService
+            .Setup(x => x.GetBookingAsync(_parsedCancellation.Platform, _parsedCancellation.BookingReference))
+            .ReturnsAsync(CloneBooking(_storedBooking));
+
+        _mockLambdaClient
+            .Setup(x => x.InvokeAsync(It.IsAny<InvokeRequest>(), default))
+            .ReturnsAsync(new InvokeResponse { StatusCode = 200, FunctionError = "Unhandled" });
+
+        var context = new TestLambdaContext { AwsRequestId = "test-owner-function-error" };
+
+        // Act
+        var result = await _function.FunctionHandler(new LambdaRequest(), context);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.CancellationsProcessed.Should().Be(0);
+
+        _mockBookingStateService.Verify(
+            x => x.SaveBookingAsync(It.IsAny<Booking>()),
+            Times.Never,
+            "Booking must not be marked as cancelled when invoke returned FunctionError");
+
+        _mockEmailScanner.Verify(
+            x => x.MarkEmailAsProcessedAsync(It.IsAny<EmailCredentials>(), _cancelEmail),
+            Times.Never,
+            "Cancellation email must remain unprocessed when invoke returned FunctionError");
+    }
+
     // Simple deep-copy helper to avoid mutation across tests
     private static Booking CloneBooking(Booking b) => new()
     {

@@ -556,7 +556,9 @@ public class Function
                 ?? new List<string> { "canceled by traveler", "Booking canceled", "Reservation canceled", "Booking cancelled", "Reservation cancelled" };
             _logger.LogInformation($"Scanning for cancellation emails with patterns: {string.Join(", ", cancellationSubjectPatterns)}");
 
-            var cancellationEmails = await emailScanner.ScanForBookingEmailsAsync(emailCredentials, input.ForceRescan, fromAddresses, cancellationSubjectPatterns);
+            var cancellationFromAddresses = _propertiesConfig.EmailFilters?.CancellationFromAddresses ?? fromAddresses;
+
+            var cancellationEmails = await emailScanner.ScanForBookingEmailsAsync(emailCredentials, input.ForceRescan, cancellationFromAddresses, cancellationSubjectPatterns);
             _logger.LogInformation($"Found {cancellationEmails.Count} cancellation emails");
 
             foreach (var cancelEmail in cancellationEmails)
@@ -576,8 +578,7 @@ public class Function
                     var existingBooking = await bookingStateService.GetBookingAsync(cancellation.Platform, cancellation.BookingReference);
                     if (existingBooking == null)
                     {
-                        _logger.LogWarning($"Booking not found in S3 for cancellation: {cancellation.Platform}/{cancellation.BookingReference}");
-                        await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, cancelEmail);
+                        _logger.LogWarning($"Booking not found in S3 for cancellation: {cancellation.Platform}/{cancellation.BookingReference}. Leaving email unprocessed so it can be retried later.");
                         continue;
                     }
 
@@ -718,12 +719,18 @@ public class Function
                     IsCancellation = true
                 };
 
-                await lambdaClient.InvokeAsync(new Amazon.Lambda.Model.InvokeRequest
+                var cleanerInvokeResponse = await lambdaClient.InvokeAsync(new Amazon.Lambda.Model.InvokeRequest
                 {
                     FunctionName = calendarLambdaName,
                     InvocationType = Amazon.Lambda.InvocationType.RequestResponse,
                     Payload = JsonSerializer.Serialize(cleanerRequest)
                 });
+
+                if (!string.IsNullOrEmpty(cleanerInvokeResponse.FunctionError))
+                {
+                    _logger.LogError("CalendarLambda cleaner cancellation invoke returned FunctionError: {FunctionError}", cleanerInvokeResponse.FunctionError);
+                    throw new Exception($"CalendarLambda cleaner cancellation invoke failed with FunctionError: {cleanerInvokeResponse.FunctionError}");
+                }
                 _logger.LogInformation($"Sent cancellation email to cleaner: {booking.AssignedCleanerEmail}");
             }
             catch (Exception ex)
@@ -760,18 +767,24 @@ public class Function
                 PropertyName = propertyName,
                 CleanerName = booking.AssignedCleanerName ?? "(not yet assigned)",
                 CleanerId = string.Empty,
-                CleanerEmail = booking.AssignedCleanerEmail ?? ownerEmail,
+                CleanerEmail = booking.AssignedCleanerEmail,
                 OwnerEmail = ownerEmail,
                 CleaningDate = effectiveCleaningDateIso,
                 IsCancellation = true
             };
 
-            await lambdaClient.InvokeAsync(new Amazon.Lambda.Model.InvokeRequest
+            var ownerInvokeResponse = await lambdaClient.InvokeAsync(new Amazon.Lambda.Model.InvokeRequest
             {
                 FunctionName = calendarLambdaName,
                 InvocationType = Amazon.Lambda.InvocationType.RequestResponse,
                 Payload = JsonSerializer.Serialize(ownerRequest)
             });
+
+            if (!string.IsNullOrEmpty(ownerInvokeResponse.FunctionError))
+            {
+                _logger.LogError("CalendarLambda owner cancellation invoke returned FunctionError: {FunctionError}", ownerInvokeResponse.FunctionError);
+                throw new Exception($"CalendarLambda owner cancellation invoke failed with FunctionError: {ownerInvokeResponse.FunctionError}");
+            }
             _logger.LogInformation($"Sent cancellation email to owner: {ownerEmail}");
             return true;
         }
