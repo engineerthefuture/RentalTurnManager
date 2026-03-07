@@ -651,7 +651,7 @@ public class BookingParserServiceTests
             var email = new EmailMessage
             {
                 From = "automated@airbnb.com",
-                Subject = "Reservation confirmed - Ty Lindberg arrives Mar 6",
+                Subject = "Reservation confirmed - Ty Cheeseburger arrives Mar 6",
                 Body = @"
 NEW BOOKING CONFIRMED! TY ARRIVES MAR 6.
 
@@ -680,9 +680,69 @@ HMTYTZ48P9
             result!.Platform.Should().Be("airbnb");
             result.BookingReference.Should().Be("HMTYTZ48P9");
             result.PropertyId.Should().Be("1477018601970190586");
-            result.GuestName.Should().Be("Ty Lindberg");
+            result.GuestName.Should().Be("Ty Cheeseburger");
+            result.CheckInDate.Should().Be(new DateTime(DateTime.Now.Year, 3, 6));
+            result.CheckOutDate.Should().Be(new DateTime(DateTime.Now.Year, 3, 9));
+            result.NumberOfGuests.Should().Be(4);
+        }
+
+        [Fact]
+        public void ParseBooking_Airbnb_InlineCheckoutWithYear_ParsesCheckOutDate()
+        {
+            // Arrange - checkout is only present in inline text with explicit year
+            var email = new EmailMessage
+            {
+                From = "automated@airbnb.com",
+                Subject = "Reservation confirmed - Ty Cheeseburger arrives Mar 6",
+                Body = @"
+                    Confirmation code: HMINLINE123
+                    Listing: 1477018601970190586
+                    Check-in: March 6, 2026
+                    checkout: March 9, 2026
+                    2 guests
+                "
+            };
+
+            // Act
+            var result = _service.ParseBooking(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("airbnb");
+            result.BookingReference.Should().Be("HMINLINE123");
             result.CheckInDate.Should().Be(new DateTime(2026, 3, 6));
             result.CheckOutDate.Should().Be(new DateTime(2026, 3, 9));
-            result.NumberOfGuests.Should().Be(4);
+        }
+
+        [Fact]
+        public void ParseBooking_Airbnb_MultilineCheckoutWithYear_ParsesCheckOutDate()
+        {
+            // Arrange - checkout appears with day of week on a separate line
+            var email = new EmailMessage
+            {
+                From = "automated@airbnb.com",
+                Subject = "Reservation confirmed - Ty Cheeseburger arrives Mar 6",
+                Body = @"
+                    Confirmation code: HMMULTI123
+                    Listing: 1477018601970190586
+                    Check-in: March 6, 2026
+
+                    Checkout
+                    Monday
+                    March 9, 2026
+
+                    2 guests
+                "
+            };
+
+            // Act
+            var result = _service.ParseBooking(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("airbnb");
+            result.BookingReference.Should().Be("HMMULTI123");
+            result.CheckInDate.Should().Be(new DateTime(2026, 3, 6));
+            result.CheckOutDate.Should().Be(new DateTime(2026, 3, 9));
         }
     }

@@ -270,7 +270,7 @@ public class Function
         var endDateTime = startDateTime.AddHours(durationHours);
 
         var now = DateTime.UtcNow;
-        var uid = Guid.NewGuid().ToString();
+        var uid = BuildCleaningEventUid(propertyName, startDateTime);
 
         // Build description with cleaner contact info if provided
         var description = $"Cleaning and laundry turnover for {propertyName}";
@@ -402,8 +402,8 @@ public class Function
         var endDateTime = startDateTime.AddHours(3);
         var now = DateTime.UtcNow;
         
-        // Generate a consistent UID based on property and date so it matches the original event
-        var uid = $"cleaning-{propertyName.Replace(" ", "-")}-{startDateTime:yyyyMMdd}@rentalturnmanager.com";
+        // Use the same deterministic UID as the original invite so calendar clients can match and cancel it.
+        var uid = BuildCleaningEventUid(propertyName, startDateTime);
         
         var icsBuilder = new StringBuilder();
         icsBuilder.AppendLine("BEGIN:VCALENDAR");
@@ -433,6 +433,15 @@ public class Function
         icsBuilder.AppendLine("END:VCALENDAR");
         
         return icsBuilder.ToString();
+    }
+
+    private static string BuildCleaningEventUid(string propertyName, DateTime startDateTime)
+    {
+        var normalizedProperty = string.IsNullOrWhiteSpace(propertyName)
+            ? "property"
+            : string.Join("-", propertyName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+
+        return $"cleaning-{normalizedProperty}-{startDateTime:yyyyMMdd}@rentalturnmanager.com";
     }
 }
 

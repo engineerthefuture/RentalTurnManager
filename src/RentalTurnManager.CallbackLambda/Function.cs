@@ -920,7 +920,11 @@ public class Function
                         Payload = JsonSerializer.Serialize(cleanerRequest)
                     };
                     
-                    await _lambdaClient.InvokeAsync(invokeRequest);
+                    var cleanerInvokeResponse = await _lambdaClient.InvokeAsync(invokeRequest);
+                    if (!string.IsNullOrEmpty(cleanerInvokeResponse.FunctionError))
+                    {
+                        throw new InvalidOperationException($"CalendarLambda cleaner cancellation invoke failed with FunctionError: {cleanerInvokeResponse.FunctionError}");
+                    }
                     context.Logger.LogInformation($"Invoked CalendarLambda to send cancellation email to cleaner: {cleanerEmail}");
                 }
                 catch (Exception ex)
@@ -968,7 +972,7 @@ public class Function
                     HtmlBody = ownerHtmlBody,
                     PropertyName = propertyName ?? propertyId,
                     CleanerName = cleanerName ?? "(not yet assigned)",
-                    CleanerEmail = ownerEmail, // Send to owner's email
+                    CleanerEmail = cleanerEmail,
                     OwnerEmail = ownerEmail,
                     CleaningDate = cleaningDate,
                     IsCancellation = true
@@ -982,6 +986,10 @@ public class Function
                     };
                     
                     var response = await _lambdaClient.InvokeAsync(invokeRequest);
+                    if (!string.IsNullOrEmpty(response.FunctionError))
+                    {
+                        throw new InvalidOperationException($"CalendarLambda owner cancellation invoke failed with FunctionError: {response.FunctionError}");
+                    }
                     context.Logger.LogInformation($"Invoked CalendarLambda to send cancellation email to owner: {ownerEmail}, StatusCode: {response.StatusCode}");
                 }
                 catch (Exception ex)
