@@ -300,6 +300,7 @@ public class Function
         icsBuilder.AppendLine($"SUMMARY:Cleaning - {propertyName}");
         icsBuilder.AppendLine($"DESCRIPTION:{description}");
         icsBuilder.AppendLine($"LOCATION:{propertyAddress}");
+        icsBuilder.AppendLine($"ORGANIZER;CN={ownerName}:mailto:{ownerEmail}");
         
         // Add cleaner as attendee if email provided
         if (!string.IsNullOrEmpty(cleanerEmail))
@@ -419,6 +420,7 @@ public class Function
         icsBuilder.AppendLine($"DESCRIPTION:This cleaning appointment has been cancelled.");
         icsBuilder.AppendLine($"STATUS:CANCELLED");
         icsBuilder.AppendLine($"SEQUENCE:1");
+        icsBuilder.AppendLine($"ORGANIZER;CN=Owner:mailto:{ownerEmail}");
         
         // Add cleaner as attendee if provided
         if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName))
