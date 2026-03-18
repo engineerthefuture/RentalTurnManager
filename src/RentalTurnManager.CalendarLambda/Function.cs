@@ -95,7 +95,8 @@ public class Function
                 request.CleaningDateTime ?? request.CleaningDate,
                 request.CleanerName,
                 request.CleanerEmail,
-                request.OwnerEmail
+                request.OwnerEmail,
+                request.BookingReference
               )
             : GenerateIcsContent(
                 request.CleanerName,
@@ -107,7 +108,8 @@ public class Function
                 request.PropertyAddress,
                 request.CleaningDate,
                 request.CleaningDateTime,
-                request.CleaningDuration
+                request.CleaningDuration,
+                request.BookingReference
               );
 
         // Create MIME message with ICS attachment
@@ -244,7 +246,7 @@ public class Function
         }
     }
 
-    private string GenerateIcsContent(string cleanerName, string cleanerEmail, string cleanerPhone, string ownerName, string ownerEmail, string propertyName, string propertyAddress, string cleaningDate, string? cleaningDateTime, string duration)
+    private string GenerateIcsContent(string cleanerName, string cleanerEmail, string cleanerPhone, string ownerName, string ownerEmail, string propertyName, string propertyAddress, string cleaningDate, string? cleaningDateTime, string duration, string? bookingReference = null)
     {
         DateTime startDateTime;
         
@@ -270,7 +272,7 @@ public class Function
         var endDateTime = startDateTime.AddHours(durationHours);
 
         var now = DateTime.UtcNow;
-        var uid = BuildCleaningEventUid(propertyName, startDateTime);
+        var uid = BuildCleaningEventUid(propertyName, startDateTime, bookingReference);
 
         // Build description with cleaner contact info if provided
         var description = $"Cleaning and laundry turnover for {propertyName}";
@@ -386,7 +388,7 @@ public class Function
         return message.ToString();
     }
 
-    private string GenerateCancellationIcs(string propertyName, string cleaningDate, string cleanerName, string cleanerEmail, string ownerEmail)
+    private string GenerateCancellationIcs(string propertyName, string cleaningDate, string cleanerName, string cleanerEmail, string ownerEmail, string? bookingReference = null)
     {
         // Parse the cleaning date - could be either DateTime string or date string
         DateTime startDateTime;
@@ -404,7 +406,7 @@ public class Function
         var now = DateTime.UtcNow;
         
         // Use the same deterministic UID as the original invite so calendar clients can match and cancel it.
-        var uid = BuildCleaningEventUid(propertyName, startDateTime);
+        var uid = BuildCleaningEventUid(propertyName, startDateTime, bookingReference);
         
         var icsBuilder = new StringBuilder();
         icsBuilder.AppendLine("BEGIN:VCALENDAR");
@@ -437,13 +439,17 @@ public class Function
         return icsBuilder.ToString();
     }
 
-    private static string BuildCleaningEventUid(string propertyName, DateTime startDateTime)
+    private static string BuildCleaningEventUid(string propertyName, DateTime startDateTime, string? bookingReference = null)
     {
         var normalizedProperty = string.IsNullOrWhiteSpace(propertyName)
             ? "property"
             : string.Join("-", propertyName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
 
-        return $"cleaning-{normalizedProperty}-{startDateTime:yyyyMMdd}@rentalturnmanager.com";
+        var bookingSegment = !string.IsNullOrWhiteSpace(bookingReference)
+            ? $"-{bookingReference.Trim()}"
+            : string.Empty;
+
+        return $"cleaning-{normalizedProperty}-{startDateTime:yyyyMMdd}{bookingSegment}@rentalturnmanager.com";
     }
 }
 
