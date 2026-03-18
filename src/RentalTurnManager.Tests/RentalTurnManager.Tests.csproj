@@ -30,6 +30,7 @@
     <ProjectReference Include="..\RentalTurnManager.Core\RentalTurnManager.Core.csproj" />
     <ProjectReference Include="..\RentalTurnManager.Models\RentalTurnManager.Models.csproj" />
     <ProjectReference Include="..\RentalTurnManager.CallbackLambda\RentalTurnManager.CallbackLambda.csproj" />
+    <ProjectReference Include="..\RentalTurnManager.CalendarLambda\RentalTurnManager.CalendarLambda.csproj" />
   </ItemGroup>
 
 </Project>
