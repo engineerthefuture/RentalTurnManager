@@ -356,7 +356,7 @@ public class Function
         message.AppendLine($"Content-Type: multipart/mixed; boundary=\"{outerBoundary}\"");
         message.AppendLine();
 
-        // --- multipart/alternative: HTML + inline calendar (triggers Apple/Google/Outlook auto-processing)
+        // --- Part 1: HTML body wrapped in multipart/alternative
         message.AppendLine($"--{outerBoundary}");
         message.AppendLine($"Content-Type: multipart/alternative; boundary=\"{altBoundary}\"");
         message.AppendLine();
@@ -368,20 +368,16 @@ public class Function
         message.AppendLine(htmlBody);
         message.AppendLine();
 
-        message.AppendLine($"--{altBoundary}");
-        message.AppendLine($"Content-Type: text/calendar; charset=UTF-8; method={method}");
-        message.AppendLine("Content-Transfer-Encoding: 7bit");
-        message.AppendLine();
-        message.AppendLine(icsContent);
-        message.AppendLine();
-
         message.AppendLine($"--{altBoundary}--");
         message.AppendLine();
 
-        // --- .ics attachment: fallback for clients that don't auto-process inline calendar parts
+        // --- Part 2: calendar invite at the multipart/mixed level (NOT inside alternative).
+        // Apple Calendar, Google Calendar, and Outlook all require the text/calendar part to
+        // appear here — at the mixed level with no Content-Disposition — to trigger the
+        // automatic "Add to Calendar" invitation UI. Placing it inside multipart/alternative
+        // causes Apple Mail to treat it as a body alternative and render it as a file download.
         message.AppendLine($"--{outerBoundary}");
-        message.AppendLine($"Content-Type: application/ics; name=\"{filename}\"");
-        message.AppendLine($"Content-Disposition: attachment; filename=\"{filename}\"");
+        message.AppendLine($"Content-Type: text/calendar; charset=UTF-8; method={method}; name=\"{filename}\"");
         message.AppendLine("Content-Transfer-Encoding: 7bit");
         message.AppendLine();
         message.AppendLine(icsContent);
