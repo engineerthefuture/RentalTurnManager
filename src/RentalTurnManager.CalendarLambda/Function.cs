@@ -19,6 +19,7 @@ using System.Text;
 using System.Text.Json;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("RentalTurnManager.Tests")]
 
 namespace RentalTurnManager.CalendarLambda;
 
@@ -248,24 +249,7 @@ public class Function
 
     private string GenerateIcsContent(string cleanerName, string cleanerEmail, string cleanerPhone, string ownerName, string ownerEmail, string propertyName, string propertyAddress, string cleaningDate, string? cleaningDateTime, string duration, string? bookingReference = null)
     {
-        DateTime startDateTime;
-        
-        // If CleaningDateTime is provided (ISO format with time), use it
-        if (!string.IsNullOrEmpty(cleaningDateTime) && DateTime.TryParse(cleaningDateTime, out var parsedDateTime))
-        {
-            // Assume the DateTime from workflow is already in UTC
-            startDateTime = parsedDateTime.Kind == DateTimeKind.Utc 
-                ? parsedDateTime 
-                : DateTime.SpecifyKind(parsedDateTime, DateTimeKind.Utc);
-        }
-        else
-        {
-            // Fallback: Parse date and default to 12:00 PM Eastern Time
-            var startDate = DateTime.Parse(cleaningDate);
-            var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
-            var startDateTimeUnspecified = new DateTime(startDate.Year, startDate.Month, startDate.Day, 12, 0, 0, DateTimeKind.Unspecified);
-            startDateTime = TimeZoneInfo.ConvertTimeToUtc(startDateTimeUnspecified, easternZone);
-        }
+        var startDateTime = ParseCleaningDateTimeUtc(cleaningDateTime, cleaningDate);
         
         // Parse duration (e.g., "2-3 hours" -> use 2.5 hours)
         var durationHours = ParseDuration(duration);
@@ -357,7 +341,8 @@ public class Function
 
     private string CreateRawEmailWithAttachment(string from, string to, string cc, string subject, string htmlBody, string icsContent, string filename, string method = "REQUEST")
     {
-        var boundary = $"----=_Part_{Guid.NewGuid():N}";
+        var outerBoundary = $"----=_Part_{Guid.NewGuid():N}";
+        var altBoundary   = $"----=_Alt_{Guid.NewGuid():N}";
 
         var message = new StringBuilder();
         message.AppendLine($"From: {from}");
@@ -368,39 +353,48 @@ public class Function
         }
         message.AppendLine($"Subject: {subject}");
         message.AppendLine("MIME-Version: 1.0");
-        message.AppendLine($"Content-Type: multipart/mixed; boundary=\"{boundary}\"");
+        message.AppendLine($"Content-Type: multipart/mixed; boundary=\"{outerBoundary}\"");
         message.AppendLine();
-        message.AppendLine($"--{boundary}");
+
+        // --- multipart/alternative: HTML + inline calendar (triggers Apple/Google/Outlook auto-processing)
+        message.AppendLine($"--{outerBoundary}");
+        message.AppendLine($"Content-Type: multipart/alternative; boundary=\"{altBoundary}\"");
+        message.AppendLine();
+
+        message.AppendLine($"--{altBoundary}");
         message.AppendLine("Content-Type: text/html; charset=UTF-8");
         message.AppendLine("Content-Transfer-Encoding: 7bit");
         message.AppendLine();
         message.AppendLine(htmlBody);
         message.AppendLine();
-        message.AppendLine($"--{boundary}");
+
+        message.AppendLine($"--{altBoundary}");
         message.AppendLine($"Content-Type: text/calendar; charset=UTF-8; method={method}");
+        message.AppendLine("Content-Transfer-Encoding: 7bit");
+        message.AppendLine();
+        message.AppendLine(icsContent);
+        message.AppendLine();
+
+        message.AppendLine($"--{altBoundary}--");
+        message.AppendLine();
+
+        // --- .ics attachment: fallback for clients that don't auto-process inline calendar parts
+        message.AppendLine($"--{outerBoundary}");
+        message.AppendLine($"Content-Type: application/ics; name=\"{filename}\"");
         message.AppendLine($"Content-Disposition: attachment; filename=\"{filename}\"");
         message.AppendLine("Content-Transfer-Encoding: 7bit");
         message.AppendLine();
         message.AppendLine(icsContent);
         message.AppendLine();
-        message.AppendLine($"--{boundary}--");
+
+        message.AppendLine($"--{outerBoundary}--");
 
         return message.ToString();
     }
 
     private string GenerateCancellationIcs(string propertyName, string cleaningDate, string cleanerName, string cleanerEmail, string ownerEmail, string? bookingReference = null)
     {
-        // Parse the cleaning date - could be either DateTime string or date string
-        DateTime startDateTime;
-        if (DateTime.TryParse(cleaningDate, out var parsedDate))
-        {
-            startDateTime = parsedDate.ToUniversalTime();
-        }
-        else
-        {
-            // Fallback to today if parsing fails
-            startDateTime = DateTime.UtcNow;
-        }
+        var startDateTime = ParseCleaningDateTimeUtc(cleaningDate);
         
         var endDateTime = startDateTime.AddHours(3);
         var now = DateTime.UtcNow;
@@ -439,17 +433,42 @@ public class Function
         return icsBuilder.ToString();
     }
 
-    private static string BuildCleaningEventUid(string propertyName, DateTime startDateTime, string? bookingReference = null)
+    internal static string BuildCleaningEventUid(string propertyName, DateTime startDateTime, string? bookingReference = null)
     {
         var normalizedProperty = string.IsNullOrWhiteSpace(propertyName)
             ? "property"
             : string.Join("-", propertyName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
 
-        var bookingSegment = !string.IsNullOrWhiteSpace(bookingReference)
-            ? $"-{bookingReference.Trim()}"
-            : string.Empty;
+        var bookingSegment = string.Empty;
+        if (!string.IsNullOrWhiteSpace(bookingReference))
+        {
+            // Strip anything outside [A-Za-z0-9_-] to prevent ICS line injection
+            var sanitized = System.Text.RegularExpressions.Regex.Replace(bookingReference.Trim(), @"[^A-Za-z0-9_\-]", "");
+            if (sanitized.Length > 0)
+                bookingSegment = $"-{sanitized}";
+        }
 
         return $"cleaning-{normalizedProperty}-{startDateTime:yyyyMMdd}{bookingSegment}@rentalturnmanager.com";
+    }
+
+    internal static DateTime ParseCleaningDateTimeUtc(string? dateTimeString, string? dateOnlyFallback = null)
+    {
+        // RoundtripKind honours the Z suffix (keeps Kind=Utc and value in UTC).
+        // For strings without a timezone designator, Kind=Unspecified; SpecifyKind then
+        // treats them as UTC, which matches the workflow's convention of sending UTC timestamps.
+        if (!string.IsNullOrEmpty(dateTimeString) &&
+            DateTime.TryParse(dateTimeString, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+            return parsed.Kind == DateTimeKind.Utc ? parsed : DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+
+        // Date-only fallback: default to 12:00 PM Eastern Time
+        if (!string.IsNullOrEmpty(dateOnlyFallback) && DateTime.TryParse(dateOnlyFallback, out var fallbackDate))
+        {
+            var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+            var noon = new DateTime(fallbackDate.Year, fallbackDate.Month, fallbackDate.Day, 12, 0, 0, DateTimeKind.Unspecified);
+            return TimeZoneInfo.ConvertTimeToUtc(noon, easternZone);
+        }
+
+        return DateTime.UtcNow;
     }
 }
 
