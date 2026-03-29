@@ -431,9 +431,17 @@ public class Function
 
     internal static string BuildCleaningEventUid(string propertyName, DateTime startDateTime, string? bookingReference = null)
     {
-        var normalizedProperty = string.IsNullOrWhiteSpace(propertyName)
+        // Strip everything except letters, digits, and spaces, then convert spaces to
+        // hyphens.  This prevents parentheses, commas, and other punctuation from the
+        // property address from appearing in the UID — iCalendar TEXT values require
+        // commas to be escaped as \, and Apple Calendar can misparse unescaped commas
+        // in a UID, causing it to match the wrong (older) calendar event.
+        var sanitizedName = System.Text.RegularExpressions.Regex.Replace(
+            propertyName.Trim(), @"[^A-Za-z0-9 ]", "").Trim();
+
+        var normalizedProperty = sanitizedName.Length == 0
             ? "property"
-            : string.Join("-", propertyName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+            : System.Text.RegularExpressions.Regex.Replace(sanitizedName, @"\s+", "-");
 
         var bookingSegment = string.Empty;
         if (!string.IsNullOrWhiteSpace(bookingReference))
