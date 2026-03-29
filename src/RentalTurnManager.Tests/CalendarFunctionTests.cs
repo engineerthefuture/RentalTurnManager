@@ -82,6 +82,25 @@ public class CalendarFunctionTests
     }
 
     [Fact]
+    public void BuildCleaningEventUid_PropertyNameWithAddressInParens_SpecialCharsStripped()
+    {
+        // Real-world property names include the address in parentheses, e.g.
+        // "Waterfront Lake Anna (157 Cooke Ln, Bumpass, VA 23024)".
+        // Commas and parentheses in iCalendar TEXT values must be escaped, and
+        // Apple Calendar can misparse unescaped commas in a UID — causing it to
+        // navigate to an existing (older) event instead of offering to add a new one.
+        var dt = new DateTime(2026, 3, 29, 15, 30, 0, DateTimeKind.Utc);
+
+        var uid = Function.BuildCleaningEventUid(
+            "Waterfront Lake Anna (157 Cooke Ln, Bumpass, VA 23024)", dt, "HM4JQC3K94");
+
+        // No parentheses, commas, or other non-[A-Za-z0-9-] chars in the UID.
+        uid.Should().Be(
+            "cleaning-Waterfront-Lake-Anna-157-Cooke-Ln-Bumpass-VA-23024-20260329-HM4JQC3K94@rentalturnmanager.com");
+        uid.Should().NotContainAny("(", ")", ",");
+    }
+
+    [Fact]
     public void BuildCleaningEventUid_SameInputsYieldIdenticalUid_InviteAndCancelCorrelate()
     {
         var dt = new DateTime(2026, 9, 26, 15, 30, 0, DateTimeKind.Utc);
