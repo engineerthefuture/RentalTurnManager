@@ -226,22 +226,17 @@ public class Function
             var emails = await emailScanner.ScanForBookingEmailsAsync(emailCredentials, input.ForceRescan, fromAddresses, subjectPatterns);
             _logger.LogInformation($"Found {emails.Count} potential booking emails");
 
-            foreach (var email in emails)
+            var bookingPairs = bookingParser.ParseBookings(emails) ?? new List<(Booking Booking, List<EmailMessage> SourceEmails)>();
+            _logger.LogInformation($"Parsed {bookingPairs.Count} complete booking(s) from emails");
+
+            foreach (var (booking, sourceEmails) in bookingPairs)
             {
                 try
                 {
-                    // Parse booking information
-                    var booking = bookingParser.ParseBooking(email);
-                    if (booking == null)
-                    {
-                        _logger.LogWarning($"Could not parse booking from email: {email.Subject}");
-                        continue;
-                    }
-                    
                     // Validate booking has required fields
                     if (string.IsNullOrEmpty(booking.BookingReference))
                     {
-                        _logger.LogWarning($"Booking missing reference ID from email: {email.Subject}");
+                        _logger.LogWarning($"Booking missing reference ID, skipping");
                         continue;
                     }
 
@@ -540,12 +535,13 @@ public class Function
                     await bookingStateService.SaveBookingAsync(booking);
                     _logger.LogInformation($"Saved booking state: {booking.Platform} - {booking.BookingReference}");
 
-                    // Mark email as processed
-                    await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, email);
+                    // Mark all source emails as processed
+                    foreach (var sourceEmail in sourceEmails)
+                        await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, sourceEmail);
                 }
                 catch (Exception ex)
                 {
-                    var error = $"Error processing email '{email.Subject}': {ex.Message}";
+                    var error = $"Error processing booking '{booking.BookingReference}' ({booking.Platform}): {ex.Message}";
                     _logger.LogError(ex, error);
                     response.Errors.Add(error);
                 }

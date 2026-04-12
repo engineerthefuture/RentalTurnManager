@@ -21,4 +21,11 @@ public interface IBookingParserService
 {
     Booking? ParseBooking(EmailMessage email);
     Booking? ParseCancellation(EmailMessage email);
+
+    /// <summary>
+    /// Parses a batch of emails into complete bookings. Handles platforms that
+    /// require multiple emails per booking (e.g. Booking.com request + confirmation).
+    /// Returns each completed booking paired with the source emails that produced it.
+    /// </summary>
+    List<(Booking Booking, List<EmailMessage> SourceEmails)> ParseBookings(IEnumerable<EmailMessage> emails);
 }

@@ -745,4 +745,173 @@ HMTYTZ48P9
             result.CheckInDate.Should().Be(new DateTime(2026, 3, 6));
             result.CheckOutDate.Should().Be(new DateTime(2026, 3, 9));
         }
+
+    // -----------------------------------------------------------------------
+    // Booking.com two-email pairing tests
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void ParseBookings_BookingCom_ConfirmationAndRequest_ReturnsMergedBooking()
+    {
+        // Arrange
+        var confirmEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "Booking.com - New booking! (5474030366, Monday, December 21, 2026)",
+            Body = string.Empty
+        };
+        var requestEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "New booking request – accept or decline by 10:45 AM on Apr 13, 2026",
+            Body = @"
+   Request details
+
+   2 nights
+   2 adults
+
+   Check-in
+
+   December 21, 2026
+
+   Check-out
+
+   December 23, 2026
+"
+        };
+
+        // Act
+        var results = _service.ParseBookings(new[] { confirmEmail, requestEmail });
+
+        // Assert
+        results.Should().HaveCount(1);
+        var (booking, sourceEmails) = results[0];
+        booking.Platform.Should().Be("bookingcom");
+        booking.BookingReference.Should().Be("5474030366");
+        booking.CheckInDate.Should().Be(new DateTime(2026, 12, 21));
+        booking.CheckOutDate.Should().Be(new DateTime(2026, 12, 23));
+        booking.NumberOfGuests.Should().Be(2);
+        sourceEmails.Should().Contain(confirmEmail);
+        sourceEmails.Should().Contain(requestEmail);
+    }
+
+    [Fact]
+    public void ParseBookings_BookingCom_ConfirmationOnly_ReturnsEmpty()
+    {
+        // Arrange – no matching request email means we cannot build a complete booking
+        var confirmEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "Booking.com - New booking! (9900112233, Friday, January 9, 2026)",
+            Body = string.Empty
+        };
+
+        // Act
+        var results = _service.ParseBookings(new[] { confirmEmail });
+
+        // Assert – incomplete booking should not be returned
+        results.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseBookings_BookingCom_RequestOnly_ReturnsEmpty()
+    {
+        // Arrange – no confirmation means no booking reference so nothing to process
+        var requestEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "New booking request – accept or decline by 10:45 AM on Apr 13, 2026",
+            Body = @"
+   Check-in
+   December 21, 2026
+   Check-out
+   December 23, 2026
+   2 adults
+"
+        };
+
+        // Act
+        var results = _service.ParseBookings(new[] { requestEmail });
+
+        // Assert
+        results.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseBookings_BookingCom_MismatchedCheckInDates_ReturnsEmpty()
+    {
+        // Arrange – confirmation check-in differs from request check-in: no pairing
+        var confirmEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "Booking.com - New booking! (1122334455, Wednesday, March 4, 2026)",
+            Body = string.Empty
+        };
+        var requestEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "New booking request – accept or decline by 10:45 AM on Mar 1, 2026",
+            Body = @"
+   Check-in
+   March 11, 2026
+   Check-out
+   March 14, 2026
+   2 adults
+"
+        };
+
+        // Act
+        var results = _service.ParseBookings(new[] { confirmEmail, requestEmail });
+
+        // Assert – dates don't match, so no complete booking
+        results.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseBookings_MixedPlatforms_ReturnsAllParsedBookings()
+    {
+        // Arrange – one Airbnb email and one Booking.com pair
+        var airbnbEmail = new EmailMessage
+        {
+            From = "automated@airbnb.com",
+            Subject = "Reservation confirmed",
+            Body = @"
+                Confirmation code: HMMIXED001
+                Listing: 11112222
+                Check-in: 06/01/2026
+                Check-out: 06/04/2026
+                2 guests
+            "
+        };
+        var bcConfirmEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "Booking.com - New booking! (7788990011, Monday, June 1, 2026)",
+            Body = string.Empty
+        };
+        var bcRequestEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "New booking request – accept or decline by 10:45 AM on May 28, 2026",
+            Body = @"
+   Check-in
+   June 1, 2026
+   Check-out
+   June 4, 2026
+   3 adults
+"
+        };
+
+        // Act
+        var results = _service.ParseBookings(new[] { airbnbEmail, bcConfirmEmail, bcRequestEmail });
+
+        // Assert
+        results.Should().HaveCount(2);
+        results.Should().Contain(r => r.Booking.Platform == "airbnb" && r.Booking.BookingReference == "HMMIXED001");
+        results.Should().Contain(r => r.Booking.Platform == "bookingcom" && r.Booking.BookingReference == "7788990011");
+        var bcBooking = results.First(r => r.Booking.Platform == "bookingcom").Booking;
+        bcBooking.NumberOfGuests.Should().Be(3);
+        bcBooking.CheckInDate.Should().Be(new DateTime(2026, 6, 1));
+        bcBooking.CheckOutDate.Should().Be(new DateTime(2026, 6, 4));
+    }
     }
