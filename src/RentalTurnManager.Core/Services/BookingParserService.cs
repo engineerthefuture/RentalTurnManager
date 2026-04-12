@@ -812,8 +812,17 @@ public class BookingParserService : IBookingParserService
         if (DateTime.TryParse(subjectMatch.Groups[2].Value, out var checkIn))
             booking.CheckInDate = checkIn;
 
-        // Property ID from content (e.g. "property ID: 12345678" or URL segments)
-        var propMatch = Regex.Match(content, @"property[:\s/]+([0-9]{6,})", RegexOptions.IgnoreCase);
+        // Property ID from content. Booking.com extranet links include the hotel/property ID
+        // in several common forms:
+        //   hotel_id=XXXXXXXX
+        //   hotelid=XXXXXXXX
+        //   /hotels/XXXXXXXX
+        //   property: XXXXXXXX  (plain-text fallback)
+        var propMatch = Regex.Match(content, @"hotel[_]?id[=:]\s*(\d+)", RegexOptions.IgnoreCase);
+        if (!propMatch.Success)
+            propMatch = Regex.Match(content, @"/hotels?/(\d{6,})", RegexOptions.IgnoreCase);
+        if (!propMatch.Success)
+            propMatch = Regex.Match(content, @"property[:\s/]+(\d{6,})", RegexOptions.IgnoreCase);
         if (propMatch.Success)
             booking.PropertyId = propMatch.Groups[1].Value;
 
@@ -822,7 +831,7 @@ public class BookingParserService : IBookingParserService
         if (guestMatch.Success)
             booking.GuestName = guestMatch.Groups[1].Value.Trim();
 
-        _logger.LogInformation($"Parsed Booking.com confirmation – Reference: '{booking.BookingReference}', CheckIn: {booking.CheckInDate:yyyy-MM-dd}");
+        _logger.LogInformation($"Parsed Booking.com confirmation – Reference: '{booking.BookingReference}', CheckIn: {booking.CheckInDate:yyyy-MM-dd}, PropertyId: '{booking.PropertyId}'");
         return booking;
     }
 

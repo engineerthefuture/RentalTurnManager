@@ -274,6 +274,22 @@ public class Function
                         p.PlatformIds.TryGetValue(normalizedPlatform, out var id) && 
                         id.Equals(booking.PropertyId, StringComparison.OrdinalIgnoreCase)
                     );
+
+                    // Booking.com host emails don't embed the host's property ID, so when
+                    // PropertyId is empty fall back to the single configured bookingcom property.
+                    if (property == null && string.IsNullOrEmpty(booking.PropertyId) && normalizedPlatform == "bookingcom")
+                    {
+                        var bookingComProperties = _propertiesConfig.Properties
+                            ?.Where(p => p.PlatformIds.ContainsKey("bookingcom"))
+                            .ToList();
+                        if (bookingComProperties?.Count == 1)
+                        {
+                            property = bookingComProperties[0];
+                            booking.PropertyId = property.PlatformIds["bookingcom"];
+                            _logger.LogInformation(
+                                $"Booking.com email contained no property ID; matched to sole configured property '{property.PropertyId}' (bookingcom ID: {booking.PropertyId})");
+                        }
+                    }
                     
                     if (property == null)
                     {
