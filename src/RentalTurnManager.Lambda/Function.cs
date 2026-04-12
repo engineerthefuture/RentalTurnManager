@@ -217,8 +217,16 @@ public class Function
             var fromAddresses = _propertiesConfig.EmailFilters?.BookingPlatformFromAddresses ?? new List<string> { "airbnb.com", "vrbo.com", "booking.com" };
             _logger.LogInformation($"Using from addresses: {string.Join(", ", fromAddresses)}");
             
-            // Get configured subject patterns
-            var subjectPatterns = _propertiesConfig.EmailFilters?.SubjectPatterns ?? new List<string> { "Reservation confirmed", "Instant Booking from", "booking confirmation" };
+            // Get configured subject patterns and always include the Booking.com-specific ones.
+            // These are merged rather than replaced so existing configs that pre-date Booking.com
+            // support continue to work without requiring a manual secret update.
+            var configuredPatterns = _propertiesConfig.EmailFilters?.SubjectPatterns
+                ?? new List<string> { "Reservation confirmed", "Instant Booking from", "booking confirmation" };
+            var requiredPatterns = new List<string> { "New booking request", "Booking.com - New booking" };
+            var subjectPatterns = configuredPatterns
+                .Concat(requiredPatterns.Where(r =>
+                    !configuredPatterns.Any(c => c.Contains(r, StringComparison.OrdinalIgnoreCase))))
+                .ToList();
             _logger.LogInformation($"Using subject patterns: {string.Join(", ", subjectPatterns)}");
             
             // Scan emails for new bookings
