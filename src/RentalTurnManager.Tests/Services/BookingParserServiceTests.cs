@@ -230,11 +230,11 @@ public class BookingParserServiceTests
     [Fact]
     public void ParseBooking_Airbnb_SubjectArrives_ParsesCheckIn()
     {
-        // Arrange - subject contains 'arrives Mar 3' without year
+        // Arrange - subject contains 'arrives Dec 21' without year
         var email = new EmailMessage
         {
             From = "notify@example.com",
-            Subject = "Reservation confirmed - Alice arrives Mar 3",
+            Subject = "Reservation confirmed - Alice arrives Dec 21",
             Body = @"
                 Confirmation code: HMARRIVE123
                 Listing: 22233344
@@ -248,8 +248,7 @@ public class BookingParserServiceTests
         result.Should().NotBeNull();
         result!.Platform.Should().Be("airbnb");
         result.BookingReference.Should().Be("HMARRIVE123");
-        // Expect year to be current year (2026)
-        result.CheckInDate.Should().Be(new DateTime(DateTime.Now.Year, 3, 3));
+        result.CheckInDate.Should().Be(new DateTime(DateTime.Now.Year, 12, 21));
     }
 
     [Fact]
@@ -606,6 +605,77 @@ public class BookingParserServiceTests
         }
 
         [Fact]
+        public void ParseCancellation_BookingCom_CanceledBookingSubject_ExtractsReference()
+        {
+            // Arrange - real Booking.com cancellation email format
+            var email = new EmailMessage
+            {
+                From = "noreply@booking.com",
+                Subject = "Canceled booking! (5474030366, Monday, December 21, 2026)",
+                Body = @"
+Cancellation — 5474030366
+
+Dear Brent Foster,
+
+Unfortunately, Brent Foster canceled their booking.
+Following the cancellation of reservation 5474030366, we can confirm
+that the guest's cancellation fees are now $0.
+
+https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking.html?res_id=5474030366&hotel_id=99887766&lang=en-us
+"
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("bookingcom");
+            result.BookingReference.Should().Be("5474030366");
+            result.PropertyId.Should().Be("99887766");
+        }
+
+        [Fact]
+        public void ParseCancellation_BookingCom_CanceledBookingSubject_NoHotelIdInBody_StillExtractsReference()
+        {
+            // Arrange - subject has reference, body uses em-dash format but no URL
+            var email = new EmailMessage
+            {
+                From = "noreply@booking.com",
+                Subject = "Canceled booking! (9900112233, Friday, January 9, 2026)",
+                Body = "Cancellation — 9900112233\nThe booking has been cancelled."
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("bookingcom");
+            result.BookingReference.Should().Be("9900112233");
+        }
+
+        [Fact]
+        public void ParseCancellation_BookingCom_BodyReservationPattern_ExtractsReference()
+        {
+            // Arrange - no "Canceled booking!" subject but body has "reservation XXXXXX"
+            var email = new EmailMessage
+            {
+                From = "noreply@booking.com",
+                Subject = "Booking cancellation notice",
+                Body = "Following the cancellation of reservation 7712345678, no fees apply."
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("bookingcom");
+            result.BookingReference.Should().Be("7712345678");
+        }
+
+        [Fact]
         public void ParseCancellation_UnknownPlatform_ReturnsNull()
         {
             // Arrange
@@ -646,20 +716,20 @@ public class BookingParserServiceTests
         {
             // Arrange - simulates the Airbnb host confirmation email plain-text body format:
             //   "Check-in     Checkout"
-            //   "Fri, Mar 6   Mon, Mar 9"
+            //   "Mon, Dec 21   Thu, Dec 24"
             // The checkout date has no year and must be inferred from the check-in year.
             var email = new EmailMessage
             {
                 From = "automated@airbnb.com",
-                Subject = "Reservation confirmed - Ty Cheeseburger arrives Mar 6",
+                Subject = "Reservation confirmed - Ty Cheeseburger arrives Dec 21",
                 Body = @"
-NEW BOOKING CONFIRMED! TY ARRIVES MAR 6.
+NEW BOOKING CONFIRMED! TY ARRIVES DEC 21.
 
 https://www.airbnb.com/rooms/1477018601970190586
 
 Check-in     Checkout
              
-Fri, Mar 6   Mon, Mar 9
+Mon, Dec 21   Thu, Dec 24
              
 3:00 PM      11:00 AM
 
@@ -681,8 +751,8 @@ HMTYTZ48P9
             result.BookingReference.Should().Be("HMTYTZ48P9");
             result.PropertyId.Should().Be("1477018601970190586");
             result.GuestName.Should().Be("Ty Cheeseburger");
-            result.CheckInDate.Should().Be(new DateTime(DateTime.Now.Year, 3, 6));
-            result.CheckOutDate.Should().Be(new DateTime(DateTime.Now.Year, 3, 9));
+            result.CheckInDate.Should().Be(new DateTime(DateTime.Now.Year, 12, 21));
+            result.CheckOutDate.Should().Be(new DateTime(DateTime.Now.Year, 12, 24));
             result.NumberOfGuests.Should().Be(4);
         }
 
@@ -693,12 +763,12 @@ HMTYTZ48P9
             var email = new EmailMessage
             {
                 From = "automated@airbnb.com",
-                Subject = "Reservation confirmed - Ty Cheeseburger arrives Mar 6",
+                Subject = "Reservation confirmed - Ty Cheeseburger arrives Dec 21",
                 Body = @"
                     Confirmation code: HMINLINE123
                     Listing: 1477018601970190586
-                    Check-in: March 6, 2026
-                    checkout: March 9, 2026
+                    Check-in: December 21, 2026
+                    checkout: December 24, 2026
                     2 guests
                 "
             };
@@ -710,8 +780,8 @@ HMTYTZ48P9
             result.Should().NotBeNull();
             result!.Platform.Should().Be("airbnb");
             result.BookingReference.Should().Be("HMINLINE123");
-            result.CheckInDate.Should().Be(new DateTime(2026, 3, 6));
-            result.CheckOutDate.Should().Be(new DateTime(2026, 3, 9));
+            result.CheckInDate.Should().Be(new DateTime(2026, 12, 21));
+            result.CheckOutDate.Should().Be(new DateTime(2026, 12, 24));
         }
 
         [Fact]
@@ -721,15 +791,15 @@ HMTYTZ48P9
             var email = new EmailMessage
             {
                 From = "automated@airbnb.com",
-                Subject = "Reservation confirmed - Ty Cheeseburger arrives Mar 6",
+                Subject = "Reservation confirmed - Ty Cheeseburger arrives Dec 21",
                 Body = @"
                     Confirmation code: HMMULTI123
                     Listing: 1477018601970190586
-                    Check-in: March 6, 2026
+                    Check-in: December 21, 2026
 
                     Checkout
-                    Monday
-                    March 9, 2026
+                    Thursday
+                    December 24, 2026
 
                     2 guests
                 "
@@ -742,7 +812,176 @@ HMTYTZ48P9
             result.Should().NotBeNull();
             result!.Platform.Should().Be("airbnb");
             result.BookingReference.Should().Be("HMMULTI123");
-            result.CheckInDate.Should().Be(new DateTime(2026, 3, 6));
-            result.CheckOutDate.Should().Be(new DateTime(2026, 3, 9));
+            result.CheckInDate.Should().Be(new DateTime(2026, 12, 21));
+            result.CheckOutDate.Should().Be(new DateTime(2026, 12, 24));
         }
+
+    // -----------------------------------------------------------------------
+    // Booking.com two-email pairing tests
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void ParseBookings_BookingCom_ConfirmationAndRequest_ReturnsMergedBooking()
+    {
+        // Arrange
+        var confirmEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "Booking.com - New booking! (5474030366, Monday, December 21, 2026)",
+            Body = string.Empty
+        };
+        var requestEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "New booking request – accept or decline by 10:45 AM on Apr 13, 2026",
+            Body = @"
+   Request details
+
+   2 nights
+   2 adults
+
+   Check-in
+
+   December 21, 2026
+
+   Check-out
+
+   December 23, 2026
+"
+        };
+
+        // Act
+        var results = _service.ParseBookings(new[] { confirmEmail, requestEmail });
+
+        // Assert
+        results.Should().HaveCount(1);
+        var (booking, sourceEmails) = results[0];
+        booking.Platform.Should().Be("bookingcom");
+        booking.BookingReference.Should().Be("5474030366");
+        booking.CheckInDate.Should().Be(new DateTime(2026, 12, 21));
+        booking.CheckOutDate.Should().Be(new DateTime(2026, 12, 23));
+        booking.NumberOfGuests.Should().Be(2);
+        sourceEmails.Should().Contain(confirmEmail);
+        sourceEmails.Should().Contain(requestEmail);
+    }
+
+    [Fact]
+    public void ParseBookings_BookingCom_ConfirmationOnly_ReturnsEmpty()
+    {
+        // Arrange – no matching request email means we cannot build a complete booking
+        var confirmEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "Booking.com - New booking! (9900112233, Friday, January 9, 2026)",
+            Body = string.Empty
+        };
+
+        // Act
+        var results = _service.ParseBookings(new[] { confirmEmail });
+
+        // Assert – incomplete booking should not be returned
+        results.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseBookings_BookingCom_RequestOnly_ReturnsEmpty()
+    {
+        // Arrange – no confirmation means no booking reference so nothing to process
+        var requestEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "New booking request – accept or decline by 10:45 AM on Apr 13, 2026",
+            Body = @"
+   Check-in
+   December 21, 2026
+   Check-out
+   December 23, 2026
+   2 adults
+"
+        };
+
+        // Act
+        var results = _service.ParseBookings(new[] { requestEmail });
+
+        // Assert
+        results.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseBookings_BookingCom_MismatchedCheckInDates_ReturnsEmpty()
+    {
+        // Arrange – confirmation check-in differs from request check-in: no pairing
+        var confirmEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "Booking.com - New booking! (1122334455, Wednesday, March 4, 2026)",
+            Body = string.Empty
+        };
+        var requestEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "New booking request – accept or decline by 10:45 AM on Mar 1, 2026",
+            Body = @"
+   Check-in
+   March 11, 2026
+   Check-out
+   March 14, 2026
+   2 adults
+"
+        };
+
+        // Act
+        var results = _service.ParseBookings(new[] { confirmEmail, requestEmail });
+
+        // Assert – dates don't match, so no complete booking
+        results.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseBookings_MixedPlatforms_ReturnsAllParsedBookings()
+    {
+        // Arrange – one Airbnb email and one Booking.com pair
+        var airbnbEmail = new EmailMessage
+        {
+            From = "automated@airbnb.com",
+            Subject = "Reservation confirmed",
+            Body = @"
+                Confirmation code: HMMIXED001
+                Listing: 11112222
+                Check-in: 06/01/2026
+                Check-out: 06/04/2026
+                2 guests
+            "
+        };
+        var bcConfirmEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "Booking.com - New booking! (7788990011, Monday, June 1, 2026)",
+            Body = string.Empty
+        };
+        var bcRequestEmail = new EmailMessage
+        {
+            From = "noreply@booking.com",
+            Subject = "New booking request – accept or decline by 10:45 AM on May 28, 2026",
+            Body = @"
+   Check-in
+   June 1, 2026
+   Check-out
+   June 4, 2026
+   3 adults
+"
+        };
+
+        // Act
+        var results = _service.ParseBookings(new[] { airbnbEmail, bcConfirmEmail, bcRequestEmail });
+
+        // Assert
+        results.Should().HaveCount(2);
+        results.Should().Contain(r => r.Booking.Platform == "airbnb" && r.Booking.BookingReference == "HMMIXED001");
+        results.Should().Contain(r => r.Booking.Platform == "bookingcom" && r.Booking.BookingReference == "7788990011");
+        var bcBooking = results.First(r => r.Booking.Platform == "bookingcom").Booking;
+        bcBooking.NumberOfGuests.Should().Be(3);
+        bcBooking.CheckInDate.Should().Be(new DateTime(2026, 6, 1));
+        bcBooking.CheckOutDate.Should().Be(new DateTime(2026, 6, 4));
+    }
     }

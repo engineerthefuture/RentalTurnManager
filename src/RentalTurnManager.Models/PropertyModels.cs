@@ -80,7 +80,8 @@ public class EmailFilterConfiguration
     {
         "Reservation confirmed",
         "Instant Booking from",
-        "booking confirmation"
+        "booking confirmation",
+        "New booking"
     };
 
     public List<string> CancellationSubjectPatterns { get; set; } = new()
@@ -89,7 +90,8 @@ public class EmailFilterConfiguration
         "Booking canceled",
         "Reservation canceled",
         "Booking cancelled",
-        "Reservation cancelled"
+        "Reservation cancelled",
+        "Canceled booking"
     };
 
     public List<string>? CancellationFromAddresses { get; set; }

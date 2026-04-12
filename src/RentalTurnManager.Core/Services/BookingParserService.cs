@@ -216,13 +216,39 @@ public class BookingParserService : IBookingParserService
 
         var booking = new Booking { Platform = "bookingcom" };
 
-        var refMatch = Regex.Match(content, @"(?:booking|reservation)\s*(?:number|ID)[:\s#]+([0-9]+)", RegexOptions.IgnoreCase);
-        if (refMatch.Success)
-            booking.BookingReference = refMatch.Groups[1].Value;
+        // Subject: "Canceled booking! (5474030366, Monday, December 21, 2026)"
+        var subjectMatch = Regex.Match(subject,
+            @"Canceled booking!\s*\((\d+),",
+            RegexOptions.IgnoreCase);
+        if (subjectMatch.Success)
+            booking.BookingReference = subjectMatch.Groups[1].Value;
 
-        var propertyMatch = Regex.Match(content, @"property[:\s]+([0-9]+)", RegexOptions.IgnoreCase);
-        if (propertyMatch.Success)
-            booking.PropertyId = propertyMatch.Groups[1].Value;
+        // Fallback: body contains "Cancellation — 5474030366" or "reservation 5474030366"
+        if (string.IsNullOrEmpty(booking.BookingReference))
+        {
+            var refMatch = Regex.Match(content,
+                @"Cancellation\s*[\—\-–]\s*(\d{6,})",
+                RegexOptions.IgnoreCase);
+            if (!refMatch.Success)
+                refMatch = Regex.Match(content,
+                    @"(?:cancellation of )?reservation\s+(\d{6,})",
+                    RegexOptions.IgnoreCase);
+            if (!refMatch.Success)
+                refMatch = Regex.Match(content,
+                    @"(?:booking|reservation)\s*(?:number|ID)[:\s#]+(\d+)",
+                    RegexOptions.IgnoreCase);
+            if (refMatch.Success)
+                booking.BookingReference = refMatch.Groups[1].Value;
+        }
+
+        // Property ID from URL parameter hotel_id=XXXXXXXX or plain-text property: XXXXXXXX
+        var propMatch = Regex.Match(content, @"hotel[_]?id[=:](\d+)", RegexOptions.IgnoreCase);
+        if (!propMatch.Success)
+            propMatch = Regex.Match(content, @"/hotels?/(\d{6,})", RegexOptions.IgnoreCase);
+        if (!propMatch.Success)
+            propMatch = Regex.Match(content, @"property[:\s]+(\d{6,})", RegexOptions.IgnoreCase);
+        if (propMatch.Success)
+            booking.PropertyId = propMatch.Groups[1].Value;
 
         if (string.IsNullOrEmpty(booking.BookingReference))
         {
@@ -715,5 +741,236 @@ public class BookingParserService : IBookingParserService
         }
 
         return booking;
+    }
+
+    // -----------------------------------------------------------------------
+    // ParseBookings – multi-email batch processing
+    // -----------------------------------------------------------------------
+
+    public List<(Booking Booking, List<EmailMessage> SourceEmails)> ParseBookings(IEnumerable<EmailMessage> emails)
+    {
+        var result = new List<(Booking, List<EmailMessage>)>();
+
+        var bookingComEmails = new List<EmailMessage>();
+        var otherEmails = new List<EmailMessage>();
+
+        foreach (var email in emails)
+        {
+            var platform = DeterminePlatform(email);
+            if (platform == "bookingcom")
+                bookingComEmails.Add(email);
+            else
+                otherEmails.Add(email);
+        }
+
+        // Airbnb / VRBO: one email → one booking (existing logic)
+        foreach (var email in otherEmails)
+        {
+            try
+            {
+                var booking = ParseBooking(email);
+                if (booking != null)
+                    result.Add((booking, new List<EmailMessage> { email }));
+                else
+                    _logger.LogWarning($"Could not parse booking from email: {email.Subject}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error parsing booking from email: {email.Subject}");
+            }
+        }
+
+        // Booking.com: pair request + confirmation emails
+        result.AddRange(ParseBookingComEmailPairs(bookingComEmails));
+
+        return result;
+    }
+
+    // -----------------------------------------------------------------------
+    // Booking.com two-email pairing
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Returns true when the email is a Booking.com new-booking confirmation.
+    /// Subject format: "Booking.com - New booking! (5474030366, Monday, December 21, 2026)"
+    /// </summary>
+    private static bool IsBookingComConfirmationEmail(EmailMessage email)
+    {
+        var subject = email.Subject ?? "";
+        return Regex.IsMatch(subject, @"Booking\.com\s*-\s*New booking!", RegexOptions.IgnoreCase);
+    }
+
+    /// <summary>
+    /// Returns true when the email is a Booking.com booking request (pre-confirmation).
+    /// Subject format: "New booking request – accept or decline by 10:45 AM on Apr 13, 2026"
+    /// </summary>
+    private static bool IsBookingComRequestEmail(EmailMessage email)
+    {
+        var subject = email.Subject ?? "";
+        return Regex.IsMatch(subject, @"New booking request", RegexOptions.IgnoreCase) &&
+               Regex.IsMatch(subject, @"accept or decline", RegexOptions.IgnoreCase);
+    }
+
+    /// <summary>
+    /// Parses a Booking.com confirmation email.
+    /// Returns a partial <see cref="Booking"/> with BookingReference and CheckInDate populated.
+    /// PropertyId is extracted from the content when available.
+    /// </summary>
+    private Booking? ParseBookingComConfirmationEmail(EmailMessage email)
+    {
+        var subject = email.Subject ?? "";
+        var content = (email.HtmlBody ?? "") + " " + (email.Body ?? "");
+
+        // Subject: "Booking.com - New booking! (5474030366, Monday, December 21, 2026)"
+        var subjectMatch = Regex.Match(subject,
+            @"New booking!\s*\((\d+),\s*\w+,\s*([A-Za-z]+ \d{1,2},\s*\d{4})\)",
+            RegexOptions.IgnoreCase);
+
+        if (!subjectMatch.Success)
+        {
+            _logger.LogWarning($"Could not parse Booking.com confirmation subject: {subject}");
+            return null;
+        }
+
+        var booking = new Booking { Platform = "bookingcom" };
+        booking.BookingReference = subjectMatch.Groups[1].Value;
+
+        if (DateTime.TryParse(subjectMatch.Groups[2].Value, out var checkIn))
+            booking.CheckInDate = checkIn;
+
+        // Property ID from content. Booking.com extranet links include the hotel/property ID
+        // in several common forms:
+        //   hotel_id=XXXXXXXX
+        //   hotelid=XXXXXXXX
+        //   /hotels/XXXXXXXX
+        //   property: XXXXXXXX  (plain-text fallback)
+        var propMatch = Regex.Match(content, @"hotel[_]?id[=:]\s*(\d+)", RegexOptions.IgnoreCase);
+        if (!propMatch.Success)
+            propMatch = Regex.Match(content, @"/hotels?/(\d{6,})", RegexOptions.IgnoreCase);
+        if (!propMatch.Success)
+            propMatch = Regex.Match(content, @"property[:\s/]+(\d{6,})", RegexOptions.IgnoreCase);
+        if (propMatch.Success)
+            booking.PropertyId = propMatch.Groups[1].Value;
+
+        // Guest name from content
+        var guestMatch = Regex.Match(content, @"guest\s+name[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+)\b", RegexOptions.IgnoreCase);
+        if (guestMatch.Success)
+            booking.GuestName = guestMatch.Groups[1].Value.Trim();
+
+        _logger.LogInformation($"Parsed Booking.com confirmation – Reference: '{booking.BookingReference}', CheckIn: {booking.CheckInDate:yyyy-MM-dd}, PropertyId: '{booking.PropertyId}'");
+        return booking;
+    }
+
+    /// <summary>
+    /// Parses a Booking.com booking-request email (the pre-acceptance email).
+    /// Returns a partial <see cref="Booking"/> with CheckInDate, CheckOutDate, and NumberOfGuests.
+    /// </summary>
+    private Booking? ParseBookingComRequestEmail(EmailMessage email)
+    {
+        var content = (email.HtmlBody ?? "") + " " + (email.Body ?? "");
+
+        var booking = new Booking { Platform = "bookingcom" };
+
+        // Check-in / Check-out appear as plain text labels followed by "Month Day, Year"
+        var checkInMatch = Regex.Match(content,
+            @"Check-in\s+([A-Za-z]+ \d{1,2},\s*\d{4})",
+            RegexOptions.IgnoreCase);
+        var checkOutMatch = Regex.Match(content,
+            @"Check-out\s+([A-Za-z]+ \d{1,2},\s*\d{4})",
+            RegexOptions.IgnoreCase);
+
+        if (checkInMatch.Success && DateTime.TryParse(checkInMatch.Groups[1].Value, out var checkIn))
+            booking.CheckInDate = checkIn;
+
+        if (checkOutMatch.Success && DateTime.TryParse(checkOutMatch.Groups[1].Value, out var checkOut))
+            booking.CheckOutDate = checkOut;
+
+        if (booking.CheckInDate == default || booking.CheckOutDate == default)
+        {
+            _logger.LogWarning($"Could not extract dates from Booking.com request email: {email.Subject}");
+            return null;
+        }
+
+        // Number of guests (adults + children)
+        var adultsMatch = Regex.Match(content, @"(\d+)\s+adults?", RegexOptions.IgnoreCase);
+        var childrenMatch = Regex.Match(content, @"(\d+)\s+child(?:ren)?", RegexOptions.IgnoreCase);
+        int guests = 0;
+        if (adultsMatch.Success && int.TryParse(adultsMatch.Groups[1].Value, out var adults))
+            guests += adults;
+        if (childrenMatch.Success && int.TryParse(childrenMatch.Groups[1].Value, out var children))
+            guests += children;
+        if (guests > 0)
+            booking.NumberOfGuests = guests;
+
+        _logger.LogInformation($"Parsed Booking.com request – CheckIn: {booking.CheckInDate:yyyy-MM-dd}, CheckOut: {booking.CheckOutDate:yyyy-MM-dd}, Guests: {booking.NumberOfGuests}");
+        return booking;
+    }
+
+    private List<(Booking Booking, List<EmailMessage> SourceEmails)> ParseBookingComEmailPairs(
+        IEnumerable<EmailMessage> emails)
+    {
+        var confirmations = new List<EmailMessage>();
+        var requests = new List<EmailMessage>();
+
+        foreach (var email in emails)
+        {
+            if (IsBookingComConfirmationEmail(email))
+                confirmations.Add(email);
+            else if (IsBookingComRequestEmail(email))
+                requests.Add(email);
+            else
+                _logger.LogWarning($"Unrecognised Booking.com email type, skipping: {email.Subject}");
+        }
+
+        var result = new List<(Booking, List<EmailMessage>)>();
+
+        foreach (var confirmEmail in confirmations)
+        {
+            try
+            {
+                var confirmBooking = ParseBookingComConfirmationEmail(confirmEmail);
+                if (confirmBooking == null) continue;
+
+                // Find a matching request email by check-in date
+                EmailMessage? matchedRequest = null;
+                Booking? requestBooking = null;
+
+                foreach (var reqEmail in requests)
+                {
+                    var rb = ParseBookingComRequestEmail(reqEmail);
+                    if (rb != null && rb.CheckInDate.Date == confirmBooking.CheckInDate.Date)
+                    {
+                        matchedRequest = reqEmail;
+                        requestBooking = rb;
+                        break;
+                    }
+                }
+
+                if (matchedRequest == null || requestBooking == null)
+                {
+                    _logger.LogWarning(
+                        $"No matching Booking.com request email found for confirmation '{confirmEmail.Subject}' " +
+                        $"(check-in {confirmBooking.CheckInDate:yyyy-MM-dd}). Cannot create complete booking.");
+                    continue;
+                }
+
+                // Merge: confirmation supplies reference; request supplies dates + guests
+                confirmBooking.CheckOutDate = requestBooking.CheckOutDate;
+                if (confirmBooking.NumberOfGuests == 0)
+                    confirmBooking.NumberOfGuests = requestBooking.NumberOfGuests;
+
+                _logger.LogInformation(
+                    $"Merged Booking.com booking – Reference: '{confirmBooking.BookingReference}', " +
+                    $"CheckIn: {confirmBooking.CheckInDate:yyyy-MM-dd}, CheckOut: {confirmBooking.CheckOutDate:yyyy-MM-dd}");
+
+                result.Add((confirmBooking, new List<EmailMessage> { confirmEmail, matchedRequest }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error pairing Booking.com emails for: {confirmEmail.Subject}");
+            }
+        }
+
+        return result;
     }
 }

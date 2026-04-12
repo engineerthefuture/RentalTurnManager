@@ -6,7 +6,9 @@
     "subjectPatterns": [
       "Reservation confirmed",
       "Instant Booking from",
-      "booking confirmation"
+      "booking confirmation",
+      "New booking request",
+      "Booking.com - New booking"
     ]
   },
   "properties": [

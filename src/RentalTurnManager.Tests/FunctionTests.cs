@@ -167,8 +167,8 @@ public class FunctionTests
             .ReturnsAsync(new List<EmailMessage> { email });
 
         _mockBookingParser
-            .Setup(x => x.ParseBooking(It.IsAny<EmailMessage>()))
-            .Returns(booking);
+            .Setup(x => x.ParseBookings(It.IsAny<IEnumerable<EmailMessage>>()))
+            .Returns(new List<(Booking, List<EmailMessage>)> { (booking, new List<EmailMessage> { email }) });
 
         _mockStepFunction
             .Setup(x => x.StartCleanerWorkflowAsync(It.IsAny<CleanerWorkflowInput>()))
@@ -223,8 +223,8 @@ public class FunctionTests
             .ReturnsAsync(new List<EmailMessage> { email });
 
         _mockBookingParser
-            .Setup(x => x.ParseBooking(It.IsAny<EmailMessage>()))
-            .Returns(booking);
+            .Setup(x => x.ParseBookings(It.IsAny<IEnumerable<EmailMessage>>()))
+            .Returns(new List<(Booking, List<EmailMessage>)> { (booking, new List<EmailMessage> { email }) });
 
         var context = new TestLambdaContext();
         var request = new LambdaRequest();

@@ -217,8 +217,16 @@ public class Function
             var fromAddresses = _propertiesConfig.EmailFilters?.BookingPlatformFromAddresses ?? new List<string> { "airbnb.com", "vrbo.com", "booking.com" };
             _logger.LogInformation($"Using from addresses: {string.Join(", ", fromAddresses)}");
             
-            // Get configured subject patterns
-            var subjectPatterns = _propertiesConfig.EmailFilters?.SubjectPatterns ?? new List<string> { "Reservation confirmed", "Instant Booking from", "booking confirmation" };
+            // Get configured subject patterns and always include the Booking.com-specific ones.
+            // These are merged rather than replaced so existing configs that pre-date Booking.com
+            // support continue to work without requiring a manual secret update.
+            var configuredPatterns = _propertiesConfig.EmailFilters?.SubjectPatterns
+                ?? new List<string> { "Reservation confirmed", "Instant Booking from", "booking confirmation" };
+            var requiredPatterns = new List<string> { "New booking request", "Booking.com - New booking" };
+            var subjectPatterns = configuredPatterns
+                .Concat(requiredPatterns.Where(r =>
+                    !configuredPatterns.Any(c => c.Contains(r, StringComparison.OrdinalIgnoreCase))))
+                .ToList();
             _logger.LogInformation($"Using subject patterns: {string.Join(", ", subjectPatterns)}");
             
             // Scan emails for new bookings
@@ -226,22 +234,17 @@ public class Function
             var emails = await emailScanner.ScanForBookingEmailsAsync(emailCredentials, input.ForceRescan, fromAddresses, subjectPatterns);
             _logger.LogInformation($"Found {emails.Count} potential booking emails");
 
-            foreach (var email in emails)
+            var bookingPairs = bookingParser.ParseBookings(emails) ?? new List<(Booking Booking, List<EmailMessage> SourceEmails)>();
+            _logger.LogInformation($"Parsed {bookingPairs.Count} complete booking(s) from emails");
+
+            foreach (var (booking, sourceEmails) in bookingPairs)
             {
                 try
                 {
-                    // Parse booking information
-                    var booking = bookingParser.ParseBooking(email);
-                    if (booking == null)
-                    {
-                        _logger.LogWarning($"Could not parse booking from email: {email.Subject}");
-                        continue;
-                    }
-                    
                     // Validate booking has required fields
                     if (string.IsNullOrEmpty(booking.BookingReference))
                     {
-                        _logger.LogWarning($"Booking missing reference ID from email: {email.Subject}");
+                        _logger.LogWarning($"Booking missing reference ID, skipping");
                         continue;
                     }
 
@@ -271,6 +274,22 @@ public class Function
                         p.PlatformIds.TryGetValue(normalizedPlatform, out var id) && 
                         id.Equals(booking.PropertyId, StringComparison.OrdinalIgnoreCase)
                     );
+
+                    // Booking.com host emails don't embed the host's property ID, so when
+                    // PropertyId is empty fall back to the single configured bookingcom property.
+                    if (property == null && string.IsNullOrEmpty(booking.PropertyId) && normalizedPlatform == "bookingcom")
+                    {
+                        var bookingComProperties = _propertiesConfig.Properties
+                            ?.Where(p => p.PlatformIds.ContainsKey("bookingcom"))
+                            .ToList();
+                        if (bookingComProperties?.Count == 1)
+                        {
+                            property = bookingComProperties[0];
+                            booking.PropertyId = property.PlatformIds["bookingcom"];
+                            _logger.LogInformation(
+                                $"Booking.com email contained no property ID; matched to sole configured property '{property.PropertyId}' (bookingcom ID: {booking.PropertyId})");
+                        }
+                    }
                     
                     if (property == null)
                     {
@@ -540,20 +559,27 @@ public class Function
                     await bookingStateService.SaveBookingAsync(booking);
                     _logger.LogInformation($"Saved booking state: {booking.Platform} - {booking.BookingReference}");
 
-                    // Mark email as processed
-                    await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, email);
+                    // Mark all source emails as processed
+                    foreach (var sourceEmail in sourceEmails)
+                        await emailScanner.MarkEmailAsProcessedAsync(emailCredentials, sourceEmail);
                 }
                 catch (Exception ex)
                 {
-                    var error = $"Error processing email '{email.Subject}': {ex.Message}";
+                    var error = $"Error processing booking '{booking.BookingReference}' ({booking.Platform}): {ex.Message}";
                     _logger.LogError(ex, error);
                     response.Errors.Add(error);
                 }
             }
 
-            // Scan for and process booking cancellation emails
-            var cancellationSubjectPatterns = _propertiesConfig.EmailFilters?.CancellationSubjectPatterns
+            // Merge required Booking.com cancellation pattern into whatever the config supplies,
+            // so existing deployed secrets work without a manual update.
+            var configuredCancelPatterns = _propertiesConfig.EmailFilters?.CancellationSubjectPatterns
                 ?? new List<string> { "canceled by traveler", "Booking canceled", "Reservation canceled", "Booking cancelled", "Reservation cancelled" };
+            var requiredCancelPatterns = new List<string> { "Canceled booking" };
+            var cancellationSubjectPatterns = configuredCancelPatterns
+                .Concat(requiredCancelPatterns.Where(r =>
+                    !configuredCancelPatterns.Any(c => c.Contains(r, StringComparison.OrdinalIgnoreCase))))
+                .ToList();
             _logger.LogInformation($"Scanning for cancellation emails with patterns: {string.Join(", ", cancellationSubjectPatterns)}");
 
             var cancellationFromAddresses = _propertiesConfig.EmailFilters?.CancellationFromAddresses ?? fromAddresses;
