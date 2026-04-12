@@ -605,6 +605,77 @@ public class BookingParserServiceTests
         }
 
         [Fact]
+        public void ParseCancellation_BookingCom_CanceledBookingSubject_ExtractsReference()
+        {
+            // Arrange - real Booking.com cancellation email format
+            var email = new EmailMessage
+            {
+                From = "noreply@booking.com",
+                Subject = "Canceled booking! (5474030366, Monday, December 21, 2026)",
+                Body = @"
+Cancellation — 5474030366
+
+Dear Brent Foster,
+
+Unfortunately, Brent Foster canceled their booking.
+Following the cancellation of reservation 5474030366, we can confirm
+that the guest's cancellation fees are now $0.
+
+https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking.html?res_id=5474030366&hotel_id=99887766&lang=en-us
+"
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("bookingcom");
+            result.BookingReference.Should().Be("5474030366");
+            result.PropertyId.Should().Be("99887766");
+        }
+
+        [Fact]
+        public void ParseCancellation_BookingCom_CanceledBookingSubject_NoHotelIdInBody_StillExtractsReference()
+        {
+            // Arrange - subject has reference, body uses em-dash format but no URL
+            var email = new EmailMessage
+            {
+                From = "noreply@booking.com",
+                Subject = "Canceled booking! (9900112233, Friday, January 9, 2026)",
+                Body = "Cancellation — 9900112233\nThe booking has been cancelled."
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("bookingcom");
+            result.BookingReference.Should().Be("9900112233");
+        }
+
+        [Fact]
+        public void ParseCancellation_BookingCom_BodyReservationPattern_ExtractsReference()
+        {
+            // Arrange - no "Canceled booking!" subject but body has "reservation XXXXXX"
+            var email = new EmailMessage
+            {
+                From = "noreply@booking.com",
+                Subject = "Booking cancellation notice",
+                Body = "Following the cancellation of reservation 7712345678, no fees apply."
+            };
+
+            // Act
+            var result = _service.ParseCancellation(email);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Platform.Should().Be("bookingcom");
+            result.BookingReference.Should().Be("7712345678");
+        }
+
+        [Fact]
         public void ParseCancellation_UnknownPlatform_ReturnsNull()
         {
             // Arrange

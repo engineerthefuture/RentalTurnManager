@@ -90,7 +90,8 @@ public class EmailFilterConfiguration
         "Booking canceled",
         "Reservation canceled",
         "Booking cancelled",
-        "Reservation cancelled"
+        "Reservation cancelled",
+        "Canceled booking"
     };
 
     public List<string>? CancellationFromAddresses { get; set; }

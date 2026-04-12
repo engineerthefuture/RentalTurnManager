@@ -216,13 +216,39 @@ public class BookingParserService : IBookingParserService
 
         var booking = new Booking { Platform = "bookingcom" };
 
-        var refMatch = Regex.Match(content, @"(?:booking|reservation)\s*(?:number|ID)[:\s#]+([0-9]+)", RegexOptions.IgnoreCase);
-        if (refMatch.Success)
-            booking.BookingReference = refMatch.Groups[1].Value;
+        // Subject: "Canceled booking! (5474030366, Monday, December 21, 2026)"
+        var subjectMatch = Regex.Match(subject,
+            @"Canceled booking!\s*\((\d+),",
+            RegexOptions.IgnoreCase);
+        if (subjectMatch.Success)
+            booking.BookingReference = subjectMatch.Groups[1].Value;
 
-        var propertyMatch = Regex.Match(content, @"property[:\s]+([0-9]+)", RegexOptions.IgnoreCase);
-        if (propertyMatch.Success)
-            booking.PropertyId = propertyMatch.Groups[1].Value;
+        // Fallback: body contains "Cancellation — 5474030366" or "reservation 5474030366"
+        if (string.IsNullOrEmpty(booking.BookingReference))
+        {
+            var refMatch = Regex.Match(content,
+                @"Cancellation\s*[\—\-–]\s*(\d{6,})",
+                RegexOptions.IgnoreCase);
+            if (!refMatch.Success)
+                refMatch = Regex.Match(content,
+                    @"(?:cancellation of )?reservation\s+(\d{6,})",
+                    RegexOptions.IgnoreCase);
+            if (!refMatch.Success)
+                refMatch = Regex.Match(content,
+                    @"(?:booking|reservation)\s*(?:number|ID)[:\s#]+(\d+)",
+                    RegexOptions.IgnoreCase);
+            if (refMatch.Success)
+                booking.BookingReference = refMatch.Groups[1].Value;
+        }
+
+        // Property ID from URL parameter hotel_id=XXXXXXXX or plain-text property: XXXXXXXX
+        var propMatch = Regex.Match(content, @"hotel[_]?id[=:](\d+)", RegexOptions.IgnoreCase);
+        if (!propMatch.Success)
+            propMatch = Regex.Match(content, @"/hotels?/(\d{6,})", RegexOptions.IgnoreCase);
+        if (!propMatch.Success)
+            propMatch = Regex.Match(content, @"property[:\s]+(\d{6,})", RegexOptions.IgnoreCase);
+        if (propMatch.Success)
+            booking.PropertyId = propMatch.Groups[1].Value;
 
         if (string.IsNullOrEmpty(booking.BookingReference))
         {

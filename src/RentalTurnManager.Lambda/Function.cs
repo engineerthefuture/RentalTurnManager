@@ -571,9 +571,15 @@ public class Function
                 }
             }
 
-            // Scan for and process booking cancellation emails
-            var cancellationSubjectPatterns = _propertiesConfig.EmailFilters?.CancellationSubjectPatterns
+            // Merge required Booking.com cancellation pattern into whatever the config supplies,
+            // so existing deployed secrets work without a manual update.
+            var configuredCancelPatterns = _propertiesConfig.EmailFilters?.CancellationSubjectPatterns
                 ?? new List<string> { "canceled by traveler", "Booking canceled", "Reservation canceled", "Booking cancelled", "Reservation cancelled" };
+            var requiredCancelPatterns = new List<string> { "Canceled booking" };
+            var cancellationSubjectPatterns = configuredCancelPatterns
+                .Concat(requiredCancelPatterns.Where(r =>
+                    !configuredCancelPatterns.Any(c => c.Contains(r, StringComparison.OrdinalIgnoreCase))))
+                .ToList();
             _logger.LogInformation($"Scanning for cancellation emails with patterns: {string.Join(", ", cancellationSubjectPatterns)}");
 
             var cancellationFromAddresses = _propertiesConfig.EmailFilters?.CancellationFromAddresses ?? fromAddresses;
