@@ -1,0 +1,42 @@
+schema_version: "1.0"
+
+extension:
+  id: "brownfield-bootstrap"
+  name: "Brownfield Bootstrap Extension"
+  version: "2.2.0"
+  description: "Bootstrap existing brownfield projects into spec-kit SDD workflow with automatic project analysis and customized template generation"
+  author: "wcpaxx"
+  repository: "https://github.com/wcpaxx/spec-kit-brownfield-extensions"
+  homepage: "https://github.com/wcpaxx/spec-kit-brownfield-extensions"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.1.0"
+  commands:
+    - "speckit.specify"
+    - "speckit.plan"
+    - "speckit.tasks"
+
+provides:
+  commands:
+    # English command
+    - name: "speckit.brownfield-bootstrap.init"
+      file: "commands/init.md"
+      description: "Initialize SDD for existing brownfield projects"
+      aliases: ["speckit.brownfield.bootstrap", "speckit.brownfield-bootstrap.bootstrap"]
+
+    # Chinese command (中文命令)
+    - name: "speckit.brownfield-bootstrap.init-cn"
+      file: "commands/init-cn.md"
+      description: "初始化棕地项目的SDD工作流"
+      aliases: ["speckit.brownfield.bootstrap-cn", "speckit.brownfield-bootstrap.bootstrap-cn"]
+
+  config:
+    file: "config-template.yml"
+    description: "Configuration options for brownfield bootstrap"
+
+tags:
+  - "brownfield"
+  - "bootstrap"
+  - "sdd"
+  - "initialization"

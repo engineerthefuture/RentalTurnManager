@@ -740,6 +740,51 @@ Approximate monthly costs (based on 1 property, checking every 20 minutes):
 
 **Scaling**: Add ~$2-4/month for each additional property.
 
+## Spec-Driven Development
+
+This project uses [Spec Kit](https://github.com/github/spec-kit) for feature development via a Spec-Driven Development (SDD) workflow. Features are defined as specifications before implementation, ensuring clear intent and predictable outcomes.
+
+### Prerequisites
+
+Install the `specify` CLI (requires [uv](https://docs.astral.sh/uv/) and Python 3.11+):
+
+```bash
+uv tool install specify-cli --from git+https://github.com/github/spec-kit.git@v0.7.0
+```
+
+### SDD Workflow
+
+All new feature development follows this sequence using GitHub Copilot agent mode:
+
+| Step | Command | Purpose |
+|------|---------|---------|
+| 1 | `@speckit.specify` | Define what you want to build (requirements & user stories) |
+| 2 | `@speckit.clarify` | *(optional)* Clarify underspecified areas before planning |
+| 3 | `@speckit.plan` | Create technical implementation plan (C#/.NET 10, AWS Lambda) |
+| 4 | `@speckit.tasks` | Break plan into actionable TDD-ordered tasks |
+| 5 | `@speckit.implement` | Execute all tasks to build the feature |
+
+### Project Constitution
+
+The project constitution at [`.specify/memory/constitution.md`](.specify/memory/constitution.md) governs all SDD artifacts. Key constraints:
+
+- **Interface-First**: All services must have a paired `IXxxService` interface in `RentalTurnManager.Core`
+- **TDD Enforced**: Tests (xUnit + Moq + FluentAssertions) written and confirmed failing before implementation
+- **Module Placement**: Business logic → `Core`; shared models → `Models`; Lambda-specific code → its own Lambda project
+- **AWS-Native**: All AWS interactions via official `AWSSDK.*` packages; no hardcoded credentials
+
+### Feature Specs
+
+Active and completed feature specs are stored under `specs/`:
+
+```
+specs/
+└── [###-feature-name]/
+    ├── spec.md      # Requirements & user stories
+    ├── plan.md      # Technical implementation plan
+    └── tasks.md     # Task breakdown
+```
+
 ## Contributing
 
 ### Development Workflow

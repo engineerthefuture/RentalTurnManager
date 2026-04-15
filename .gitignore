@@ -65,3 +65,8 @@ lambda-deployment/
 # Rider
 .idea.powershell/
 _ReSharper.Caches/
+
+# Spec Kit — local CLI bookkeeping (not needed by contributors)
+SDD/.specify/init-options.json
+SDD/.specify/integrations/copilot.manifest.json
+SDD/.specify/integrations/speckit.manifest.json

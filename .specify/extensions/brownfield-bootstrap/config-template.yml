@@ -1,0 +1,22 @@
+brownfield_bootstrap:
+  language: "en"
+  
+  analysis:
+    max_depth: 3
+    exclude_patterns:
+      - "node_modules/**"
+      - ".git/**"
+      - "vendor/**"
+      - "__pycache__/**"
+      - "target/**"
+      - "build/**"
+      - "dist/**"
+    
+  constitution:
+    include_tdd: true
+    include_code_reuse_principles: true
+    
+  templates:
+    generate_spec_template: true
+    generate_plan_template: true
+    generate_tasks_template: true
