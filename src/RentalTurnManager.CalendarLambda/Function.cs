@@ -55,7 +55,13 @@ public class Function
         {
             try
             {
-                var utcDateTime = DateTime.Parse(request.CleaningDateTime);
+                var utcDateTime = DateTime.Parse(
+                    request.CleaningDateTime,
+                    null,
+                    System.Globalization.DateTimeStyles.RoundtripKind);
+                // Strings without a timezone designator arrive from the workflow as UTC
+                if (utcDateTime.Kind != DateTimeKind.Utc)
+                    utcDateTime = DateTime.SpecifyKind(utcDateTime, DateTimeKind.Utc);
                 var propertyTimezone = request.Timezone ?? "America/New_York";
                 var easternZone = TimeZoneInfo.FindSystemTimeZoneById(propertyTimezone);
                 var easternDateTime = TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, easternZone);
@@ -334,7 +340,7 @@ public class Function
         return icsBuilder.ToString();
     }
 
-    private double ParseDuration(string duration)
+    internal static double ParseDuration(string duration)
     {
         // Extract first number from duration string (e.g., "2-3 hours" -> 2.5)
         var match = System.Text.RegularExpressions.Regex.Match(duration, @"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)");
