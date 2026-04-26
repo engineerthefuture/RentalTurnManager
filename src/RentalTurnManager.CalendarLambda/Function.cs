@@ -56,7 +56,8 @@ public class Function
             try
             {
                 var utcDateTime = DateTime.Parse(request.CleaningDateTime);
-                var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+                var propertyTimezone = request.Timezone ?? "America/New_York";
+                var easternZone = TimeZoneInfo.FindSystemTimeZoneById(propertyTimezone);
                 var easternDateTime = TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, easternZone);
                 var easternTimeDisplay = easternDateTime.ToString("h:mm tt");
                 
@@ -96,7 +97,10 @@ public class Function
                 request.CleaningDateTime ?? request.CleaningDate,
                 request.CleanerName,
                 request.CleanerEmail,
+                request.OwnerName,
                 request.OwnerEmail,
+                request.CleaningDuration,
+                request.Timezone,
                 request.BookingReference
               )
             : GenerateIcsContent(
@@ -110,6 +114,7 @@ public class Function
                 request.CleaningDate,
                 request.CleaningDateTime,
                 request.CleaningDuration,
+                request.Timezone,
                 request.BookingReference
               );
 
@@ -152,6 +157,8 @@ public class Function
                 request.CleaningDateTime ?? request.CleaningDate,
                 request.PropertyName,
                 request.OwnerName,
+                request.Timezone,
+                request.CleaningDuration,
                 context
             );
         }
@@ -170,6 +177,8 @@ public class Function
         string cleaningDate,
         string propertyName,
         string ownerName,
+        string? timezone,
+        string? cleaningDuration,
         ILambdaContext context)
     {
         try
@@ -212,6 +221,18 @@ public class Function
                     booking.OwnerName = ownerName;
                 }
                 
+                // Set Timezone if provided
+                if (!string.IsNullOrEmpty(timezone))
+                {
+                    booking.Timezone = timezone;
+                }
+                
+                // Set CleaningDuration if provided
+                if (!string.IsNullOrEmpty(cleaningDuration))
+                {
+                    booking.CleaningDuration = cleaningDuration;
+                }
+                
                 // Parse the full cleaning DateTime (already in UTC from workflow)
                 if (DateTime.TryParse(cleaningDate, out var cleaningDateTime))
                 {
@@ -247,9 +268,9 @@ public class Function
         }
     }
 
-    private string GenerateIcsContent(string cleanerName, string cleanerEmail, string cleanerPhone, string ownerName, string ownerEmail, string propertyName, string propertyAddress, string cleaningDate, string? cleaningDateTime, string duration, string? bookingReference = null)
+    private string GenerateIcsContent(string cleanerName, string cleanerEmail, string cleanerPhone, string ownerName, string ownerEmail, string propertyName, string propertyAddress, string cleaningDate, string? cleaningDateTime, string duration, string? timezone = null, string? bookingReference = null)
     {
-        var startDateTime = ParseCleaningDateTimeUtc(cleaningDateTime, cleaningDate);
+        var startDateTime = ParseCleaningDateTimeUtc(cleaningDateTime, cleaningDate, timezone);
         
         // Parse duration (e.g., "2-3 hours" -> use 2.5 hours)
         var durationHours = ParseDuration(duration);
@@ -388,11 +409,12 @@ public class Function
         return message.ToString();
     }
 
-    private string GenerateCancellationIcs(string propertyName, string cleaningDate, string cleanerName, string cleanerEmail, string ownerEmail, string? bookingReference = null)
+    private string GenerateCancellationIcs(string propertyName, string cleaningDate, string cleanerName, string cleanerEmail, string ownerName, string ownerEmail, string cleaningDuration, string? timezone = null, string? bookingReference = null)
     {
-        var startDateTime = ParseCleaningDateTimeUtc(cleaningDate);
+        var startDateTime = ParseCleaningDateTimeUtc(cleaningDate, null, timezone);
         
-        var endDateTime = startDateTime.AddHours(3);
+        var durationHours = ParseDuration(cleaningDuration);
+        var endDateTime = startDateTime.AddHours(durationHours > 0 ? durationHours : 3.0);
         var now = DateTime.UtcNow;
         
         // Use the same deterministic UID as the original invite so calendar clients can match and cancel it.
@@ -412,7 +434,7 @@ public class Function
         icsBuilder.AppendLine($"DESCRIPTION:This cleaning appointment has been cancelled.");
         icsBuilder.AppendLine($"STATUS:CANCELLED");
         icsBuilder.AppendLine($"SEQUENCE:1");
-        icsBuilder.AppendLine($"ORGANIZER;CN=Owner:mailto:{ownerEmail}");
+        icsBuilder.AppendLine($"ORGANIZER;CN={ownerName}:mailto:{ownerEmail}");
         
         // Add cleaner as attendee if provided
         if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName))
@@ -421,7 +443,7 @@ public class Function
         }
         
         // Add owner as attendee
-        icsBuilder.AppendLine($"ATTENDEE;CN=Owner:mailto:{ownerEmail}");
+        icsBuilder.AppendLine($"ATTENDEE;CN={ownerName}:mailto:{ownerEmail}");
         
         icsBuilder.AppendLine("END:VEVENT");
         icsBuilder.AppendLine("END:VCALENDAR");
@@ -455,7 +477,7 @@ public class Function
         return $"cleaning-{normalizedProperty}-{startDateTime:yyyyMMdd}{bookingSegment}@rentalturnmanager.com";
     }
 
-    internal static DateTime ParseCleaningDateTimeUtc(string? dateTimeString, string? dateOnlyFallback = null)
+    internal static DateTime ParseCleaningDateTimeUtc(string? dateTimeString, string? dateOnlyFallback = null, string? timezone = null)
     {
         // RoundtripKind honours the Z suffix (keeps Kind=Utc and value in UTC).
         // For strings without a timezone designator, Kind=Unspecified; SpecifyKind then
@@ -464,12 +486,14 @@ public class Function
             DateTime.TryParse(dateTimeString, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
             return parsed.Kind == DateTimeKind.Utc ? parsed : DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
 
-        // Date-only fallback: default to 12:00 PM Eastern Time
+        // Date-only fallback: default to 12:00 PM in the property's configured timezone
         if (!string.IsNullOrEmpty(dateOnlyFallback) && DateTime.TryParse(dateOnlyFallback, out var fallbackDate))
         {
-            var easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+            TimeZoneInfo propertyZone;
+            try { propertyZone = TimeZoneInfo.FindSystemTimeZoneById(timezone ?? "America/New_York"); }
+            catch (TimeZoneNotFoundException) { propertyZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); }
             var noon = new DateTime(fallbackDate.Year, fallbackDate.Month, fallbackDate.Day, 12, 0, 0, DateTimeKind.Unspecified);
-            return TimeZoneInfo.ConvertTimeToUtc(noon, easternZone);
+            return TimeZoneInfo.ConvertTimeToUtc(noon, propertyZone);
         }
 
         return DateTime.UtcNow;
@@ -494,6 +518,7 @@ public class CalendarEmailRequest
     public string CleaningDate { get; set; } = string.Empty;
     public string? CleaningDateTime { get; set; }
     public string CleaningDuration { get; set; } = string.Empty;
+    public string? Timezone { get; set; }
     
     // Booking details for state update
     public string? Platform { get; set; }
@@ -521,4 +546,6 @@ public class BookingState
     public DateTime? ScheduledCleaningTime { get; set; }
     public string? WorkflowPropertyId { get; set; }
     public string? OwnerName { get; set; }
+    public string? Timezone { get; set; }
+    public string? CleaningDuration { get; set; }
 }

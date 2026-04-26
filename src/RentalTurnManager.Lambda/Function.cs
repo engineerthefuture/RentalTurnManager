@@ -692,9 +692,11 @@ public class Function
             ?? property?.Metadata.PropertyName
             ?? booking.PropertyId;
         var ownerName = property?.Metadata.OwnerName ?? "Property Management";
+        var propertyTimezone = property?.Metadata.Timezone ?? "America/New_York";
+        var propertyCleaningDuration = property?.Metadata.CleaningDuration ?? string.Empty;
 
         TimeZoneInfo easternZone;
-        try { easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); }
+        try { easternZone = TimeZoneInfo.FindSystemTimeZoneById(propertyTimezone); }
         catch (TimeZoneNotFoundException) { easternZone = TimeZoneInfo.Utc; }
 
         // Prefer the confirmed cleaning time; fall back to checkout date (the expected cleaning day)
@@ -740,8 +742,11 @@ public class Function
                     CleanerName = booking.AssignedCleanerName,
                     CleanerId = string.Empty,
                     CleanerEmail = booking.AssignedCleanerEmail,
+                    OwnerName = ownerName,
                     OwnerEmail = ownerEmail,
                     CleaningDate = effectiveCleaningDateIso,
+                    CleaningDuration = propertyCleaningDuration,
+                    Timezone = propertyTimezone,
                     IsCancellation = true
                 };
 
@@ -794,8 +799,11 @@ public class Function
                 CleanerName = booking.AssignedCleanerName ?? "(not yet assigned)",
                 CleanerId = string.Empty,
                 CleanerEmail = booking.AssignedCleanerEmail,
+                OwnerName = ownerName,
                 OwnerEmail = ownerEmail,
                 CleaningDate = effectiveCleaningDateIso,
+                CleaningDuration = propertyCleaningDuration,
+                Timezone = propertyTimezone,
                 IsCancellation = true
             };
 
