@@ -43,6 +43,7 @@ public class CleanerContact
 public class PropertyMetadata
 {
     public string PropertyName { get; set; } = string.Empty;
+    public string Timezone { get; set; } = "America/New_York";
     public int Bedrooms { get; set; }
     public double Bathrooms { get; set; }
     public string CleaningDuration { get; set; } = string.Empty;

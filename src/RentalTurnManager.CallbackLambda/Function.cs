@@ -821,6 +821,16 @@ public class Function
             {
                 ownerName = ownerElement.GetString();
             }
+            string? bookingTimezone = null;
+            if (booking.TryGetValue("Timezone", out var tzElement) && tzElement.ValueKind == JsonValueKind.String)
+            {
+                bookingTimezone = tzElement.GetString();
+            }
+            string? bookingCleaningDuration = null;
+            if (booking.TryGetValue("CleaningDuration", out var durElement) && durElement.ValueKind == JsonValueKind.String)
+            {
+                bookingCleaningDuration = durElement.GetString();
+            }
             if (booking.TryGetValue("ScheduledCleaningTime", out var timeElement) && timeElement.ValueKind == JsonValueKind.String)
             {
                 scheduledTime = DateTime.Parse(timeElement.GetString()!);
@@ -863,15 +873,15 @@ public class Function
             var ownerEmail = _defaultOwnerEmail;
             var calendarLambdaName = System.Environment.GetEnvironmentVariable("CALENDAR_LAMBDA_NAME") ?? "RentalTurnManager-CalendarLambda";
             
-            // Get Eastern timezone for time formatting (used in both cleaner and owner emails)
+            // Get property timezone for time formatting (used in both cleaner and owner emails)
             TimeZoneInfo easternZone;
             try
             {
-                easternZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+                easternZone = TimeZoneInfo.FindSystemTimeZoneById(bookingTimezone ?? "America/New_York");
             }
             catch (TimeZoneNotFoundException)
             {
-                context.Logger.LogWarning("Eastern timezone not found, using UTC for time display");
+                context.Logger.LogWarning("Property timezone not found, using UTC for time display");
                 easternZone = TimeZoneInfo.Utc;
             }
             
@@ -908,8 +918,11 @@ public class Function
                         CleanerName = cleanerName,
                         CleanerId = cleanerId,
                         CleanerEmail = cleanerEmail,
+                        OwnerName = ownerName ?? "Property Management",
                         OwnerEmail = ownerEmail,
                         CleaningDate = scheduledTime.Value.ToString("o"),
+                        CleaningDuration = bookingCleaningDuration ?? string.Empty,
+                        Timezone = bookingTimezone ?? "America/New_York",
                         IsCancellation = true
                     };
                     
@@ -973,8 +986,11 @@ public class Function
                     PropertyName = propertyName ?? propertyId,
                     CleanerName = cleanerName ?? "(not yet assigned)",
                     CleanerEmail = cleanerEmail,
+                    OwnerName = ownerName ?? "Property Management",
                     OwnerEmail = ownerEmail,
                     CleaningDate = cleaningDate,
+                    CleaningDuration = bookingCleaningDuration ?? string.Empty,
+                    Timezone = bookingTimezone ?? "America/New_York",
                     IsCancellation = true
                 };
                     
