@@ -148,10 +148,12 @@ public class CalendarFunctionTests
         // With no primary datetime string, the fallback date defaults to 12:00 PM Eastern
         var result = Function.ParseCleaningDateTimeUtc(null, "2026-09-26");
 
-        // 12:00 PM Eastern is 16:00 UTC (EDT, UTC-4)
+        var easternTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+        var easternNoonUnspecified = new DateTime(2026, 9, 26, 12, 0, 0, DateTimeKind.Unspecified);
+        var expectedUtc = TimeZoneInfo.ConvertTimeToUtc(easternNoonUnspecified, easternTimeZone);
+
         result.Kind.Should().Be(DateTimeKind.Utc);
-        result.Date.Should().Be(new DateTime(2026, 9, 26));
-        result.Hour.Should().Be(16); // 12:00 PM EDT = 16:00 UTC
+        result.Should().Be(expectedUtc);
     }
 
     [Fact]
@@ -170,12 +172,14 @@ public class CalendarFunctionTests
     [Fact]
     public void ParseCleaningDateTimeUtc_CustomTimezone_NoonInThatTimezoneUsedAsFallback()
     {
-        // "America/Chicago" CDT on Sept 26, 2026 is UTC-5, so noon = 17:00 UTC
         var result = Function.ParseCleaningDateTimeUtc(null, "2026-09-26", "America/Chicago");
 
+        var tz = TimeZoneInfo.FindSystemTimeZoneById("America/Chicago");
+        var localNoon = new DateTime(2026, 9, 26, 12, 0, 0, DateTimeKind.Unspecified);
+        var expectedUtc = TimeZoneInfo.ConvertTimeToUtc(localNoon, tz);
+
         result.Kind.Should().Be(DateTimeKind.Utc);
-        result.Date.Should().Be(new DateTime(2026, 9, 26));
-        result.Hour.Should().Be(17); // 12:00 PM CDT = 17:00 UTC
+        result.Should().Be(expectedUtc);
     }
 
     [Fact]
