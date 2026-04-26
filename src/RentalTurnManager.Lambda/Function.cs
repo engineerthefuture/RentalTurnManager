@@ -692,12 +692,13 @@ public class Function
             ?? property?.Metadata.PropertyName
             ?? booking.PropertyId;
         var ownerName = property?.Metadata.OwnerName ?? "Property Management";
-        var propertyTimezone = property?.Metadata.Timezone ?? "America/New_York";
+        var propertyTimezone = string.IsNullOrWhiteSpace(property?.Metadata.Timezone) ? "America/New_York" : property!.Metadata.Timezone;
         var propertyCleaningDuration = property?.Metadata.CleaningDuration ?? string.Empty;
 
         TimeZoneInfo easternZone;
         try { easternZone = TimeZoneInfo.FindSystemTimeZoneById(propertyTimezone); }
         catch (TimeZoneNotFoundException) { easternZone = TimeZoneInfo.Utc; }
+        catch (InvalidTimeZoneException) { easternZone = TimeZoneInfo.Utc; }
 
         // Prefer the confirmed cleaning time; fall back to checkout date (the expected cleaning day)
         // when no cleaner had been assigned/confirmed yet.

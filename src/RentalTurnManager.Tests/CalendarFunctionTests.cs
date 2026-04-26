@@ -179,13 +179,14 @@ public class CalendarFunctionTests
     }
 
     [Fact]
-    public void ParseCleaningDateTimeUtc_InvalidTimezone_FallsBackToEastern()
+    public void ParseCleaningDateTimeUtc_InvalidTimezone_FallsBackToUtc()
     {
-        // An unrecognised timezone ID falls back to Eastern (EDT = UTC-4 on Sept 26, 2026)
+        // An unrecognised timezone ID safely falls back to UTC, so noon date-only
+        // fallback lands at 12:00 UTC rather than raising an exception.
         var result = Function.ParseCleaningDateTimeUtc(null, "2026-09-26", "Not/A/Valid/Zone");
 
         result.Kind.Should().Be(DateTimeKind.Utc);
-        result.Hour.Should().Be(16); // 12:00 PM EDT = 16:00 UTC
+        result.Hour.Should().Be(12); // noon UTC
     }
 
     [Fact]
