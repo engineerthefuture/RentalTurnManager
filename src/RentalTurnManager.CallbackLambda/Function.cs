@@ -826,6 +826,8 @@ public class Function
             {
                 bookingTimezone = tzElement.GetString();
             }
+            // Normalize empty/whitespace to null so downstream ?? defaults work correctly
+            bookingTimezone = string.IsNullOrWhiteSpace(bookingTimezone) ? null : bookingTimezone;
             string? bookingCleaningDuration = null;
             if (booking.TryGetValue("CleaningDuration", out var durElement) && durElement.ValueKind == JsonValueKind.String)
             {
@@ -882,6 +884,11 @@ public class Function
             catch (TimeZoneNotFoundException)
             {
                 context.Logger.LogWarning("Property timezone not found, using UTC for time display");
+                easternZone = TimeZoneInfo.Utc;
+            }
+            catch (InvalidTimeZoneException)
+            {
+                context.Logger.LogWarning("Property timezone is invalid, using UTC for time display");
                 easternZone = TimeZoneInfo.Utc;
             }
             

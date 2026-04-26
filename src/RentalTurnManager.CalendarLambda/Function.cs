@@ -55,8 +55,14 @@ public class Function
         {
             try
             {
-                var utcDateTime = DateTime.Parse(request.CleaningDateTime);
-                var propertyTimezone = request.Timezone ?? "America/New_York";
+                var utcDateTime = DateTime.Parse(
+                    request.CleaningDateTime,
+                    null,
+                    System.Globalization.DateTimeStyles.RoundtripKind);
+                // Strings without a timezone designator arrive from the workflow as UTC
+                if (utcDateTime.Kind != DateTimeKind.Utc)
+                    utcDateTime = DateTime.SpecifyKind(utcDateTime, DateTimeKind.Utc);
+                var propertyTimezone = string.IsNullOrWhiteSpace(request.Timezone) ? "America/New_York" : request.Timezone;
                 var easternZone = TimeZoneInfo.FindSystemTimeZoneById(propertyTimezone);
                 var easternDateTime = TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, easternZone);
                 var easternTimeDisplay = easternDateTime.ToString("h:mm tt");
@@ -307,18 +313,18 @@ public class Function
         icsBuilder.AppendLine($"SUMMARY:Cleaning - {propertyName}");
         icsBuilder.AppendLine($"DESCRIPTION:{description}");
         icsBuilder.AppendLine($"LOCATION:{propertyAddress}");
-        icsBuilder.AppendLine($"ORGANIZER;CN={ownerName}:mailto:{ownerEmail}");
+        icsBuilder.AppendLine($"ORGANIZER;CN={EscapeIcsParamValue(ownerName)}:mailto:{ownerEmail}");
         
         // Add cleaner as attendee if email provided
         if (!string.IsNullOrEmpty(cleanerEmail))
         {
-            icsBuilder.AppendLine($"ATTENDEE;CN={cleanerName};ROLE=REQ-PARTICIPANT:mailto:{cleanerEmail}");
+            icsBuilder.AppendLine($"ATTENDEE;CN={EscapeIcsParamValue(cleanerName)};ROLE=REQ-PARTICIPANT:mailto:{cleanerEmail}");
         }
         
         // Add owner as optional attendee
         if (!string.IsNullOrEmpty(ownerEmail))
         {
-            icsBuilder.AppendLine($"ATTENDEE;CN={ownerName};ROLE=OPT-PARTICIPANT:mailto:{ownerEmail}");
+            icsBuilder.AppendLine($"ATTENDEE;CN={EscapeIcsParamValue(ownerName)};ROLE=OPT-PARTICIPANT:mailto:{ownerEmail}");
         }
         
         icsBuilder.AppendLine("STATUS:CONFIRMED");
@@ -334,7 +340,7 @@ public class Function
         return icsBuilder.ToString();
     }
 
-    private double ParseDuration(string duration)
+    internal static double ParseDuration(string duration)
     {
         // Extract first number from duration string (e.g., "2-3 hours" -> 2.5)
         var match = System.Text.RegularExpressions.Regex.Match(duration, @"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)");
@@ -358,6 +364,19 @@ public class Function
     private string FormatDateTime(DateTime dt)
     {
         return dt.ToUniversalTime().ToString("yyyyMMddTHHmmssZ");
+    }
+
+    /// <summary>
+    /// Escapes/quotes a CN parameter value per RFC 5545 §3.1.
+    /// Strips double-quotes and control characters (invalid in any param value),
+    /// then wraps in double-quotes when the value contains comma, semicolon, or colon.
+    /// </summary>
+    private static string EscapeIcsParamValue(string value)
+    {
+        var sanitized = value.Replace("\"", "").Replace("\r", "").Replace("\n", "");
+        return (sanitized.Contains(',') || sanitized.Contains(';') || sanitized.Contains(':'))
+            ? $"\"{sanitized}\""
+            : sanitized;
     }
 
     private string CreateRawEmailWithAttachment(string from, string to, string cc, string subject, string htmlBody, string icsContent, string filename, string method = "REQUEST")
@@ -413,7 +432,9 @@ public class Function
     {
         var startDateTime = ParseCleaningDateTimeUtc(cleaningDate, null, timezone);
         
-        var durationHours = ParseDuration(cleaningDuration);
+        // Use actual cleaning duration when available; fall back to 3 hours (not ParseDuration's
+        // 2-hour default) so null/empty on a cancellation does not silently shorten the event.
+        var durationHours = !string.IsNullOrWhiteSpace(cleaningDuration) ? ParseDuration(cleaningDuration) : 0.0;
         var endDateTime = startDateTime.AddHours(durationHours > 0 ? durationHours : 3.0);
         var now = DateTime.UtcNow;
         
@@ -434,16 +455,16 @@ public class Function
         icsBuilder.AppendLine($"DESCRIPTION:This cleaning appointment has been cancelled.");
         icsBuilder.AppendLine($"STATUS:CANCELLED");
         icsBuilder.AppendLine($"SEQUENCE:1");
-        icsBuilder.AppendLine($"ORGANIZER;CN={ownerName}:mailto:{ownerEmail}");
+        icsBuilder.AppendLine($"ORGANIZER;CN={EscapeIcsParamValue(ownerName)}:mailto:{ownerEmail}");
         
         // Add cleaner as attendee if provided
         if (!string.IsNullOrEmpty(cleanerEmail) && !string.IsNullOrEmpty(cleanerName))
         {
-            icsBuilder.AppendLine($"ATTENDEE;CN={cleanerName}:mailto:{cleanerEmail}");
+            icsBuilder.AppendLine($"ATTENDEE;CN={EscapeIcsParamValue(cleanerName)}:mailto:{cleanerEmail}");
         }
         
         // Add owner as attendee
-        icsBuilder.AppendLine($"ATTENDEE;CN={ownerName}:mailto:{ownerEmail}");
+        icsBuilder.AppendLine($"ATTENDEE;CN={EscapeIcsParamValue(ownerName)}:mailto:{ownerEmail}");
         
         icsBuilder.AppendLine("END:VEVENT");
         icsBuilder.AppendLine("END:VCALENDAR");
@@ -490,8 +511,10 @@ public class Function
         if (!string.IsNullOrEmpty(dateOnlyFallback) && DateTime.TryParse(dateOnlyFallback, out var fallbackDate))
         {
             TimeZoneInfo propertyZone;
-            try { propertyZone = TimeZoneInfo.FindSystemTimeZoneById(timezone ?? "America/New_York"); }
-            catch (TimeZoneNotFoundException) { propertyZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); }
+            var tzId = string.IsNullOrWhiteSpace(timezone) ? "America/New_York" : timezone;
+            try { propertyZone = TimeZoneInfo.FindSystemTimeZoneById(tzId); }
+            catch (TimeZoneNotFoundException) { propertyZone = TimeZoneInfo.Utc; }
+            catch (InvalidTimeZoneException) { propertyZone = TimeZoneInfo.Utc; }
             var noon = new DateTime(fallbackDate.Year, fallbackDate.Month, fallbackDate.Day, 12, 0, 0, DateTimeKind.Unspecified);
             return TimeZoneInfo.ConvertTimeToUtc(noon, propertyZone);
         }
