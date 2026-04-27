@@ -83,7 +83,7 @@ public class Function
             {
                 _propertiesConfig = JsonSerializer.Deserialize<PropertiesConfiguration>(propertiesJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
                 // Log later when logger is available
                 Console.WriteLine($"Error deserializing PROPERTIES_CONFIG: {ex.Message}");

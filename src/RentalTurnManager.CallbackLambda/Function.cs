@@ -474,7 +474,7 @@ public class Function
                             propertyDisplayName = pnameElem.GetString();
                         }
                     }
-                    catch
+                    catch (JsonException)
                     {
                         // ignore
                     }
@@ -507,7 +507,7 @@ public class Function
                             assignedCleanerName = nameElem.GetString();
                         }
                     }
-                    catch
+                    catch (Exception)
                     {
                         // ignore and leave assignedCleanerName null
                     }
@@ -544,7 +544,7 @@ public class Function
                             }
                         }
                     }
-                    catch
+                    catch (JsonException)
                     {
                         // ignore and leave propertyDisplayName/assignedCleanerName as-is
                     }
