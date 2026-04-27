@@ -32,6 +32,7 @@ env:
   OIDC_ROLE_NAME: ${{ secrets.OIDC_ROLE_NAME }}
   IMAP_HOST: ${{ secrets.IMAP_HOST }}
   OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   test:
@@ -154,7 +155,7 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.OIDC_ROLE_NAME }}
           aws-region: ${{ env.AWS_REGION }}
