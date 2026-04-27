@@ -8,7 +8,7 @@ public class ImapClientAdapter : IImapClient
 {
     private readonly ImapClient _client = new();
 
-    public IMailFolder Inbox => _client.Inbox;
+    public IMailFolder Inbox => _client.Inbox!;
 
     public Task ConnectAsync(string host, int port, bool useSsl)
         => _client.ConnectAsync(host, port, useSsl);

@@ -169,7 +169,7 @@ public class EmailScannerService : IEmailScannerService
                     
                     var emailMessage = new EmailMessage
                     {
-                        MessageId = message.MessageId,
+                        MessageId = message.MessageId ?? string.Empty,
                         Subject = message.Subject ?? string.Empty,
                         From = message.From.ToString(),
                         Date = message.Date.UtcDateTime,
