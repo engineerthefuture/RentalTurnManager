@@ -12,10 +12,12 @@ using Xunit;
 using Moq;
 using FluentAssertions;
 using System.Text;
+using System.Text.Json;
 using Amazon.Lambda.TestUtilities;
 using Amazon.SimpleEmail;
 using Amazon.SimpleEmail.Model;
 using Amazon.S3;
+using Amazon.S3.Model;
 using RentalTurnManager.CalendarLambda;
 
 namespace RentalTurnManager.Tests;
@@ -117,6 +119,19 @@ public class CalendarFunctionTests
         var cancelUid = Function.BuildCleaningEventUid(propertyName, dt, bookingRef);
 
         inviteUid.Should().Be(cancelUid);
+    }
+
+    [Fact]
+    public void BuildCleaningEventUid_PropertyNameAllPunctuation_FallsBackToPropertyDefault()
+    {
+        // A property name made entirely of characters stripped by the sanitizer
+        // (parentheses, commas, etc.) falls back to the literal "property"
+        // to keep the UID non-empty and valid.
+        var dt = new DateTime(2026, 9, 26, 0, 0, 0, DateTimeKind.Utc);
+
+        var uid = Function.BuildCleaningEventUid("(!!!, !!)", dt);
+
+        uid.Should().Be("cleaning-property-20260926@rentalturnmanager.com");
     }
 
     // -------------------------------------------------------------------------
@@ -240,10 +255,12 @@ public class CalendarFunctionHandlerTests
     /// Invokes the CalendarLambda FunctionHandler with a mocked SES client and returns
     /// the full raw MIME message that would have been sent via SES.
     /// </summary>
-    private static async Task<string> InvokeAndCaptureRawEmail(CalendarEmailRequest request)
+    private static async Task<string> InvokeAndCaptureRawEmail(
+        CalendarEmailRequest request,
+        Mock<IAmazonS3>? s3Mock = null)
     {
         var sesMock = new Mock<IAmazonSimpleEmailService>();
-        var s3Mock  = new Mock<IAmazonS3>();
+        s3Mock ??= new Mock<IAmazonS3>();
 
         SendRawEmailRequest? captured = null;
         sesMock
@@ -423,5 +440,277 @@ public class CalendarFunctionHandlerTests
         var rawEmail = await InvokeAndCaptureRawEmail(CancellationRequest());
 
         rawEmail.Should().Contain("Content-Type: text/calendar; charset=UTF-8; method=CANCEL");
+    }
+
+    // ---- Cc header branch ----------------------------------------------------
+
+    [Fact]
+    public async Task FunctionHandler_WithCcEmail_CcHeaderIncludedInRawMessage()
+    {
+        var req = InviteRequest();
+        req.CcEmail = "cc@example.com";
+
+        var rawEmail = await InvokeAndCaptureRawEmail(req);
+
+        rawEmail.Should().Contain("Cc: cc@example.com");
+    }
+
+    // ---- Missing CleaningDateTime --------------------------------------------
+
+    [Fact]
+    public async Task FunctionHandler_WithoutCleaningDateTime_SkipsTimeConversionAndSucceeds()
+    {
+        var req = InviteRequest();
+        req.CleaningDateTime = null;
+        req.HtmlBody = "<p>Date-only appointment</p>";
+
+        var rawEmail = await InvokeAndCaptureRawEmail(req);
+
+        rawEmail.Should().Contain("BEGIN:VCALENDAR");
+        rawEmail.Should().Contain("<p>Date-only appointment</p>"); // body unchanged
+    }
+
+    // ---- Regex closure: plain-text (no <li>) covers hasLi=false/closeLi=false ----
+
+    [Fact]
+    public async Task FunctionHandler_HtmlBodyWithPlainTimePattern_ReplacesWithoutLiWrapper()
+    {
+        var req = InviteRequest();
+        req.HtmlBody        = "<p>Time: 15:30 today</p>";
+        req.CleaningDateTime = "2026-09-26T15:30:00Z";
+        req.Timezone        = "America/New_York"; // EDT = UTC-4 → 11:30 AM
+
+        var rawEmail = await InvokeAndCaptureRawEmail(req);
+
+        rawEmail.Should().Contain("Time: 11:30 AM");
+        rawEmail.Should().NotContain("<li>Time:");
+    }
+
+    // ---- HTML body with no Time pattern — LogWarning branch -------------------
+
+    [Fact]
+    public async Task FunctionHandler_HtmlBodyWithNoTimePattern_BodyIsRetainedUnchanged()
+    {
+        var req = InviteRequest();
+        req.HtmlBody        = "<p>No time mentioned here.</p>";
+        req.CleaningDateTime = "2026-09-26T15:30:00Z";
+
+        var rawEmail = await InvokeAndCaptureRawEmail(req);
+
+        rawEmail.Should().Contain("No time mentioned here.");
+    }
+
+    // ---- EscapeIcsParamValue: name with comma is double-quoted ---------------
+
+    [Fact]
+    public async Task FunctionHandler_OwnerNameWithComma_IsDoubleQuotedInInvite()
+    {
+        var req = InviteRequest();
+        req.OwnerName = "Smith, LLC";
+
+        var rawEmail = await InvokeAndCaptureRawEmail(req);
+
+        rawEmail.Should().Contain("ORGANIZER;CN=\"Smith, LLC\":mailto:");
+        rawEmail.Should().Contain("ATTENDEE;CN=\"Smith, LLC\";ROLE=OPT-PARTICIPANT:mailto:");
+    }
+
+    [Fact]
+    public async Task FunctionHandler_OwnerNameWithComma_IsDoubleQuotedInCancellation()
+    {
+        var req = CancellationRequest();
+        req.OwnerName = "Smith, LLC";
+
+        var rawEmail = await InvokeAndCaptureRawEmail(req);
+
+        rawEmail.Should().Contain("ORGANIZER;CN=\"Smith, LLC\":mailto:");
+        rawEmail.Should().Contain("ATTENDEE;CN=\"Smith, LLC\":mailto:");
+    }
+
+    // ---- Cancellation: no cleaner email/name — cleaner ATTENDEE omitted ------
+
+    [Fact]
+    public async Task FunctionHandler_CancellationWithNoCleanerEmail_OmitsCleanerAttendee()
+    {
+        var req = CancellationRequest();
+        req.CleanerEmail = "";
+        req.CleanerName  = "";
+
+        var rawEmail = await InvokeAndCaptureRawEmail(req);
+
+        rawEmail.Should().Contain("METHOD:CANCEL");
+        // owner ATTENDEE must still be present
+        rawEmail.Should().Contain("ATTENDEE;CN=Brent Foster:mailto:owner@example.com");
+        // only the owner ATTENDEE line exists — the cleaner line was omitted
+        rawEmail.Split('\n').Count(l => l.TrimStart().StartsWith("ATTENDEE;CN=")).Should().Be(1);
+    }
+
+    // ---- Cancellation: empty duration falls back to 3 hours ------------------
+
+    [Fact]
+    public async Task FunctionHandler_CancellationWithEmptyDuration_DtEndIsThreeHoursAfterDtStart()
+    {
+        var req = CancellationRequest();
+        req.CleaningDateTime = "2026-09-26T13:00:00Z";
+        req.CleaningDuration = "";
+
+        var rawEmail = await InvokeAndCaptureRawEmail(req);
+
+        // DTSTART = 20260926T130000Z, 3-hour fallback → DTEND = 20260926T160000Z
+        rawEmail.Should().Contain("DTSTART:20260926T130000Z");
+        rawEmail.Should().Contain("DTEND:20260926T160000Z");
+    }
+
+    // ---- UpdateBookingWithCleanerAssignment ----------------------------------
+
+    /// <summary>
+    /// Builds an InviteRequest with all three booking-state trigger fields populated.
+    /// </summary>
+    private static CalendarEmailRequest InviteRequestWithStateUpdate(
+        string ownerName = "Brent Foster",
+        string timezone = "America/New_York",
+        string cleaningDuration = "2.25 hours") => new()
+    {
+        FromEmail        = "owner@example.com",
+        ToEmail          = "cleaner@example.com",
+        Subject          = "Cleaning Appointment",
+        HtmlBody         = "<p>Cleaning scheduled</p>",
+        CleanerName      = "Luis Dias",
+        CleanerId        = "cleaner-1",
+        CleanerEmail     = "cleaner@example.com",
+        CleanerPhone     = "+1-555-0100",
+        OwnerName        = ownerName,
+        OwnerEmail       = "owner@example.com",
+        PropertyName     = "My Lakehouse",
+        PropertyAddress  = "123 Lake Rd",
+        CleaningDate     = "2026-09-26",
+        CleaningDateTime = "2026-09-26T15:30:00Z",
+        CleaningDuration = cleaningDuration,
+        Timezone         = timezone,
+        BookingReference = "ABC123",
+        Platform         = "airbnb",
+        BookingStateBucket = "my-bucket",
+        IsCancellation   = false,
+    };
+
+    /// <summary>
+    /// Builds an S3 mock that returns <paramref name="bookingJson"/> from GetObject and
+    /// captures PutObject requests into the returned list for assertions.
+    /// </summary>
+    private static (Mock<IAmazonS3> mock, List<PutObjectRequest> puts) S3WithBooking(
+        string? bookingJson = null)
+    {
+        bookingJson ??= JsonSerializer.Serialize(new BookingState
+        {
+            Platform         = "airbnb",
+            BookingReference = "ABC123",
+            PropertyId       = "prop-1",
+            GuestName        = "Test Guest",
+        });
+
+        var s3Mock = new Mock<IAmazonS3>();
+        s3Mock
+            .Setup(s => s.GetObjectAsync(
+                It.IsAny<GetObjectRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GetObjectResponse
+            {
+                ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson))
+            });
+
+        var puts = new List<PutObjectRequest>();
+        s3Mock
+            .Setup(s => s.PutObjectAsync(
+                It.IsAny<PutObjectRequest>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<PutObjectRequest, CancellationToken>((r, _) => puts.Add(r))
+            .ReturnsAsync(new PutObjectResponse());
+
+        return (s3Mock, puts);
+    }
+
+    [Fact]
+    public async Task FunctionHandler_InviteWithBookingStateFields_UpdatesS3WithCleanerAssignment()
+    {
+        var (s3Mock, puts) = S3WithBooking();
+
+        await InvokeAndCaptureRawEmail(InviteRequestWithStateUpdate(), s3Mock);
+
+        s3Mock.Verify(
+            s => s.GetObjectAsync(
+                It.Is<GetObjectRequest>(r =>
+                    r.BucketName == "my-bucket" && r.Key == "bookings/airbnb/ABC123.json"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        puts.Should().ContainSingle();
+        var saved = JsonSerializer.Deserialize<BookingState>(puts[0].ContentBody)!;
+        saved.AssignedCleanerName.Should().Be("Luis Dias");
+        saved.AssignedCleanerEmail.Should().Be("cleaner@example.com");
+        saved.OwnerName.Should().Be("Brent Foster");
+        saved.Timezone.Should().Be("America/New_York");
+        saved.CleaningDuration.Should().Be("2.25 hours");
+        saved.ScheduledCleaningTime.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task FunctionHandler_InviteWithBookingStateFields_WorkflowPropertyIdNotOverwrittenWhenAlreadySet()
+    {
+        var existingBooking = new BookingState
+        {
+            Platform           = "airbnb",
+            BookingReference   = "ABC123",
+            PropertyId         = "prop-1",
+            WorkflowPropertyId = "pre-existing-property",
+        };
+        var (s3Mock, puts) = S3WithBooking(JsonSerializer.Serialize(existingBooking));
+
+        await InvokeAndCaptureRawEmail(InviteRequestWithStateUpdate(), s3Mock);
+
+        puts.Should().ContainSingle();
+        var saved = JsonSerializer.Deserialize<BookingState>(puts[0].ContentBody)!;
+        saved.WorkflowPropertyId.Should().Be("pre-existing-property");
+    }
+
+    [Fact]
+    public async Task FunctionHandler_InviteWithEmptyOwnerName_OwnerNameNotWrittenToBookingState()
+    {
+        var (s3Mock, puts) = S3WithBooking();
+
+        await InvokeAndCaptureRawEmail(InviteRequestWithStateUpdate(ownerName: ""), s3Mock);
+
+        puts.Should().ContainSingle();
+        var saved = JsonSerializer.Deserialize<BookingState>(puts[0].ContentBody)!;
+        saved.OwnerName.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task FunctionHandler_InviteWithEmptyTimezoneAndDuration_FieldsNotWrittenToBookingState()
+    {
+        var (s3Mock, puts) = S3WithBooking();
+
+        await InvokeAndCaptureRawEmail(
+            InviteRequestWithStateUpdate(timezone: "", cleaningDuration: ""),
+            s3Mock);
+
+        puts.Should().ContainSingle();
+        var saved = JsonSerializer.Deserialize<BookingState>(puts[0].ContentBody)!;
+        saved.Timezone.Should().BeNull();
+        saved.CleaningDuration.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task FunctionHandler_BookingStateFields_S3ThrowsDoesNotPropagateException()
+    {
+        var s3Mock = new Mock<IAmazonS3>();
+        s3Mock
+            .Setup(s => s.GetObjectAsync(
+                It.IsAny<GetObjectRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Simulated S3 failure"));
+
+        // The calendar invite must still be sent successfully even when S3 state update fails.
+        var rawEmail = await InvokeAndCaptureRawEmail(InviteRequestWithStateUpdate(), s3Mock);
+
+        rawEmail.Should().Contain("BEGIN:VCALENDAR");
     }
 }
