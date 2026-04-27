@@ -145,15 +145,6 @@ public class FunctionTests
             PropertyId = "AIRBNB_001",
             CheckInDate = DateTime.UtcNow.AddDays(7)
         };
-        var property = new PropertyConfiguration
-        {
-            PropertyId = "property-001",
-            Cleaners = new List<CleanerContact>
-            {
-                new CleanerContact { Name = "Test Cleaner", Email = "cleaner@test.com", Rank = 1 }
-            }
-        };
-
         _mockSecretsService
             .Setup(x => x.GetEmailCredentialsAsync())
             .ReturnsAsync(credentials);

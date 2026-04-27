@@ -41,7 +41,7 @@ public class EmailScannerServiceTests
         var uid = new UniqueId(1);
         mockInbox.Setup(i => i.SearchAsync(It.IsAny<SearchQuery>())).ReturnsAsync(new List<UniqueId> { uid });
 
-        var message = new MimeMessage();
+        using var message = new MimeMessage();
         message.MessageId = "<msg-1@example.com>";
         message.Subject = "Reservation confirmed - YourStay";
         message.From.Add(new MailboxAddress("Airbnb", "noreply@airbnb.com"));

@@ -47,7 +47,7 @@ public class CallbackFunctionMoreTargetedTests
             property = new { cleaners = new[] { new { cleanerId = "c1" } } }
         });
 
-        var getObjResp = new GetObjectResponse
+        using var getObjResp = new GetObjectResponse
         {
             ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(actualWorkflowObj))
         };
@@ -114,7 +114,7 @@ public class CallbackFunctionMoreTargetedTests
             ["OwnerName"] = "Owner One"
         });
 
-        var getResp = new GetObjectResponse { ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson)) };
+        using var getResp = new GetObjectResponse { ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson)) };
 
         s3Mock
             .Setup(x => x.GetObjectAsync(It.IsAny<string>(), It.IsAny<string>()))

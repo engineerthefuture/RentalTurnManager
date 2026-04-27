@@ -261,7 +261,7 @@ public class CallbackFunctionAdditionalTests
             property = new { cleaners = new[] { new { cleanerId = "c1" } } }
         });
 
-        var getObjResp = new GetObjectResponse
+        using var getObjResp = new GetObjectResponse
         {
             ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(workflowContext))
         };
@@ -349,7 +349,7 @@ public class CallbackFunctionAdditionalTests
         };
 
         var bookingJson = JsonSerializer.Serialize(booking);
-        var getObjResp = new GetObjectResponse { ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson)) };
+        using var getObjResp = new GetObjectResponse { ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson)) };
 
         s3Mock
             .Setup(x => x.GetObjectAsync(It.IsAny<string>(), It.IsAny<string>()))

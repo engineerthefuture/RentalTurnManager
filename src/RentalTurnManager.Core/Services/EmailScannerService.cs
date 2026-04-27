@@ -100,56 +100,36 @@ public class EmailScannerService : IEmailScannerService
                 _logger.LogInformation("Using wildcard (*) for from addresses - matching on subject patterns only");
                 
                 // Build subject pattern query (still filter by subject even with wildcard)
-                SearchQuery subjectQuery;
-                if (subjectFilters.Count == 1)
-                {
-                    subjectQuery = SearchQuery.SubjectContains(subjectFilters[0]);
-                }
-                else
-                {
-                    subjectQuery = subjectFilters
+                baseQuery = subjectFilters.Count == 1
+                    ? SearchQuery.SubjectContains(subjectFilters[0])
+                    : subjectFilters
                         .Skip(1)
                         .Aggregate<string, SearchQuery>(
                             SearchQuery.SubjectContains(subjectFilters[0]),
                             (query, pattern) => query.Or(SearchQuery.SubjectContains(pattern))
                         );
-                }
-                
-                baseQuery = subjectQuery;
             }
             else
             {
                 // Build From address query
-                SearchQuery fromQuery;
-                if (fromAddresses.Count == 1)
-                {
-                    fromQuery = SearchQuery.FromContains(fromAddresses[0]);
-                }
-                else
-                {
-                    fromQuery = fromAddresses
+                var fromQuery = fromAddresses.Count == 1
+                    ? SearchQuery.FromContains(fromAddresses[0])
+                    : fromAddresses
                         .Skip(1)
                         .Aggregate<string, SearchQuery>(
                             SearchQuery.FromContains(fromAddresses[0]),
                             (query, address) => query.Or(SearchQuery.FromContains(address))
                         );
-                }
                 
                 // Build subject pattern query
-                SearchQuery subjectQuery;
-                if (subjectFilters.Count == 1)
-                {
-                    subjectQuery = SearchQuery.SubjectContains(subjectFilters[0]);
-                }
-                else
-                {
-                    subjectQuery = subjectFilters
+                var subjectQuery = subjectFilters.Count == 1
+                    ? SearchQuery.SubjectContains(subjectFilters[0])
+                    : subjectFilters
                         .Skip(1)
                         .Aggregate<string, SearchQuery>(
                             SearchQuery.SubjectContains(subjectFilters[0]),
                             (query, pattern) => query.Or(SearchQuery.SubjectContains(pattern))
                         );
-                }
                 
                 // Combine: match if From AND Subject both match (must be from platform AND have booking subject)
                 baseQuery = fromQuery.And(subjectQuery);
@@ -169,7 +149,7 @@ public class EmailScannerService : IEmailScannerService
                     
                     var emailMessage = new EmailMessage
                     {
-                        MessageId = message.MessageId,
+                        MessageId = message.MessageId ?? string.Empty,
                         Subject = message.Subject ?? string.Empty,
                         From = message.From.ToString(),
                         Date = message.Date.UtcDateTime,

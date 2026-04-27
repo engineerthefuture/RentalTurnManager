@@ -382,7 +382,6 @@ public class Function
                     context.Logger.LogInformation($"Searching for workflow context for booking {bookingRef}");
                     
                     string? workflowContextJson = null;
-                    string? foundKey = null;
                     
                     // Try common platforms
                     var platforms = new[] { "airbnb", "vrbo", "bookingcom" };
@@ -403,7 +402,6 @@ public class Function
                                 workflowContextJson = await reader.ReadToEndAsync();
                             }
                             
-                            foundKey = s3Key;
                             context.Logger.LogInformation($"Found workflow context at {s3Key}");
                             break;
                         }
@@ -462,27 +460,18 @@ public class Function
                     }
 
                     // Property might be a string (escaped JSON) or an object
-                    JsonElement propertyData;
-                    if (propertyElement.ValueKind == JsonValueKind.String)
-                    {
-                        // Parse the escaped JSON string
-                        propertyData = JsonDocument.Parse(propertyElement.GetString()!).RootElement;
-                    }
-                    else
-                    {
-                        propertyData = propertyElement;
-                    }
+                    var propertyData = propertyElement.ValueKind == JsonValueKind.String
+                        ? JsonDocument.Parse(propertyElement.GetString()!).RootElement
+                        : propertyElement;
 
                     // If the workflowPropertyId wasn't stored in the booking, prefer the property metadata name
                     try
                     {
-                        if (string.IsNullOrEmpty(propertyDisplayName) && propertyData.ValueKind == JsonValueKind.Object)
+                        if (string.IsNullOrEmpty(propertyDisplayName) && propertyData.ValueKind == JsonValueKind.Object &&
+                            propertyData.TryGetProperty("metadata", out var metadataElem) && metadataElem.ValueKind == JsonValueKind.Object &&
+                            metadataElem.TryGetProperty("propertyName", out var pnameElem) && pnameElem.ValueKind == JsonValueKind.String)
                         {
-                            if (propertyData.TryGetProperty("metadata", out var metadataElem) && metadataElem.ValueKind == JsonValueKind.Object &&
-                                metadataElem.TryGetProperty("propertyName", out var pnameElem) && pnameElem.ValueKind == JsonValueKind.String)
-                            {
-                                propertyDisplayName = pnameElem.GetString();
-                            }
+                            propertyDisplayName = pnameElem.GetString();
                         }
                     }
                     catch
@@ -526,7 +515,7 @@ public class Function
                     try
                     {
                         // Workflow property and assigned cleaner may be stored inside the booking object
-                        if (workflowInput != null && workflowInput.TryGetValue("booking", out var bookingElemForId))
+                        if (workflowInput.TryGetValue("booking", out var bookingElemForId))
                         {
                             var bookingForId = bookingElemForId.ValueKind == JsonValueKind.String
                                 ? JsonDocument.Parse(bookingElemForId.GetString()!).RootElement
@@ -558,13 +547,6 @@ public class Function
                     catch
                     {
                         // ignore and leave propertyDisplayName/assignedCleanerName as-is
-                    }
-
-                    // Ensure workflowInput is present (defensive check for static analysis)
-                    if (workflowInput == null)
-                    {
-                        context.Logger.LogError("Workflow input unexpectedly null when preparing owner override");
-                        throw new Exception("Workflow context missing");
                     }
 
                     // Update with override values (serialize primitives to JsonElement)
@@ -600,14 +582,13 @@ public class Function
                     throw;
                 }
             }
-            else if (action == "cancel")
+            else
             {
                 context.Logger.LogInformation($"Owner cancelled cleaning for booking {bookingRef}");
             }
 
             if (string.IsNullOrEmpty(propertyDisplayName)) propertyDisplayName = propertyId;
 
-            var ownerEmail = _defaultOwnerEmail;
             var encodedBookingRef = WebUtility.HtmlEncode(bookingRef);
             var encodedPropertyDisplay = WebUtility.HtmlEncode(propertyDisplayName);
             var encodedCleanerDisplay = WebUtility.HtmlEncode(assignedCleanerName ?? cleanerId);
@@ -845,13 +826,14 @@ public class Function
             booking["CancelledAt"] = JsonDocument.Parse($"{{\"value\":\"{DateTime.UtcNow:O}\"}}").RootElement.GetProperty("value");
             
             // Add cleanerId if provided and not already set (use PascalCase to match BookingState model)
-            if (!string.IsNullOrEmpty(cleanerId) && (!booking.ContainsKey("AssignedCleanerId") || booking["AssignedCleanerId"].ValueKind == JsonValueKind.Null))
+            if (!string.IsNullOrEmpty(cleanerId) && 
+                (!booking.TryGetValue("AssignedCleanerId", out var existingCleanerId) || existingCleanerId.ValueKind == JsonValueKind.Null))
             {
                 booking["AssignedCleanerId"] = JsonDocument.Parse($"{{\"value\":\"{cleanerId}\"}}").RootElement.GetProperty("value");
             }
             
             // Add propertyId if not already set (use PascalCase to match BookingState model)
-            if (!booking.ContainsKey("WorkflowPropertyId") || booking["WorkflowPropertyId"].ValueKind == JsonValueKind.Null)
+            if (!booking.TryGetValue("WorkflowPropertyId", out var existingPropertyId) || existingPropertyId.ValueKind == JsonValueKind.Null)
             {
                 booking["WorkflowPropertyId"] = JsonDocument.Parse($"{{\"value\":\"{propertyId}\"}}").RootElement.GetProperty("value");
             }

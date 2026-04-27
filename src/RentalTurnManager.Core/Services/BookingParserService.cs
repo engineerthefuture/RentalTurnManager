@@ -383,13 +383,11 @@ public class BookingParserService : IBookingParserService
                     checkInStr += $", {currentYear}";
                     
                     // Try parsing with current year
-                    if (DateTime.TryParse(checkInStr, out var tempCheckIn))
+                    if (DateTime.TryParse(checkInStr, out var tempCheckIn) &&
+                        tempCheckIn < DateTime.Now.AddDays(-30))
                     {
                         // If the date is more than 30 days in the past, it's probably next year
-                        if (tempCheckIn < DateTime.Now.AddDays(-30))
-                        {
-                            checkInStr = $"{checkInMatch.Groups[1].Value}, {currentYear + 1}";
-                        }
+                        checkInStr = $"{checkInMatch.Groups[1].Value}, {currentYear + 1}";
                     }
                 }
                 
@@ -430,13 +428,11 @@ public class BookingParserService : IBookingParserService
                 // Try format with day of week on separate line: "Checkout\nMonday\nMarch 9, 2026"
                 // This pattern allows for whitespace/newlines between checkout and the date
                 var checkOutMultilineMatch = Regex.Match(content, @"check[\s-]*out[\s\r\n<>]+(?:\w+[\s\r\n<>]+)?(\w+\s+\d{1,2},\s+\d{4})", RegexOptions.IgnoreCase);
-                if (checkOutMultilineMatch.Success)
+                if (checkOutMultilineMatch.Success &&
+                    DateTime.TryParse(checkOutMultilineMatch.Groups[1].Value, out var checkOut))
                 {
-                    if (DateTime.TryParse(checkOutMultilineMatch.Groups[1].Value, out var checkOut))
-                    {
-                        booking.CheckOutDate = checkOut;
-                        _logger.LogInformation($"Extracted checkout date (multiline format): {booking.CheckOutDate:yyyy-MM-dd}");
-                    }
+                    booking.CheckOutDate = checkOut;
+                    _logger.LogInformation($"Extracted checkout date (multiline format): {booking.CheckOutDate:yyyy-MM-dd}");
                 }
             }
         }
@@ -679,15 +675,9 @@ public class BookingParserService : IBookingParserService
         {
             // Also check for children (both "child" and "children")
             var childrenMatch = Regex.Match(content, @"(\d+)\s+child(?:ren)?", RegexOptions.IgnoreCase);
-            var children = 0;
-            if (childrenMatch.Success && int.TryParse(childrenMatch.Groups[1].Value, out children))
-            {
-                booking.NumberOfGuests = adults + children;
-            }
-            else
-            {
-                booking.NumberOfGuests = adults;
-            }
+            booking.NumberOfGuests = childrenMatch.Success && int.TryParse(childrenMatch.Groups[1].Value, out var children)
+                ? adults + children
+                : adults;
         }
 
         return booking;

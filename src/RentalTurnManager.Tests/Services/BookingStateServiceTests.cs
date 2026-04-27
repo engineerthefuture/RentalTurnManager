@@ -37,7 +37,7 @@ public class BookingStateServiceTests
         };
 
         var json = JsonSerializer.Serialize(booking);
-        var response = new GetObjectResponse
+        using var response = new GetObjectResponse
         {
             ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(json))
         };
@@ -112,7 +112,7 @@ public class BookingStateServiceTests
         };
 
         var json = JsonSerializer.Serialize(existing);
-        var response = new GetObjectResponse
+        using var response = new GetObjectResponse
         {
             ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(json))
         };
