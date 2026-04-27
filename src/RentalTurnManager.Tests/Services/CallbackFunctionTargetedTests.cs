@@ -43,7 +43,7 @@ public class CallbackFunctionTargetedTests
         });
         var escaped = JsonSerializer.Serialize(actualWorkflow); // produces a quoted JSON string
 
-        var getObjResp = new GetObjectResponse
+        using var getObjResp = new GetObjectResponse
         {
             ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(escaped))
         };

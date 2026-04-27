@@ -98,7 +98,7 @@ public class CallbackFunctionFocusedTests
         var s3Mock = new Mock<IAmazonS3>();
 
         var bookingJson = "{}";
-        var getObjResp = new GetObjectResponse
+        using var getObjResp = new GetObjectResponse
         {
             ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson))
         };
@@ -160,7 +160,7 @@ public class CallbackFunctionFocusedTests
         };
 
         var bookingJson = JsonSerializer.Serialize(bookingObj);
-        var getObjResp = new GetObjectResponse
+        using var getObjResp = new GetObjectResponse
         {
             ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson))
         };
@@ -265,7 +265,7 @@ public class CallbackFunctionFocusedTests
         };
 
         var bookingJson = JsonSerializer.Serialize(bookingObj);
-        var getObjResp = new GetObjectResponse
+        using var getObjResp = new GetObjectResponse
         {
             ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson))
         };
@@ -337,7 +337,7 @@ public class CallbackFunctionFocusedTests
         };
 
         var workflowJson = JsonSerializer.Serialize(workflow);
-        var getObjResp = new GetObjectResponse
+        using var getObjResp = new GetObjectResponse
         {
             ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(workflowJson))
         };
@@ -427,7 +427,7 @@ public class CallbackFunctionFocusedTests
         };
 
         var bookingJson = JsonSerializer.Serialize(bookingObj);
-        var getObjResp = new GetObjectResponse
+        using var getObjResp = new GetObjectResponse
         {
             ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson))
         };

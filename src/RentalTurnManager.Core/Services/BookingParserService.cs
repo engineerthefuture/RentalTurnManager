@@ -679,15 +679,9 @@ public class BookingParserService : IBookingParserService
         {
             // Also check for children (both "child" and "children")
             var childrenMatch = Regex.Match(content, @"(\d+)\s+child(?:ren)?", RegexOptions.IgnoreCase);
-            var children = 0;
-            if (childrenMatch.Success && int.TryParse(childrenMatch.Groups[1].Value, out children))
-            {
-                booking.NumberOfGuests = adults + children;
-            }
-            else
-            {
-                booking.NumberOfGuests = adults;
-            }
+            booking.NumberOfGuests = childrenMatch.Success && int.TryParse(childrenMatch.Groups[1].Value, out var children)
+                ? adults + children
+                : adults;
         }
 
         return booking;

@@ -462,16 +462,9 @@ public class Function
                     }
 
                     // Property might be a string (escaped JSON) or an object
-                    JsonElement propertyData;
-                    if (propertyElement.ValueKind == JsonValueKind.String)
-                    {
-                        // Parse the escaped JSON string
-                        propertyData = JsonDocument.Parse(propertyElement.GetString()!).RootElement;
-                    }
-                    else
-                    {
-                        propertyData = propertyElement;
-                    }
+                    var propertyData = propertyElement.ValueKind == JsonValueKind.String
+                        ? JsonDocument.Parse(propertyElement.GetString()!).RootElement
+                        : propertyElement;
 
                     // If the workflowPropertyId wasn't stored in the booking, prefer the property metadata name
                     try
