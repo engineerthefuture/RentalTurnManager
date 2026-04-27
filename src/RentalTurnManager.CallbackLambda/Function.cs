@@ -515,7 +515,7 @@ public class Function
                     try
                     {
                         // Workflow property and assigned cleaner may be stored inside the booking object
-                        if (workflowInput != null && workflowInput.TryGetValue("booking", out var bookingElemForId))
+                        if (workflowInput.TryGetValue("booking", out var bookingElemForId))
                         {
                             var bookingForId = bookingElemForId.ValueKind == JsonValueKind.String
                                 ? JsonDocument.Parse(bookingElemForId.GetString()!).RootElement
@@ -547,13 +547,6 @@ public class Function
                     catch
                     {
                         // ignore and leave propertyDisplayName/assignedCleanerName as-is
-                    }
-
-                    // Ensure workflowInput is present (defensive check for static analysis)
-                    if (workflowInput == null)
-                    {
-                        context.Logger.LogError("Workflow input unexpectedly null when preparing owner override");
-                        throw new Exception("Workflow context missing");
                     }
 
                     // Update with override values (serialize primitives to JsonElement)
@@ -589,7 +582,7 @@ public class Function
                     throw;
                 }
             }
-            else if (action == "cancel")
+            else
             {
                 context.Logger.LogInformation($"Owner cancelled cleaning for booking {bookingRef}");
             }
