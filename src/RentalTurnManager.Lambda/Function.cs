@@ -307,15 +307,13 @@ public class Function
                     // Parse defaultCheckOut time (e.g., "11:00 AM") and add margin minutes
                     int cleaningHour = 12; // Default to 12:00 PM if parsing fails
                     int cleaningMinute = 0;
-                    if (!string.IsNullOrEmpty(property.Metadata.DefaultCheckOut))
+                    if (!string.IsNullOrEmpty(property.Metadata.DefaultCheckOut) &&
+                        DateTime.TryParse(property.Metadata.DefaultCheckOut, out var checkOutTime))
                     {
-                        if (DateTime.TryParse(property.Metadata.DefaultCheckOut, out var checkOutTime))
-                        {
-                            // Add configured margin minutes to check-out time
-                            var cleaningTime = checkOutTime.AddMinutes(property.Metadata.MarginMinutesAfterCheckOut);
-                            cleaningHour = cleaningTime.Hour;
-                            cleaningMinute = cleaningTime.Minute;
-                        }
+                        // Add configured margin minutes to check-out time
+                        var cleaningTime = checkOutTime.AddMinutes(property.Metadata.MarginMinutesAfterCheckOut);
+                        cleaningHour = cleaningTime.Hour;
+                        cleaningMinute = cleaningTime.Minute;
                     }
                     
                     // Create DateTime at calculated time on checkout date in Eastern Time
@@ -334,91 +332,89 @@ public class Function
 
                     // Calculate alternative time slots (30-minute increments)
                     var alternativeTimeSlots = new List<TimeSlot>();
-                    if (!string.IsNullOrEmpty(property.Metadata.DefaultCheckIn) && 
+                    if (!string.IsNullOrEmpty(property.Metadata.DefaultCheckIn) &&
                         !string.IsNullOrEmpty(property.Metadata.DefaultCheckOut) &&
-                        !string.IsNullOrEmpty(property.Metadata.CleaningDuration))
+                        !string.IsNullOrEmpty(property.Metadata.CleaningDuration) &&
+                        DateTime.TryParse(property.Metadata.DefaultCheckIn, out var checkInTime) &&
+                        DateTime.TryParse(property.Metadata.DefaultCheckOut, out var slotsCheckOutTime))
                     {
-                        if (DateTime.TryParse(property.Metadata.DefaultCheckIn, out var checkInTime) &&
-                            DateTime.TryParse(property.Metadata.DefaultCheckOut, out var checkOutTime))
+                        // Parse cleaning duration (e.g., "2.5 hours")
+                        var durationMatch = System.Text.RegularExpressions.Regex.Match(
+                            property.Metadata.CleaningDuration,
+                            @"([0-9.]+)\s*hours?");
+                        if (durationMatch.Success && double.TryParse(durationMatch.Groups[1].Value, out var durationHours))
                         {
-                            // Parse cleaning duration (e.g., "2.5 hours")
-                            var durationMatch = System.Text.RegularExpressions.Regex.Match(
-                                property.Metadata.CleaningDuration, 
-                                @"([0-9.]+)\s*hours?");
-                            if (durationMatch.Success && double.TryParse(durationMatch.Groups[1].Value, out var durationHours))
+                            // Start time is default cleaning time (checkOut + marginMinutesAfterCheckOut)
+                            var startTime = new DateTime(
+                                cleaningDate.Year,
+                                cleaningDate.Month,
+                                cleaningDate.Day,
+                                slotsCheckOutTime.Hour,
+                                slotsCheckOutTime.Minute,
+                                0,
+                                DateTimeKind.Unspecified
+                            ).AddMinutes(property.Metadata.MarginMinutesAfterCheckOut);
+
+                            // Latest possible start time is checkIn - cleaningDuration
+                            var latestStartEastern = new DateTime(
+                                cleaningDate.Year,
+                                cleaningDate.Month,
+                                cleaningDate.Day,
+                                checkInTime.Hour,
+                                checkInTime.Minute,
+                                0,
+                                DateTimeKind.Unspecified
+                            ).AddHours(-durationHours);
+
+                            // Choose a sensible increment so we end up with approximately 5 slots
+                            var originalIncrement = property.Metadata.AlternateTimeIncrementMinutes > 0
+                                ? property.Metadata.AlternateTimeIncrementMinutes
+                                : 30;
+
+                            var availableMinutes = (latestStartEastern - startTime).TotalMinutes;
+                            var incrementMinutes = originalIncrement;
+
+                            if (availableMinutes > 0)
                             {
-                                // Start time is default cleaning time (checkOut + marginMinutesAfterCheckOut)
-                                var startTime = new DateTime(
-                                    cleaningDate.Year,
-                                    cleaningDate.Month,
-                                    cleaningDate.Day,
-                                    checkOutTime.Hour,
-                                    checkOutTime.Minute,
-                                    0,
-                                    DateTimeKind.Unspecified
-                                ).AddMinutes(property.Metadata.MarginMinutesAfterCheckOut);
-                                
-                                // Latest possible start time is checkIn - cleaningDuration
-                                var latestStartEastern = new DateTime(
-                                    cleaningDate.Year,
-                                    cleaningDate.Month,
-                                    cleaningDate.Day,
-                                    checkInTime.Hour,
-                                    checkInTime.Minute,
-                                    0,
-                                    DateTimeKind.Unspecified
-                                ).AddHours(-durationHours);
-                                
-                                // Choose a sensible increment so we end up with approximately 5 slots
-                                var originalIncrement = property.Metadata.AlternateTimeIncrementMinutes > 0
-                                    ? property.Metadata.AlternateTimeIncrementMinutes
-                                    : 30;
+                                // How many slots would we get at the original increment?
+                                var slotsAtOriginal = (int)Math.Floor(availableMinutes / (double)originalIncrement);
 
-                                var availableMinutes = (latestStartEastern - startTime).TotalMinutes;
-                                var incrementMinutes = originalIncrement;
+                                _logger.LogInformation("Alternate slots: availableMinutes={availableMinutes}, originalIncrement={originalIncrement}, slotsAtOriginal={slotsAtOriginal}", availableMinutes, originalIncrement, slotsAtOriginal);
 
-                                if (availableMinutes > 0)
+                                if (slotsAtOriginal == 5)
                                 {
-                                    // How many slots would we get at the original increment?
-                                    var slotsAtOriginal = (int)Math.Floor(availableMinutes / (double)originalIncrement);
+                                    // original increment is perfect
+                                    incrementMinutes = originalIncrement;
+                                }
+                                else
+                                {
+                                    // Derive an increment that yields ~5 slots: availableMinutes / 5
+                                    var desired = (int)Math.Floor(availableMinutes / 5.0);
+                                    if (desired < 5) desired = 5; // never below 5 minutes
 
-                                    _logger.LogInformation("Alternate slots: availableMinutes={availableMinutes}, originalIncrement={originalIncrement}, slotsAtOriginal={slotsAtOriginal}", availableMinutes, originalIncrement, slotsAtOriginal);
+                                    // Round desired down to nearest multiple of 5 for consistency
+                                    desired = (desired / 5) * 5;
+                                    if (desired < 5) desired = 5;
 
-                                    if (slotsAtOriginal == 5)
-                                    {
-                                        // original increment is perfect
-                                        incrementMinutes = originalIncrement;
-                                    }
-                                    else
-                                    {
-                                        // Derive an increment that yields ~5 slots: availableMinutes / 5
-                                        var desired = (int)Math.Floor(availableMinutes / 5.0);
-                                        if (desired < 5) desired = 5; // never below 5 minutes
-
-                                        // Round desired down to nearest multiple of 5 for consistency
-                                        desired = (desired / 5) * 5;
-                                        if (desired < 5) desired = 5;
-
-                                        incrementMinutes = desired;
-                                    }
-
-                                    _logger.LogInformation("Chosen alternate increment: {incrementMinutes} minutes (desired calculation)", incrementMinutes);
+                                    incrementMinutes = desired;
                                 }
 
-                                // Generate time slots at the (possibly adjusted) interval
-                                if (availableMinutes > 0 && incrementMinutes > 0)
+                                _logger.LogInformation("Chosen alternate increment: {incrementMinutes} minutes (desired calculation)", incrementMinutes);
+                            }
+
+                            // Generate time slots at the (possibly adjusted) interval
+                            if (availableMinutes > 0 && incrementMinutes > 0)
+                            {
+                                var currentSlot = startTime.AddMinutes(incrementMinutes); // Start from increment after default
+                                while (currentSlot <= latestStartEastern)
                                 {
-                                    var currentSlot = startTime.AddMinutes(incrementMinutes); // Start from increment after default
-                                    while (currentSlot <= latestStartEastern)
+                                    var slotUtc = TimeZoneInfo.ConvertTimeToUtc(currentSlot, easternZone);
+                                    alternativeTimeSlots.Add(new TimeSlot
                                     {
-                                        var slotUtc = TimeZoneInfo.ConvertTimeToUtc(currentSlot, easternZone);
-                                        alternativeTimeSlots.Add(new TimeSlot
-                                        {
-                                            Time = currentSlot.ToString("h:mm tt"),
-                                            IsoDateTime = slotUtc.ToString("o")
-                                        });
-                                        currentSlot = currentSlot.AddMinutes(incrementMinutes);
-                                    }
+                                        Time = currentSlot.ToString("h:mm tt"),
+                                        IsoDateTime = slotUtc.ToString("o")
+                                    });
+                                    currentSlot = currentSlot.AddMinutes(incrementMinutes);
                                 }
                             }
                         }
