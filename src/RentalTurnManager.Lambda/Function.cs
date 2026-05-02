@@ -99,7 +99,7 @@ public class Function
         var templatesJson = Environment.GetEnvironmentVariable("MESSAGE_TEMPLATES");
         if (!string.IsNullOrEmpty(templatesJson))
         {
-            using var templatesStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(templatesJson));
+            var templatesStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(templatesJson));
             configBuilder.AddJsonStream(templatesStream);
         }
         
