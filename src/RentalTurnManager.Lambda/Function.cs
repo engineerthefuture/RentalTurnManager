@@ -97,13 +97,15 @@ public class Function
         
         // Load message templates from environment variable if present
         var templatesJson = Environment.GetEnvironmentVariable("MESSAGE_TEMPLATES");
+        MemoryStream? templatesStream = null;
         if (!string.IsNullOrEmpty(templatesJson))
         {
-            var templatesStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(templatesJson));
+            templatesStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(templatesJson));
             configBuilder.AddJsonStream(templatesStream);
         }
         
         _configuration = configBuilder.Build();
+        templatesStream?.Dispose();
 
         // Setup dependency injection
         var serviceCollection = new ServiceCollection();

@@ -220,12 +220,10 @@ public class CallbackFunctionCoverageTests
             });
 
         var s3Mock = new Mock<IAmazonS3>();
+        using var nullResp = new GetObjectResponse { ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes("null")) };
         s3Mock
             .Setup(x => x.GetObjectAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(new GetObjectResponse
-            {
-                ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes("null"))
-            });
+            .ReturnsAsync(nullResp);
 
         var fn = new RentalTurnManager.CallbackLambda.Function(
             new Mock<IAmazonStepFunctions>().Object,
@@ -276,12 +274,10 @@ public class CallbackFunctionCoverageTests
         });
 
         var s3Mock = new Mock<IAmazonS3>();
+        using var tzResp = new GetObjectResponse { ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson)) };
         s3Mock
             .Setup(x => x.GetObjectAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(new GetObjectResponse
-            {
-                ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson))
-            });
+            .ReturnsAsync(tzResp);
         s3Mock
             .Setup(x => x.PutObjectAsync(It.IsAny<PutObjectRequest>(), default))
             .ReturnsAsync(new PutObjectResponse());
@@ -354,12 +350,10 @@ public class CallbackFunctionCoverageTests
         });
 
         var s3Mock = new Mock<IAmazonS3>();
+        using var calErrResp = new GetObjectResponse { ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson)) };
         s3Mock
             .Setup(x => x.GetObjectAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(new GetObjectResponse
-            {
-                ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson))
-            });
+            .ReturnsAsync(calErrResp);
         s3Mock
             .Setup(x => x.PutObjectAsync(It.IsAny<PutObjectRequest>(), default))
             .ReturnsAsync(new PutObjectResponse());
@@ -637,12 +631,10 @@ public class CallbackFunctionCoverageTests
         });
 
         var s3Mock = new Mock<IAmazonS3>();
+        using var notFoundResp = new GetObjectResponse { ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(workflowJson)) };
         s3Mock
             .Setup(x => x.GetObjectAsync(It.IsAny<GetObjectRequest>(), default))
-            .ReturnsAsync(new GetObjectResponse
-            {
-                ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(workflowJson))
-            });
+            .ReturnsAsync(notFoundResp);
 
         var fn = new RentalTurnManager.CallbackLambda.Function(
             new Mock<IAmazonStepFunctions>().Object,
@@ -710,12 +702,10 @@ public class CallbackFunctionCoverageTests
         });
 
         var s3Mock = new Mock<IAmazonS3>();
+        using var schedResp = new GetObjectResponse { ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(workflowJson)) };
         s3Mock
             .Setup(x => x.GetObjectAsync(It.IsAny<GetObjectRequest>(), default))
-            .ReturnsAsync(new GetObjectResponse
-            {
-                ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(workflowJson))
-            });
+            .ReturnsAsync(schedResp);
 
         var fn = new RentalTurnManager.CallbackLambda.Function(
             stepMock.Object,
@@ -781,12 +771,10 @@ public class CallbackFunctionCoverageTests
         });
 
         var s3Mock = new Mock<IAmazonS3>();
+        using var metaResp = new GetObjectResponse { ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(workflowJson)) };
         s3Mock
             .Setup(x => x.GetObjectAsync(It.IsAny<GetObjectRequest>(), default))
-            .ReturnsAsync(new GetObjectResponse
-            {
-                ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(workflowJson))
-            });
+            .ReturnsAsync(metaResp);
 
         var fn = new RentalTurnManager.CallbackLambda.Function(
             stepMock.Object,

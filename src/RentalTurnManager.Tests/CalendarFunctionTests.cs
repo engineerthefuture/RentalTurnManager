@@ -596,7 +596,7 @@ public class CalendarFunctionHandlerTests
     /// Builds an S3 mock that returns <paramref name="bookingJson"/> from GetObject and
     /// captures PutObject requests into the returned list for assertions.
     /// </summary>
-    private static (Mock<IAmazonS3> mock, List<PutObjectRequest> puts) S3WithBooking(
+    private static (Mock<IAmazonS3> mock, List<PutObjectRequest> puts, GetObjectResponse response) S3WithBooking(
         string? bookingJson = null)
     {
         bookingJson ??= JsonSerializer.Serialize(new BookingState
@@ -608,14 +608,12 @@ public class CalendarFunctionHandlerTests
         });
 
         var s3Mock = new Mock<IAmazonS3>();
+        var calBookingResp = new GetObjectResponse { ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson)) };
         s3Mock
             .Setup(s => s.GetObjectAsync(
                 It.IsAny<GetObjectRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GetObjectResponse
-            {
-                ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(bookingJson))
-            });
+            .ReturnsAsync(calBookingResp);
 
         var puts = new List<PutObjectRequest>();
         s3Mock
@@ -625,13 +623,14 @@ public class CalendarFunctionHandlerTests
             .Callback<PutObjectRequest, CancellationToken>((r, _) => puts.Add(r))
             .ReturnsAsync(new PutObjectResponse());
 
-        return (s3Mock, puts);
+        return (s3Mock, puts, calBookingResp);
     }
 
     [Fact]
     public async Task FunctionHandler_InviteWithBookingStateFields_UpdatesS3WithCleanerAssignment()
     {
-        var (s3Mock, puts) = S3WithBooking();
+        var (s3Mock, puts, s3Resp1) = S3WithBooking();
+        using var __ = s3Resp1;
 
         await InvokeAndCaptureRawEmail(InviteRequestWithStateUpdate(), s3Mock);
 
@@ -662,7 +661,8 @@ public class CalendarFunctionHandlerTests
             PropertyId         = "prop-1",
             WorkflowPropertyId = "pre-existing-property",
         };
-        var (s3Mock, puts) = S3WithBooking(JsonSerializer.Serialize(existingBooking));
+        var (s3Mock, puts, s3Resp2) = S3WithBooking(JsonSerializer.Serialize(existingBooking));
+        using var __ = s3Resp2;
 
         await InvokeAndCaptureRawEmail(InviteRequestWithStateUpdate(), s3Mock);
 
@@ -674,7 +674,8 @@ public class CalendarFunctionHandlerTests
     [Fact]
     public async Task FunctionHandler_InviteWithEmptyOwnerName_OwnerNameNotWrittenToBookingState()
     {
-        var (s3Mock, puts) = S3WithBooking();
+        var (s3Mock, puts, s3Resp3) = S3WithBooking();
+        using var __ = s3Resp3;
 
         await InvokeAndCaptureRawEmail(InviteRequestWithStateUpdate(ownerName: ""), s3Mock);
 
@@ -686,7 +687,8 @@ public class CalendarFunctionHandlerTests
     [Fact]
     public async Task FunctionHandler_InviteWithEmptyTimezoneAndDuration_FieldsNotWrittenToBookingState()
     {
-        var (s3Mock, puts) = S3WithBooking();
+        var (s3Mock, puts, s3Resp4) = S3WithBooking();
+        using var __ = s3Resp4;
 
         await InvokeAndCaptureRawEmail(
             InviteRequestWithStateUpdate(timezone: "", cleaningDuration: ""),
