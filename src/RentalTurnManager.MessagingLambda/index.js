@@ -82,7 +82,7 @@ exports.handler = async (event, context) => {
       await platform.launch({
         executablePath,
         args: chromium.args,
-        headless: chromium.headless,
+        headless: true,
       });
       launched = true;
 
