@@ -160,6 +160,11 @@ jobs:
           role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.OIDC_ROLE_NAME }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Install Lambda tools
         run: dotnet tool install -g Amazon.Lambda.Tools
 
@@ -190,6 +195,15 @@ jobs:
           cd src/RentalTurnManager.CalendarLambda
           dotnet lambda package --configuration Release --framework net10.0 --output-package ../../calendar-lambda-deployment.zip
 
+      - name: Build Messaging Lambda package
+        run: |
+          cd src/RentalTurnManager.MessagingLambda
+          npm ci --omit=dev
+          zip -r ../../messaging-lambda-deployment.zip . \
+            --exclude "*.test.js" \
+            --exclude ".git*" \
+            --exclude "*.md"
+
       - name: Create/Update S3 deployment bucket
         run: |
           BUCKET_NAME="${{ vars.NAMESPACE_PREFIX || 'bf' }}-${{ env.ENVIRONMENT }}-s3-deployments"
@@ -201,6 +215,7 @@ jobs:
           aws s3 cp lambda-deployment.zip s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/lambda/lambda-deployment.zip
           aws s3 cp callback-lambda-deployment.zip s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/lambda/callback-lambda-deployment.zip
           aws s3 cp calendar-lambda-deployment.zip s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/lambda/calendar-lambda-deployment.zip
+          aws s3 cp messaging-lambda-deployment.zip s3://${{ env.BUCKET_NAME }}/${{ env.APP_NAME }}/lambda/messaging-lambda-deployment.zip
 
       - name: Upload Step Functions definition to S3
         run: |
@@ -250,6 +265,9 @@ jobs:
             --arg props_config "${PROPERTIES_CONFIG}" \
             --arg msg_templates "${MESSAGE_TEMPLATES}" \
             --arg owner_token "${{ secrets.OWNER_OVERRIDE_TOKEN }}" \
+            --arg airbnb_user "${{ secrets.AIRBNB_USERNAME }}" \
+            --arg airbnb_pass "${{ secrets.AIRBNB_PASSWORD }}" \
+            --arg messaging_schedule "${{ vars.MESSAGING_SCHEDULE_INTERVAL || 'rate(20 minutes)' }}" \
             '[
               {ParameterKey: "Environment", ParameterValue: $environment},
               {ParameterKey: "EmailUsername", ParameterValue: $email_user},
@@ -264,7 +282,10 @@ jobs:
               {ParameterKey: "AppNameLowercase", ParameterValue: $app_name_lower},
               {ParameterKey: "PropertiesConfig", ParameterValue: $props_config},
               {ParameterKey: "MessageTemplates", ParameterValue: $msg_templates},
-              {ParameterKey: "OwnerOverrideToken", ParameterValue: $owner_token}
+              {ParameterKey: "OwnerOverrideToken", ParameterValue: $owner_token},
+              {ParameterKey: "AirbnbUsername", ParameterValue: $airbnb_user},
+              {ParameterKey: "AirbnbPassword", ParameterValue: $airbnb_pass},
+              {ParameterKey: "MessagingScheduleInterval", ParameterValue: $messaging_schedule}
             ]' > /tmp/override-params.json
           
           # Deploy stack
@@ -293,6 +314,7 @@ jobs:
           FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}"
           CALLBACK_FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}-Callback"
           CALENDAR_FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}-Calendar"
+          MESSAGING_FUNCTION_NAME="${{ env.NAMESPACE_PREFIX }}-${{ env.ENVIRONMENT }}-lambda-${{ env.APP_NAME }}-Messaging"
           
           # Update main Lambda
           aws lambda update-function-code \
@@ -314,6 +336,13 @@ jobs:
             --s3-bucket ${{ env.BUCKET_NAME }} \
             --s3-key ${{ env.APP_NAME }}/lambda/calendar-lambda-deployment.zip \
             --region ${{ env.AWS_REGION }}
+
+          # Update Messaging Lambda
+          aws lambda update-function-code \
+            --function-name ${MESSAGING_FUNCTION_NAME} \
+            --s3-bucket ${{ env.BUCKET_NAME }} \
+            --s3-key ${{ env.APP_NAME }}/lambda/messaging-lambda-deployment.zip \
+            --region ${{ env.AWS_REGION }}
           
           # Wait for all updates to complete
           aws lambda wait function-updated \
@@ -326,6 +355,10 @@ jobs:
           
           aws lambda wait function-updated \
             --function-name ${CALENDAR_FUNCTION_NAME} \
+            --region ${{ env.AWS_REGION }}
+
+          aws lambda wait function-updated \
+            --function-name ${MESSAGING_FUNCTION_NAME} \
             --region ${{ env.AWS_REGION }}
 
       - name: Get stack outputs

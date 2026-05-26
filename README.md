@@ -19,8 +19,10 @@ Rental Turn Manager automates the process of scheduling property cleanings when 
 - **Enhanced Error Handling**: User-friendly HTML error pages for expired or used callback links with owner contact information and accessibility features (ARIA attributes, proper semantic HTML)
 - **Calendar Integration**: Sends ICS calendar invites with proper timezone handling to cleaners and owners
 - **Property Configuration**: Maintains property metadata, addresses, and cleaner preferences
+- **Automated Guest Messaging**: Scans Airbnb hosting inbox on a schedule, detects check-in notifications, and sends a personalised welcome reply — extensible to VRBO and Booking.com
+- **Per-Thread State Tracking**: Each message thread is inventoried independently in S3, tracking the last message processed and every reply sent to prevent duplicate responses across multiple stays or threads per guest
 - **Multi-Environment**: Supports dev and prod deployments with GitHub Actions
-- **Secure Credentials**: Uses AWS Secrets Manager for email credentials and owner override tokens
+- **Secure Credentials**: Uses AWS Secrets Manager for email credentials, owner override tokens, and platform login credentials
 
 ```mermaid
 sequenceDiagram
@@ -36,7 +38,7 @@ sequenceDiagram
   participant CL as Calendar Lambda
   participant Owner as Property Owner
 
-  EB->>ML: Trigger (every 20 min)
+  EB->>ML: Trigger (every 15 min)
   ML->>IMAP: Scan for booking emails
   IMAP-->>ML: Return booking emails
 
@@ -109,14 +111,51 @@ sequenceDiagram
   end
 ```
 
+### Guest Messaging Flow
+
+```mermaid
+sequenceDiagram
+  participant EB as EventBridge
+  participant ML as Messaging Lambda
+  participant AB as Airbnb Web
+  participant S3 as S3 Bucket
+
+  EB->>ML: Trigger (every 20 min)
+  ML->>S3: Load global state (lastRunAt)
+
+  loop For each inbox thread
+    ML->>S3: Load thread state (lastMessageProcessedAt, replies[])
+    ML->>AB: Scan messages newer than thread cursor
+    AB-->>ML: Return new messages
+
+    alt Check-in message detected and no prior check-in reply
+      ML->>AB: Send welcome reply (guest first name)
+      ML->>S3: Save thread state (cursor advanced, reply recorded)
+    else Already replied or no matching intent
+      ML->>S3: Save thread state (cursor advanced, no reply)
+    end
+  end
+
+  ML->>S3: Save global state (lastRunAt)
+```
+
 ## Project Structure
 
 ```
 RentalTurnManager/
 ├── src/
-│   ├── RentalTurnManager.Lambda/          # Main email scanning Lambda
-│   ├── RentalTurnManager.CalendarLambda/  # Calendar invite generator
-│   ├── RentalTurnManager.CallbackLambda/  # Cleaner response handler
+│   ├── RentalTurnManager.Lambda/          # Main email scanning Lambda (.NET)
+│   ├── RentalTurnManager.CalendarLambda/  # Calendar invite generator (.NET)
+│   ├── RentalTurnManager.CallbackLambda/  # Cleaner response handler (.NET)
+│   ├── RentalTurnManager.MessagingLambda/ # Guest message responder Lambda (Node.js)
+│   │   ├── index.js                       # Lambda handler
+│   │   ├── platforms/
+│   │   │   ├── base.js                    # Abstract platform interface
+│   │   │   └── airbnb.js                  # Airbnb inbox automation (Playwright)
+│   │   ├── intents/
+│   │   │   └── intent-detector.js         # Pattern-based message intent detection
+│   │   └── state/
+│   │       └── state-manager.js           # Per-thread S3 state management
 │   ├── RentalTurnManager.Core/            # Core business logic and services
 │   │   └── Services/                      # Email scanner, booking parser, state management
 │   ├── RentalTurnManager.Models/          # Data models and DTOs
@@ -283,6 +322,8 @@ Add the following **secrets**:
 - `OWNER_OVERRIDE_TOKEN`: Secure token for owner override capability (generate a random 32+ character string)
 - `PROPERTIES_CONFIG_DEV`: JSON string with property configurations for dev environment (see below)
 - `PROPERTIES_CONFIG`: JSON string with property configurations for prod environment (see below)
+- `AIRBNB_USERNAME`: Airbnb account email used to log into the hosting inbox
+- `AIRBNB_PASSWORD`: Airbnb account password (use a dedicated account or app password if available)
 
 #### 2. GitHub Variables
 
@@ -296,7 +337,8 @@ Add the following **variables**:
 - `NAMESPACE_PREFIX`: Resource name prefix (default: `bf`)
 - `OWNER_NAME`: Property owner name (default: `Property Owner`)
 - `IMAP_PORT`: IMAP port (default: `993`)
-- `SCHEDULE_INTERVAL`: Lambda schedule (default: `rate(20 minutes)`)
+- `SCHEDULE_INTERVAL`: Email scanner Lambda schedule (default: `rate(15 minutes)`)
+- `MESSAGING_SCHEDULE_INTERVAL`: Guest messaging Lambda schedule (default: `rate(20 minutes)`)
 - `APP_NAME`: Application name (default: `RentalTurnManager`)
 - `APP_DESCRIPTION`: Application description (default: `Rental property turnover management system`)
 
@@ -640,6 +682,56 @@ When cleaners click expired or already-used callback links, they receive:
 
 - The CloudFormation template disables scheduled execution for the dev environment by default. To enable, update the stack parameters or template.
 
+### Guest Messaging Workflow
+
+1. **Scheduled Execution**: EventBridge triggers Messaging Lambda every 20 minutes (prod only; disabled in dev)
+2. **Credential Retrieval**: Airbnb username and password fetched from Secrets Manager
+3. **Browser Automation**: Playwright launches a headless Chromium instance (binary cached in Lambda `/tmp` after cold start), logs into Airbnb, and navigates to `airbnb.com/hosting/inbox`
+4. **Thread Inventory**: All visible inbox threads are discovered by scanning for `/hosting/inbox/{id}` links
+5. **Per-Thread Processing**: For each thread:
+   - Thread state is loaded from `message-responder/threads/airbnb/{threadId}.json` in S3
+   - Only messages newer than the stored `lastMessageProcessedAt` cursor are fetched
+   - The `IntentDetector` scans message text for check-in patterns (e.g. "Justin has checked in.")
+   - If a check-in is found and no check-in reply has been sent for this thread, a personalised welcome is sent
+   - Thread state is updated and saved back to S3 with the reply recorded
+6. **Duplicate Prevention**: The `replies[]` array on each thread record prevents a second check-in reply from being sent on any future run, even if the check-in message reappears in a scan
+
+#### Thread State Schema
+
+Each thread file (`message-responder/threads/{platform}/{threadId}.json`) stores:
+
+```json
+{
+  "id": "123456",
+  "platform": "airbnb",
+  "firstSeenAt": "2026-05-25T10:00:00.000Z",
+  "lastCheckedAt": "2026-05-25T10:20:00.000Z",
+  "lastMessageProcessedAt": "2026-05-25T10:20:00.000Z",
+  "replies": [
+    {
+      "intent": "check-in",
+      "sentAt": "2026-05-25T10:20:00.000Z",
+      "message": "Hi Justin, please enjoy your stay...",
+      "guestFirstName": "Justin"
+    }
+  ]
+}
+```
+
+#### Adding New Intents
+
+The `IntentDetector` in `intents/intent-detector.js` uses a simple ordered pattern list. To add a new automated response (e.g. reply to a checkout notification):
+
+1. Add a new entry to `INTENT_PATTERNS` in `intent-detector.js`
+2. Add a handler branch in `processThread()` in `index.js`
+
+#### Adding New Platforms (VRBO, Booking.com)
+
+1. Create `platforms/vrbo.js` extending `BasePlatform`
+2. Implement `launch()`, `login()`, `getInboxThreads()`, `getThreadMessages()`, `sendMessage()`, and `close()`
+3. Add a secret (`VRBO_SECRET_NAME` env var and corresponding Secrets Manager secret) in CloudFormation
+4. Add the platform config entry to the `platformConfigs` array in `index.js`
+
 ### Booking Change Detection
 
 The system tracks booking state in S3 to handle:
@@ -661,6 +753,9 @@ aws logs tail /aws/lambda/RentalTurnManager-Calendar-dev --follow
 
 # View Callback Lambda logs
 aws logs tail /aws/lambda/RentalTurnManager-Callback-dev --follow
+
+# View Messaging Lambda logs
+aws logs tail /aws/lambda/bf-prod-lambda-RentalTurnManager-Messaging --follow
 ```
 
 ### Key Log Messages
@@ -670,6 +765,10 @@ aws logs tail /aws/lambda/RentalTurnManager-Callback-dev --follow
 - `Booking unchanged, skipping workflow` - No changes detected, workflow not triggered
 - `Processing new or updated booking` - Changes detected, workflow will start
 - `No property configuration found` - Property ID doesn't match any configured properties
+- `[airbnb] Found N thread(s) in inbox` - Messaging Lambda discovered N conversations
+- `[airbnb] Thread 123456: scanning messages since <ISO>` - Per-thread cursor in use
+- `[airbnb] Thread 123456: sent check-in reply to Justin` - Welcome message sent
+- `[airbnb] Thread 123456: check-in reply already sent, skipping` - Duplicate prevention active
 
 ### CloudWatch Metrics
 
@@ -726,17 +825,20 @@ Approximate monthly costs (based on 1 property, checking every 20 minutes):
 
 | Service | Usage | Monthly Cost |
 |---------|-------|--------------|
-| Lambda (Main) | ~2,160 invocations/month @ 1s avg | $0.00 (at $0.20 per 1M requests) |
+| Lambda (Main) | ~2,880 invocations/month @ 1s avg | $0.00 (at $0.20 per 1M requests) |
 | Lambda (Calendar) | ~20 invocations/month @ 0.5s avg | $0.01 |
 | Lambda (Callback) | ~20 invocations/month @ 0.2s avg | $0.01 |
+| Lambda (Messaging) | ~2,160 invocations/month @ 30s avg, 2 GB | ~$1.30 |
 | Step Functions | ~20 executions, 100 state transitions | $0.00 (at $0.025 per 1,000 state transitions) |
-| S3 | Storage + requests | $0.10 |
-| Secrets Manager | 1 secret | $0.40 |
+| S3 | Storage + requests (includes thread state files) | $0.15 |
+| Secrets Manager | 2 secrets (email + Airbnb) | $0.80 |
 | SES | ~100 emails/month | $0.00 (free tier) |
-| CloudWatch Logs | ~3.75 GB/month | $1.88 (at $0.50 per GB/month) |
+| CloudWatch Logs | ~4 GB/month | $2.00 (at $0.50 per GB/month) |
 | API Gateway | ~20 requests/month | $0.00 (free tier) |
 
-**Estimated Total**: Free for 1 property (stays within AWS free tier)
+**Estimated Total**: ~$4-5/month for 1 property
+
+> The Messaging Lambda's 2 GB memory and 30s average runtime (dominated by Chromium startup) are the primary cost driver. Cold starts download the Chromium binary once; warm invocations reuse it from `/tmp`.
 
 **Scaling**: Add ~$2-4/month for each additional property.
 
@@ -796,9 +898,9 @@ specs/
 5. Commit with conventional format: `feat: Add new feature`
 6. Push and create pull request
 
-### Adding New Booking Platforms
+### Adding New Booking Platforms (Email Parsing)
 
-To support a new platform (e.g., HomeAway):
+To support a new platform (e.g., HomeAway) for booking email parsing:
 
 1. Update `BookingParserService.cs`:
    - Add platform detection in `DeterminePlatform()`
@@ -807,6 +909,20 @@ To support a new platform (e.g., HomeAway):
 2. Update properties configuration to include new platform ID mapping
 3. Add comprehensive unit tests
 4. Update documentation
+
+### Adding New Guest Messaging Platforms
+
+To support a new platform (e.g., VRBO) in the Messaging Lambda:
+
+1. Create `src/RentalTurnManager.MessagingLambda/platforms/vrbo.js` extending `BasePlatform`
+2. Implement all six methods: `launch()`, `login()`, `getInboxThreads()`, `getThreadMessages()`, `sendMessage()`, `close()`
+3. Add a new Secrets Manager secret in `main.yaml` (follow the `AirbnbCredentialsSecret` pattern)
+4. Add corresponding `VrboUsername` / `VrboPassword` CloudFormation parameters and GitHub secrets
+5. Add the platform entry to `platformConfigs` in `index.js`:
+   ```js
+   { name: 'vrbo', secretName: process.env.VRBO_SECRET_NAME, PlatformClass: VrboPlatform }
+   ```
+6. Thread state files will automatically be scoped under `message-responder/threads/vrbo/`
 
 ### Pull Request Guidelines
 
