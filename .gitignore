@@ -58,6 +58,9 @@ packaged.yaml
 .env.local
 *.local.json
 
+# Node.js
+node_modules/
+
 # Lambda deployment packages
 *.zip
 lambda-deployment/

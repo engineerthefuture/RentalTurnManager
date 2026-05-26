@@ -648,7 +648,7 @@ Resources:
     Properties:
       FunctionName: !Sub '${NamespacePrefix}-${Environment}-lambda-${AppName}-Messaging'
       Description: Scans rental platform inboxes and sends automated guest replies
-      Runtime: nodejs20.x
+      Runtime: nodejs22.x
       Handler: index.handler
       Role: !GetAtt MessagingLambdaExecutionRole.Arn
       # Chromium requires generous memory and ephemeral storage
