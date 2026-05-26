@@ -13,6 +13,7 @@
  * (aria roles, href patterns, time[datetime]) over volatile class names.
  ***********************/
 
+const path = require('path');
 const { chromium } = require('playwright-core');
 const { BasePlatform } = require('./base');
 
@@ -58,12 +59,81 @@ class AirbnbPlatform extends BasePlatform {
     const emailInput = page.getByRole('textbox', { name: /email/i });
     await emailInput.waitFor({ timeout: 15_000 });
     await emailInput.fill(credentials.username);
-    await page.getByRole('button', { name: /continue/i }).click();
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
 
-    // Fill password and submit
-    const passwordInput = page.getByRole('textbox', { name: /password/i });
-    await passwordInput.waitFor({ timeout: 15_000 });
-    await passwordInput.fill(credentials.password);
+    // Wait for the next screen to fully load — could be password, OTP, or MFA.
+    // We watch for any of the known next-step indicators.
+    console.log('[airbnb] Waiting for next login step to load...');
+    const waitResult = await page.waitForFunction(() => {
+      const text = document.body.innerText;
+      return (
+        !!document.querySelector('input[type="password"]') ||
+        text.includes('Confirm it') ||
+        text.includes('Try another way') ||
+        text.includes('Enter your password') ||
+        text.includes('Too many attempts')
+      );
+    }, { timeout: 30_000 }).catch(() => null);
+
+    if (!waitResult) {
+      const sp = path.join(__dirname, '../.local-state/debug-unexpected.png');
+      await page.screenshot({ path: sp, fullPage: true }).catch(() => {});
+      console.log(`[airbnb] Unexpected page state after email submit. Title: "${await page.title()}"`);
+      console.log(`[airbnb] Screenshot: ${sp}`);
+      console.log('[airbnb] Falling back to manual login — complete it in the browser (2-minute window)');
+      await page.waitForURL((url) => !url.toString().includes('/login'), { timeout: 120_000 });
+      console.log('[airbnb] Login successful');
+      return;
+    }
+
+    // Bail out clearly if Airbnb has rate-limited this login method
+    const rateLimited = await page.locator(':text("Too many attempts")').isVisible({ timeout: 1_000 }).catch(() => false);
+    if (rateLimited) {
+      throw new Error('Airbnb rate-limited this login method — try again in 1 hour');
+    }
+
+    // After submitting email Airbnb may show either a password field or an MFA screen.
+    // input[type="password"] is intentionally excluded from role="textbox", so we target both.
+    const passwordInput = page.locator('input[type="password"]')
+      .or(page.getByRole('textbox', { name: /password/i }));
+    const hasPassword = await passwordInput.first().isVisible({ timeout: 3_000 }).catch(() => false);
+
+    if (!hasPassword) {
+      console.log('[airbnb] MFA screen detected — attempting to switch to password login');
+
+      const tryAnotherWay = page.locator(':text("Try another way")');
+      const hasTryAnother = await tryAnotherWay.first().isVisible({ timeout: 5_000 }).catch(() => false);
+      console.log(`[airbnb] "Try another way" found: ${hasTryAnother}`);
+
+      if (hasTryAnother) {
+        await tryAnotherWay.first().click();
+        await page.waitForTimeout(1_500); // let the options list render
+
+        // Click "Enter your password" — use exact text scoped to the modal to avoid
+        // matching footer/page text containing the word "password".
+        const passwordOption = page.getByText('Enter your password', { exact: true });
+
+        const hasOption = await passwordOption.isVisible({ timeout: 5_000 }).catch(() => false);
+        console.log(`[airbnb] "Enter your password" option found: ${hasOption}`);
+        if (hasOption) {
+          await passwordOption.click();
+        }
+      }
+
+      // Wait for the password field — fall back to manual if automation couldn't get there
+      const gotPassword = await passwordInput.first().isVisible({ timeout: 10_000 }).catch(() => false);
+      if (!gotPassword) {
+        const screenshotPath = path.join(__dirname, '../.local-state/debug-after-option.png');
+        await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+        console.log(`[airbnb] Screenshot: ${screenshotPath}`);
+        console.log('[airbnb] Could not reach password field automatically — complete login manually in the browser (2-minute window)');
+        await page.waitForURL((url) => !url.toString().includes('/login'), { timeout: 120_000 });
+        console.log('[airbnb] Login successful');
+        return;
+      }
+    }
+
+    await passwordInput.first().fill(credentials.password);
     await page.getByRole('button', { name: /log in/i }).click();
 
     // Wait for redirect away from the login page

@@ -61,6 +61,10 @@ packaged.yaml
 # Node.js
 node_modules/
 
+# Local test runner state and credentials
+credentials.local.json
+.local-state/
+
 # Lambda deployment packages
 *.zip
 lambda-deployment/
