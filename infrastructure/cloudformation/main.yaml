@@ -622,6 +622,14 @@ Resources:
                 Resource: !Ref AirbnbCredentialsSecret
               - Effect: Allow
                 Action:
+                  - s3:ListBucket
+                Resource: !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings'
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - 'message-responder/*'
+              - Effect: Allow
+                Action:
                   - s3:GetObject
                   - s3:PutObject
                 Resource:
