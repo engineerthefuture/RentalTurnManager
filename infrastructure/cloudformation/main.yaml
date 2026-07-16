@@ -76,6 +76,23 @@ Parameters:
     Description: JSON configuration for message templates (from GitHub variable)
     Default: '{}'
 
+  AirbnbUsername:
+    Type: String
+    Description: Airbnb account username/email for message automation
+    NoEcho: true
+    Default: ''
+
+  AirbnbPassword:
+    Type: String
+    Description: Airbnb account password for message automation
+    NoEcho: true
+    Default: ''
+
+  MessagingScheduleInterval:
+    Type: String
+    Description: Schedule expression for the Messaging Lambda execution
+    Default: rate(20 minutes)
+
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -131,6 +148,27 @@ Resources:
           Value: !Ref AppName
         - Key: Description
           Value: Email credentials for booking notifications
+
+  # Secrets Manager Secret for Airbnb Credentials (message automation)
+  AirbnbCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${NamespacePrefix}-${Environment}-secret-${AppName}-AirbnbCredentials'
+      Description: Airbnb account credentials for automated guest messaging
+      SecretString: !Sub |
+        {
+          "username": "${AirbnbUsername}",
+          "password": "${AirbnbPassword}"
+        }
+      Tags:
+        - Key: OwnerName
+          Value: !Ref OwnerName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Airbnb credentials for message automation
 
   # S3 Bucket for Booking State
   BookingStateBucket:
@@ -556,6 +594,142 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${CallbackApi}/*'
 
+  # ── Messaging Lambda ─────────────────────────────────────────────────────────
+  # Node.js Lambda that scans rental platform inboxes, detects check-in
+  # notifications, and sends automated guest replies via browser automation.
+
+  MessagingLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${NamespacePrefix}-${Environment}-role-${AppName}-MessagingLambda'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: MessagingLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref AirbnbCredentialsSecret
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings'
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - 'message-responder/*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings/message-responder/state.json'
+                  - !Sub 'arn:aws:s3:::${NamespacePrefix}-${Environment}-s3-${AppNameLowercase}-bookings/message-responder/threads/*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
+      Tags:
+        - Key: OwnerName
+          Value: !Ref OwnerName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Execution role for Messaging Lambda
+
+  MessagingLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${NamespacePrefix}-${Environment}-lambda-${AppName}-Messaging'
+      Description: Scans rental platform inboxes and sends automated guest replies
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt MessagingLambdaExecutionRole.Arn
+      # Chromium requires generous memory and ephemeral storage
+      MemorySize: 2048
+      Timeout: 300
+      EphemeralStorage:
+        Size: 1024
+      Environment:
+        Variables:
+          BOOKING_STATE_BUCKET: !Ref BookingStateBucket
+          AIRBNB_SECRET_NAME: !Ref AirbnbCredentialsSecret
+          LOOKBACK_MINUTES: '25'
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+      Code:
+        S3Bucket: !Sub '${NamespacePrefix}-${Environment}-s3-deployments'
+        S3Key: !Sub '${AppName}/lambda/messaging-lambda-deployment.zip'
+      Tags:
+        - Key: OwnerName
+          Value: !Ref OwnerName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Guest message responder Lambda
+
+  MessagingLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${MessagingLambda}'
+      RetentionInDays: 30
+      Tags:
+        - Key: OwnerName
+          Value: !Ref OwnerName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Messaging Lambda logs
+
+  MessagingScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${NamespacePrefix}-${Environment}-schedule-${AppName}-Messaging'
+      Description: Triggers the Messaging Lambda on a schedule to respond to guest messages
+      ScheduleExpression: !Ref MessagingScheduleInterval
+      State:
+        Fn::If:
+          - IsDev
+          - DISABLED
+          - ENABLED
+      Targets:
+        - Arn: !GetAtt MessagingLambda.Arn
+          Id: MessagingLambdaTarget
+      Tags:
+        - Key: OwnerName
+          Value: !Ref OwnerName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+        - Key: Description
+          Value: Scheduled trigger for guest message scanning
+
+  MessagingLambdaSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref MessagingLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt MessagingScheduleRule.Arn
+
 Outputs:
   LambdaFunctionArn:
     Description: ARN of the email scanner Lambda function
@@ -592,3 +766,9 @@ Outputs:
     Value: !Ref BookingStateBucket
     Export:
       Name: !Sub '${AWS::StackName}-BookingStateBucket'
+
+  MessagingLambdaArn:
+    Description: ARN of the guest message responder Lambda function
+    Value: !GetAtt MessagingLambda.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-MessagingLambdaArn'

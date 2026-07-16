@@ -908,9 +908,55 @@ HMTYTZ48P9
     }
 
     [Fact]
+    public void ParseBooking_Airbnb_TwoColumn_DateExactly30DaysAgo_DoesNotShiftYearForward()
+    {
+        // Regression test for boundary bug: when a date without a year is parsed and the
+        // result lands exactly on DateTime.Today.AddDays(-30), it must NOT be bumped to
+        // next year. The fix uses DateTime.Today (midnight) for the comparison so a parsed
+        // date at midnight is never falsely considered "in the past" due to a time component.
+        var boundary = DateTime.Today.AddDays(-30);
+        var dayAbbrev = boundary.ToString("ddd");  // e.g. "Mon"
+        var monthDay = boundary.ToString("MMM d"); // e.g. "Jun 15"
+        var checkOut = boundary.AddDays(2);
+        var checkOutAbbrev = checkOut.ToString("ddd");
+        var checkOutMonthDay = checkOut.ToString("MMM d");
+
+        var email = new EmailMessage
+        {
+            From = "automated@airbnb.com",
+            Subject = $"Reservation confirmed - Guest arrives {monthDay}",
+            Body = $@"
+NEW BOOKING CONFIRMED!
+
+https://www.airbnb.com/rooms/1477018601970190586
+
+Check-in     Checkout
+
+{dayAbbrev}, {monthDay}   {checkOutAbbrev}, {checkOutMonthDay}
+
+GUESTS
+2 adults
+
+CONFIRMATION CODE
+HMBOUNDARY1
+"
+        };
+
+        var result = _service.ParseBooking(email);
+
+        result.Should().NotBeNull();
+        result!.BookingReference.Should().Be("HMBOUNDARY1");
+        // Date should stay in the current year, not be bumped to next year
+        result.CheckInDate.Year.Should().Be(boundary.Year);
+        result.CheckInDate.Month.Should().Be(boundary.Month);
+        result.CheckInDate.Day.Should().Be(boundary.Day);
+    }
+
+    }
+
+    [Fact]
     public void ParseBookings_BookingCom_MismatchedCheckInDates_ReturnsEmpty()
     {
-        // Arrange – confirmation check-in differs from request check-in: no pairing
         var confirmEmail = new EmailMessage
         {
             From = "noreply@booking.com",
