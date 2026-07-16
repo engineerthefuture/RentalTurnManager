@@ -137,4 +137,94 @@ public class BookingStateServiceTests
 
         _mockS3.Verify(x => x.DeleteObjectAsync(It.Is<DeleteObjectRequest>(r => r.BucketName == "test-bucket" && r.Key.Contains("airbnb/TODELETE")), default), Times.Once);
     }
+
+    [Fact]
+    public async Task HasBookingChangedAsync_ReturnsFalse_WhenConfirmedBookingDatesShiftExactlyOneYear()
+    {
+        // Regression test: a booking that has already been confirmed (CleanerConfirmedAt set)
+        // should NOT be considered "changed" when the only difference is dates moving forward
+        // by exactly 1 year. This is the signature of a year-inference re-parse artifact.
+        var checkIn = new System.DateTime(2026, 6, 15);
+        var checkOut = new System.DateTime(2026, 6, 17);
+
+        var existing = new Booking
+        {
+            BookingReference = "HMCAWCRT3K",
+            Platform = "airbnb",
+            PropertyId = "1477018601970190586",
+            CheckInDate = checkIn,
+            CheckOutDate = checkOut,
+            NumberOfGuests = 4,
+            GuestName = "Jennifer Mang",
+            CleanerConfirmedAt = new System.DateTime(2026, 6, 15, 3, 38, 2, System.DateTimeKind.Utc)
+        };
+
+        var reparsed = new Booking
+        {
+            BookingReference = "HMCAWCRT3K",
+            Platform = "airbnb",
+            PropertyId = "1477018601970190586",
+            CheckInDate = checkIn.AddYears(1),   // 2027-06-15 — the artifact
+            CheckOutDate = checkOut.AddYears(1),  // 2027-06-17
+            NumberOfGuests = 4,
+            GuestName = "Jennifer Mang"
+        };
+
+        var json = JsonSerializer.Serialize(existing);
+        using var response = new GetObjectResponse
+        {
+            ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(json))
+        };
+
+        _mockS3
+            .Setup(x => x.GetObjectAsync(It.IsAny<GetObjectRequest>(), default))
+            .ReturnsAsync(response);
+
+        var result = await _service.HasBookingChangedAsync(reparsed);
+
+        result.Should().BeFalse("a confirmed booking's dates must not be overwritten by a 1-year shift artifact");
+    }
+
+    [Fact]
+    public async Task HasBookingChangedAsync_ReturnsTrue_WhenConfirmedBookingDatesChangeByMoreThanOneYear()
+    {
+        // A legitimate date change (not exactly 1 year) on a confirmed booking should still
+        // be detected so genuine modifications are not suppressed.
+        var existing = new Booking
+        {
+            BookingReference = "HMLEGIT999",
+            Platform = "airbnb",
+            PropertyId = "prop-1",
+            CheckInDate = new System.DateTime(2026, 6, 15),
+            CheckOutDate = new System.DateTime(2026, 6, 17),
+            NumberOfGuests = 2,
+            GuestName = "Test Guest",
+            CleanerConfirmedAt = System.DateTime.UtcNow
+        };
+
+        var updated = new Booking
+        {
+            BookingReference = "HMLEGIT999",
+            Platform = "airbnb",
+            PropertyId = "prop-1",
+            CheckInDate = new System.DateTime(2026, 7, 10), // different month/day, not +1 year
+            CheckOutDate = new System.DateTime(2026, 7, 12),
+            NumberOfGuests = 2,
+            GuestName = "Test Guest"
+        };
+
+        var json = JsonSerializer.Serialize(existing);
+        using var response = new GetObjectResponse
+        {
+            ResponseStream = new MemoryStream(Encoding.UTF8.GetBytes(json))
+        };
+
+        _mockS3
+            .Setup(x => x.GetObjectAsync(It.IsAny<GetObjectRequest>(), default))
+            .ReturnsAsync(response);
+
+        var result = await _service.HasBookingChangedAsync(updated);
+
+        result.Should().BeTrue("a genuine date change must still be detected even for confirmed bookings");
+    }
 }

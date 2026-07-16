@@ -357,8 +357,11 @@ public class BookingParserService : IBookingParserService
                 // Try parsing with current year
                 if (DateTime.TryParse(dateWithYear, out var tempCheckIn))
                 {
-                    // If the date is more than 30 days in the past, it's probably next year
-                    if (tempCheckIn < DateTime.Now.AddDays(-30))
+                    // If the date is more than 30 days in the past, it's probably next year.
+                    // Use DateTime.Today (midnight) so a date of e.g. "Jun 15" parsed as
+                    // 2026-06-15 00:00 is not incorrectly shifted when DateTime.Now is later
+                    // the same day (e.g. 2026-06-15 15:00, giving AddDays(-30) = 2026-06-15 15:00).
+                    if (tempCheckIn.Date < DateTime.Today.AddDays(-30))
                     {
                         dateWithYear = $"{dateStr}, {currentYear + 1}";
                         DateTime.TryParse(dateWithYear, out tempCheckIn);
@@ -384,7 +387,7 @@ public class BookingParserService : IBookingParserService
                     
                     // Try parsing with current year
                     if (DateTime.TryParse(checkInStr, out var tempCheckIn) &&
-                        tempCheckIn < DateTime.Now.AddDays(-30))
+                        tempCheckIn.Date < DateTime.Today.AddDays(-30))
                     {
                         // If the date is more than 30 days in the past, it's probably next year
                         checkInStr = $"{checkInMatch.Groups[1].Value}, {currentYear + 1}";
@@ -456,7 +459,7 @@ public class BookingParserService : IBookingParserService
                     var cleanCheckIn = Regex.Replace(checkInAbbrev, @"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*", "", RegexOptions.IgnoreCase);
                     if (DateTime.TryParse($"{cleanCheckIn}, {currentYear}", out var ci))
                     {
-                        if (ci < DateTime.Now.AddDays(-30)) ci = ci.AddYears(1);
+                        if (ci.Date < DateTime.Today.AddDays(-30)) ci = ci.AddYears(1);
                         booking.CheckInDate = ci;
                         _logger.LogInformation($"Extracted check-in from two-column format: {booking.CheckInDate:yyyy-MM-dd}");
                     }

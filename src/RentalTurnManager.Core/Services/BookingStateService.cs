@@ -118,6 +118,29 @@ public class BookingStateService : IBookingStateService
 
         if (hasChanged)
         {
+            // Guard: if the booking is already confirmed (cleaner assigned and acknowledged)
+            // and the only change is the dates shifting by exactly one year, this is almost
+            // certainly a year-inference artifact from re-parsing an old email that omits the
+            // year in the date string. Reject the update to prevent overwriting completed state.
+            if (existingBooking.CleanerConfirmedAt.HasValue)
+            {
+                var onlyYearShift =
+                    existingBooking.PropertyId == newBooking.PropertyId &&
+                    existingBooking.NumberOfGuests == newBooking.NumberOfGuests &&
+                    existingBooking.GuestName == newBooking.GuestName &&
+                    existingBooking.CheckInDate.AddYears(1) == newBooking.CheckInDate &&
+                    existingBooking.CheckOutDate.AddYears(1) == newBooking.CheckOutDate;
+
+                if (onlyYearShift)
+                {
+                    _logger.LogWarning(
+                        $"Ignoring suspicious date shift for confirmed booking {newBooking.Platform}/{newBooking.BookingReference}: " +
+                        $"dates moved forward exactly 1 year ({existingBooking.CheckInDate:yyyy-MM-dd} -> {newBooking.CheckInDate:yyyy-MM-dd}). " +
+                        "This is likely a year-inference error from re-parsing an old email.");
+                    return false;
+                }
+            }
+
             _logger.LogInformation($"Booking has changed: {newBooking.Platform}/{newBooking.BookingReference}");
             _logger.LogInformation($"  PropertyId: {existingBooking.PropertyId} -> {newBooking.PropertyId}");
             _logger.LogInformation($"  CheckIn: {existingBooking.CheckInDate:yyyy-MM-dd} -> {newBooking.CheckInDate:yyyy-MM-dd}");
