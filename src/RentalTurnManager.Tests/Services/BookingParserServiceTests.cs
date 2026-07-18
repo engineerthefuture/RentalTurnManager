@@ -230,11 +230,13 @@ public class BookingParserServiceTests
     [Fact]
     public void ParseBooking_Airbnb_SubjectArrives_ParsesCheckIn()
     {
-        // Arrange - subject contains 'arrives Dec 21' without year
+        // Arrange - subject contains 'arrives Dec 21' without year.
+        // Email sent in October so December 21 is in the future — should resolve to same year.
         var email = new EmailMessage
         {
             From = "notify@example.com",
             Subject = "Reservation confirmed - Alice arrives Dec 21",
+            Date = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),
             Body = @"
                 Confirmation code: HMARRIVE123
                 Listing: 22233344
@@ -248,7 +250,7 @@ public class BookingParserServiceTests
         result.Should().NotBeNull();
         result!.Platform.Should().Be("airbnb");
         result.BookingReference.Should().Be("HMARRIVE123");
-        result.CheckInDate.Should().Be(new DateTime(DateTime.Now.Year, 12, 21));
+        result.CheckInDate.Should().Be(new DateTime(2026, 12, 21));
     }
 
     [Fact]
@@ -718,10 +720,12 @@ https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking.html?res_i
             //   "Check-in     Checkout"
             //   "Mon, Dec 21   Thu, Dec 24"
             // The checkout date has no year and must be inferred from the check-in year.
+            // Email sent in October, so December 21 is a future date — should stay in same year.
             var email = new EmailMessage
             {
                 From = "automated@airbnb.com",
                 Subject = "Reservation confirmed - Ty Cheeseburger arrives Dec 21",
+                Date = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),
                 Body = @"
 NEW BOOKING CONFIRMED! TY ARRIVES DEC 21.
 
@@ -751,8 +755,8 @@ HMTYTZ48P9
             result.BookingReference.Should().Be("HMTYTZ48P9");
             result.PropertyId.Should().Be("1477018601970190586");
             result.GuestName.Should().Be("Ty Cheeseburger");
-            result.CheckInDate.Should().Be(new DateTime(DateTime.Now.Year, 12, 21));
-            result.CheckOutDate.Should().Be(new DateTime(DateTime.Now.Year, 12, 24));
+            result.CheckInDate.Should().Be(new DateTime(2026, 12, 21));
+            result.CheckOutDate.Should().Be(new DateTime(2026, 12, 24));
             result.NumberOfGuests.Should().Be(4);
         }
 
@@ -908,23 +912,25 @@ HMTYTZ48P9
     }
 
     [Fact]
-    public void ParseBooking_Airbnb_TwoColumn_DateExactly30DaysAgo_DoesNotShiftYearForward()
+    public void ParseBooking_Airbnb_TwoColumn_RescanOfOldEmail_DoesNotShiftYearForward()
     {
-        // Regression test for boundary bug: when a date without a year is parsed and the
-        // result lands exactly on DateTime.Today.AddDays(-30), it must NOT be bumped to
-        // next year. The fix uses DateTime.Today (midnight) for the comparison so a parsed
-        // date at midnight is never falsely considered "in the past" due to a time component.
-        var boundary = DateTime.Today.AddDays(-30);
-        var dayAbbrev = boundary.ToString("ddd");  // e.g. "Mon"
-        var monthDay = boundary.ToString("MMM d"); // e.g. "Jun 15"
-        var checkOut = boundary.AddDays(2);
+        // Regression test for the re-scan year-shift bug.
+        // An email originally sent in May 2026 references a June 15 check-in.
+        // When rescanned in July 2026 (32+ days later), the year must NOT be bumped
+        // to 2027 — it should stay anchored to the email's own send date (2026).
+        var emailSendDate = new DateTime(2026, 5, 20, 14, 0, 0, DateTimeKind.Utc); // email sent May 20
+        var checkIn = new DateTime(2026, 6, 15);   // 26 days after email send — normal future booking
+        var checkOut = new DateTime(2026, 6, 17);
+        var checkInAbbrev = checkIn.ToString("ddd");
+        var checkInMonthDay = checkIn.ToString("MMM d");
         var checkOutAbbrev = checkOut.ToString("ddd");
         var checkOutMonthDay = checkOut.ToString("MMM d");
 
         var email = new EmailMessage
         {
             From = "automated@airbnb.com",
-            Subject = $"Reservation confirmed - Guest arrives {monthDay}",
+            Subject = $"Reservation confirmed - Jennifer Mang arrives {checkInMonthDay}",
+            Date = emailSendDate,
             Body = $@"
 NEW BOOKING CONFIRMED!
 
@@ -932,26 +938,23 @@ https://www.airbnb.com/rooms/1477018601970190586
 
 Check-in     Checkout
 
-{dayAbbrev}, {monthDay}   {checkOutAbbrev}, {checkOutMonthDay}
+{checkInAbbrev}, {checkInMonthDay}   {checkOutAbbrev}, {checkOutMonthDay}
 
 GUESTS
-2 adults
+4 adults
 
 CONFIRMATION CODE
-HMBOUNDARY1
+HMCAWCRT3K
 "
         };
 
         var result = _service.ParseBooking(email);
 
         result.Should().NotBeNull();
-        result!.BookingReference.Should().Be("HMBOUNDARY1");
-        // Date should stay in the current year, not be bumped to next year
-        result.CheckInDate.Year.Should().Be(boundary.Year);
-        result.CheckInDate.Month.Should().Be(boundary.Month);
-        result.CheckInDate.Day.Should().Be(boundary.Day);
-    }
-
+        result!.BookingReference.Should().Be("HMCAWCRT3K");
+        // Year must be 2026, not 2027, regardless of when the rescan happens
+        result.CheckInDate.Should().Be(new DateTime(2026, 6, 15));
+        result.CheckOutDate.Should().Be(new DateTime(2026, 6, 17));
     }
 
     [Fact]
