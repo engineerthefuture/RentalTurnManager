@@ -351,19 +351,21 @@ public class BookingParserService : IBookingParserService
             if (subjectDateMatch.Success)
             {
                 var dateStr = subjectDateMatch.Groups[1].Value;
-                var currentYear = DateTime.Now.Year;
-                var dateWithYear = $"{dateStr}, {currentYear}";
+                // Anchor year inference to the email's own send date, not the current date.
+                // This prevents re-scans of old emails from bumping dates to the following year.
+                // Fall back to UtcNow only if the email has no date (e.g. unit tests without Date set).
+                var emailSendDate = email.Date != default ? email.Date : DateTime.UtcNow;
+                var emailYear = emailSendDate.Year;
+                var dateWithYear = $"{dateStr}, {emailYear}";
                 
-                // Try parsing with current year
+                // Try parsing with the email's year
                 if (DateTime.TryParse(dateWithYear, out var tempCheckIn))
                 {
-                    // If the date is more than 30 days in the past, it's probably next year.
-                    // Use DateTime.Today (midnight) so a date of e.g. "Jun 15" parsed as
-                    // 2026-06-15 00:00 is not incorrectly shifted when DateTime.Now is later
-                    // the same day (e.g. 2026-06-15 15:00, giving AddDays(-30) = 2026-06-15 15:00).
-                    if (tempCheckIn.Date < DateTime.Today.AddDays(-30))
+                    // Only advance to next year if the parsed date is more than 30 days before
+                    // the email was sent (i.e. clearly wrong year, e.g. a Dec email with a Jan date).
+                    if (tempCheckIn.Date < emailSendDate.Date.AddDays(-30))
                     {
-                        dateWithYear = $"{dateStr}, {currentYear + 1}";
+                        dateWithYear = $"{dateStr}, {emailYear + 1}";
                         DateTime.TryParse(dateWithYear, out tempCheckIn);
                     }
                     booking.CheckInDate = tempCheckIn;
@@ -379,18 +381,21 @@ public class BookingParserService : IBookingParserService
             if (checkInMatch.Success)
             {
                 var checkInStr = checkInMatch.Groups[1].Value;
-                // If year is missing, add current year or next year if date has passed
+                // If year is missing, infer from the email's send date (not the current date).
+                // This prevents re-scans of old emails from bumping dates to the following year.
+                // Fall back to UtcNow only if the email has no date (e.g. unit tests without Date set).
                 if (!checkInStr.Contains("20"))
                 {
-                    var currentYear = DateTime.Now.Year;
-                    checkInStr += $", {currentYear}";
+                    var emailSendDate = email.Date != default ? email.Date : DateTime.UtcNow;
+                    var emailYear = emailSendDate.Year;
+                    checkInStr += $", {emailYear}";
                     
-                    // Try parsing with current year
+                    // Only advance to next year if the parsed date is more than 30 days before
+                    // the email was sent (i.e. clearly wrong year, e.g. a Dec email with a Jan date).
                     if (DateTime.TryParse(checkInStr, out var tempCheckIn) &&
-                        tempCheckIn.Date < DateTime.Today.AddDays(-30))
+                        tempCheckIn.Date < emailSendDate.Date.AddDays(-30))
                     {
-                        // If the date is more than 30 days in the past, it's probably next year
-                        checkInStr = $"{checkInMatch.Groups[1].Value}, {currentYear + 1}";
+                        checkInStr = $"{checkInMatch.Groups[1].Value}, {emailYear + 1}";
                     }
                 }
                 
@@ -450,16 +455,20 @@ public class BookingParserService : IBookingParserService
                 RegexOptions.IgnoreCase);
             if (twoColMatch.Success)
             {
-                var currentYear = DateTime.Now.Year;
+                // Anchor year inference to the email's own send date, not the current date.
+                // Fall back to UtcNow only if the email has no date (e.g. unit tests without Date set).
+                var emailSendDate = email.Date != default ? email.Date : DateTime.UtcNow;
+                var emailYear = emailSendDate.Year;
                 var checkInAbbrev = twoColMatch.Groups[1].Value;
                 var checkOutAbbrev = twoColMatch.Groups[2].Value;
 
                 if (booking.CheckInDate == default)
                 {
                     var cleanCheckIn = Regex.Replace(checkInAbbrev, @"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*", "", RegexOptions.IgnoreCase);
-                    if (DateTime.TryParse($"{cleanCheckIn}, {currentYear}", out var ci))
+                    if (DateTime.TryParse($"{cleanCheckIn}, {emailYear}", out var ci))
                     {
-                        if (ci.Date < DateTime.Today.AddDays(-30)) ci = ci.AddYears(1);
+                        // Only advance to next year if the date is clearly before the email was sent.
+                        if (ci.Date < emailSendDate.Date.AddDays(-30)) ci = ci.AddYears(1);
                         booking.CheckInDate = ci;
                         _logger.LogInformation($"Extracted check-in from two-column format: {booking.CheckInDate:yyyy-MM-dd}");
                     }
