@@ -433,6 +433,7 @@
             "SendCleanerConfirmation": {
               "Type": "Task",
               "Resource": "arn:aws:states:::lambda:invoke",
+              "Retry": [],
               "Parameters": {
                 "FunctionName": "${CalendarLambdaArn}",
                 "Payload": {
@@ -467,6 +468,7 @@
             "SendOwnerNotification": {
               "Type": "Task",
               "Resource": "arn:aws:states:::lambda:invoke",
+              "Retry": [],
               "Parameters": {
                 "FunctionName": "${CalendarLambdaArn}",
                 "Payload": {

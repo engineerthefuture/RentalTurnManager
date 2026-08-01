@@ -549,13 +549,15 @@ public class Function
                         OwnerToken = ownerToken
                     };
 
+                    // Save booking state before starting the workflow so that a concurrent
+                    // Lambda invocation scanning the same email sees the booking as already
+                    // known and does not start a second workflow execution.
+                    await bookingStateService.SaveBookingAsync(booking);
+                    _logger.LogInformation($"Saved booking state: {booking.Platform} - {booking.BookingReference}");
+
                     var executionArn = await stepFunctionService.StartCleanerWorkflowAsync(workflowInput);
                     response.WorkflowsStarted++;
                     _logger.LogInformation($"Started workflow: {executionArn}");
-
-                    // Save booking state
-                    await bookingStateService.SaveBookingAsync(booking);
-                    _logger.LogInformation($"Saved booking state: {booking.Platform} - {booking.BookingReference}");
 
                     // Mark all source emails as processed
                     foreach (var sourceEmail in sourceEmails)
