@@ -93,6 +93,14 @@ Parameters:
     Description: Schedule expression for the Messaging Lambda execution
     Default: rate(20 minutes)
 
+  MessagingScheduleState:
+    Type: String
+    Description: Whether the Messaging Lambda schedule is enabled
+    AllowedValues:
+      - ENABLED
+      - DISABLED
+    Default: DISABLED
+
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -117,6 +125,8 @@ Metadata:
           default: Scheduling Configuration
         Parameters:
           - ScheduleInterval
+          - MessagingScheduleInterval
+          - MessagingScheduleState
 
 Conditions:
   IsDev:
@@ -704,11 +714,7 @@ Resources:
       Name: !Sub '${NamespacePrefix}-${Environment}-schedule-${AppName}-Messaging'
       Description: Triggers the Messaging Lambda on a schedule to respond to guest messages
       ScheduleExpression: !Ref MessagingScheduleInterval
-      State:
-        Fn::If:
-          - IsDev
-          - DISABLED
-          - ENABLED
+      State: !Ref MessagingScheduleState
       Targets:
         - Arn: !GetAtt MessagingLambda.Arn
           Id: MessagingLambdaTarget
